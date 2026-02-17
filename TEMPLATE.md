@@ -509,10 +509,17 @@ This file starts empty on new projects. Add entries when:
 │  └──────────┘ └───────────┘ └──────────┘ └─────────────────┘  │
 │                                                                 │
 │  Then:                                                          │
-│  ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ Verif.    │ │ Scope    │ │ Impl.    │ │ Present plan   │  │
-│  │ plan      │ │ check    │ │ order    │ │ → confirm      │  │
-│  └───────────┘ └──────────┘ └──────────┘ └────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 9. Verification plan:                                     │  │
+│  │    a. Metrics measurable?   b. How verified? (invariants) │  │
+│  │    c. Metric gap? → add    d. Failure modes? (3 types):  │  │
+│  │       • Direct  • Interaction  • Stress/edge             │  │
+│  │       >=1 per category, each with metric or test         │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────┐                  │
+│  │ 10.Scope │ │ 11.Impl  │ │ 12. Present    │                  │
+│  │ check    │ │ order    │ │ plan → confirm │                  │
+│  └──────────┘ └──────────┘ └────────────────┘                  │
 │                                                                 │
 │                "Should we build this, this way?"                │
 └────────────────────────────┬────────────────────────────────────┘

@@ -35,7 +35,7 @@ Every session starts from zero. This workflow solves three problems:
 ```
                   ┌──────────────┐
                   │  ENTRY GATE  │  "Are we building the right thing?"
-                  │  (12 steps)  │  Strategic alignment + dependency check
+                  │(3ph,12 step)│  Strategic alignment + dependency check
                   └──────┬───────┘
                          │
                          ▼
