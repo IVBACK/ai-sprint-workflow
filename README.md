@@ -35,7 +35,7 @@ Every session starts from zero. This workflow solves three problems:
 ```
                   ┌──────────────┐
                   │  ENTRY GATE  │  "Are we building the right thing?"
-                  │(3ph,12 step)│  Strategic alignment + dependency check
+                  │(4ph,12 step)│  Sprint detail + alignment + dependency check
                   └──────┬───────┘
                          │
                          ▼
@@ -52,7 +52,7 @@ Every session starts from zero. This workflow solves three problems:
                          │
                          ▼
                   ┌──────────────┐
-                  │ SPRINT CLOSE │  Archive, baseline, self-audit, retrospective
+                  │ SPRINT CLOSE │  Checkmarks, archive, baseline, self-audit, retrospective
                   └──────────────┘
 ```
 
@@ -65,12 +65,12 @@ Every session starts from zero. This workflow solves three problems:
 2. Start an AI coding session
 3. Tell the agent: "Read TEMPLATE.md and bootstrap this project"
 4. The agent will:
-   - Scan your project (language, framework, build system, test framework)
+   - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
    - Ask 14 discovery questions (skipping ones it can infer from project files)
    - Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
    - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
-   - Adapt audit script patterns to your detected language
-   - Move `TEMPLATE.md` to `Docs/SPRINT_WORKFLOW.md` as the permanent workflow reference
+   - Adapt audit script patterns to your detected language (multi-language projects supported)
+   - Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections for a lean ~550-line workflow reference)
    - Confirm the setup with you before writing any feature code
 5. Start your first sprint
 
@@ -84,7 +84,7 @@ Every session starts from zero. This workflow solves three problems:
 5. Populate CLAUDE.md with project context
 6. Populate GUARDRAILS.md with framework-specific rules
 7. Adapt audit script to detected language
-8. Move TEMPLATE.md → Docs/SPRINT_WORKFLOW.md
+8. TEMPLATE.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
 9. Confirm with user
 ```
 
@@ -101,7 +101,7 @@ Questions are asked in a single batch. Answers inferrable from project files
 | **Infrastructure** | Q6: CI/CD pipeline, Q7: Test framework, Q8: Existing linter/standards, Q9: Known tech debt |
 | **Workflow Preferences** | Q10: Docs language, Q11: Commit style, Q12: Immutable contracts, Q13: Anything else the AI should know |
 
-Q0 auto-detects from project files; asks explicitly if the project is empty.
+Q0 auto-detects from project files; asks explicitly if the project is empty. If user is undecided, AI proposes options with trade-offs.
 Q13 is an open-ended catch-all for context that doesn't fit the predefined categories.
 
 ## What Gets Created
@@ -115,7 +115,8 @@ your-project/
 │   ├── LESSONS_INDEX.md          # Bug → rule traceability (starts empty)
 │   ├── SPRINT_WORKFLOW.md        # Workflow reference (moved from TEMPLATE.md)
 │   └── Planning/
-│       └── Roadmap.md            # Sprint plan (Must/Should/Could)
+│       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
+│       └── S<N>_ENTRY_GATE.md    # Entry Gate report (lives during sprint, deleted at close)
 └── Tools/
     └── sprint-audit.sh           # Automated close gate checks
 ```
@@ -134,20 +135,30 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 ## Key Design Decisions
 
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
-- **Sprint scope, not duration.** A sprint is 3-12 items, not a calendar week. AI can finish a "sprint" in hours.
+- **Sprint scope, not duration.** A sprint is 3-12 items (an "item" = one deliverable behavior), not a calendar week. AI can finish a "sprint" in hours.
 - **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
 - **Automated + manual review.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output). Manual review catches semantic issues (logic errors, resource leaks, design flaws).
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
+- **Rich item status model.** Items track `open → in_progress → fixed → verified`, plus `blocked` and `deferred` statuses. `in_progress` prevents wasted rework after session interruptions. Reverse transition `verified → open` is allowed for regressions.
+- **Sprint detail on demand.** Entry Gate Phase 0: if a sprint is still a one-line sketch from Initial Planning, decompose it into Must/Should/Could before proceeding. Later sprints are detailed only when reached — not up front.
+- **Mid-sprint scope changes.** Urgent items (critical bugs, security fixes) can be added mid-sprint with a documented procedure. AI never initiates scope changes — user decides.
+- **Immutable contract revision.** Contracts are not truly permanent — they have an explicit revision procedure when project direction changes, including blast radius assessment and regression tracking.
 - **Metric gap detection.** Entry Gate step 9c: if a roadmap item has no metric gate, the AI proposes one before the sprint starts. No item ships without a measurable success criterion.
 - **Item-level test coverage.** Close Gate Phase 4b: every completed item (Must + Should + Could) must have a behavioral test — not just file-level test existence. Missing test → write one or document why untestable.
-- **Performance baseline tracking.** Sprint Close step 5: key metrics are recorded to `TRACKING.md` each sprint. Regressions vs. the previous sprint are flagged automatically.
+- **Performance baseline tracking.** Sprint Close step 5: key metrics are recorded to `TRACKING.md` each sprint. Regressions vs. the previous sprint are flagged automatically. Early sprints with no measurable metrics log a target sprint for establishing baselines.
 - **Algorithmic invariant checks.** Entry Gate step 9b: for items involving algorithms or mathematical systems, the verification plan must include invariant tests (properties that must always hold), not just "does it run?" checks.
-- **Failure mode analysis.** Entry Gate step 9d + Close Gate Phase 0: every Must item's failure modes are categorized as direct (item-internal), interaction (cross-system), or stress/edge-case (extreme-condition). Each category requires at least one identified mode with a corresponding metric or test. "Has a metric" ≠ "has the right metrics."
+- **Priority & rigor review.** Entry Gate Phase 0 challenges the Must/Should/Could breakdown with two questions per Should/Could item: (Q1) would removing it cause a Must metric to fail? → promote to Must. (Q2) Does it have its own metrics or complex failure modes? → mark as Must-gated (★). Must-gated items receive Must-level planning rigor while remaining non-blocking for sprint completion. Misplacements in either direction (Should that should be Must, Must that should be Should) are flagged to the user.
+- **Failure mode analysis.** Entry Gate step 9d + Close Gate Phase 0: every Must item's and Must-gated item's failure modes are categorized as direct (item-internal), interaction (cross-system), or stress/edge-case (extreme-condition). Each category requires at least one identified mode with a corresponding metric or test. "Has a metric" ≠ "has the right metrics."
 - **Gate execution evidence.** Entry Gate step 12 logs which steps were executed and what was decided. The log goes to `TRACKING.md` so future sessions can verify the gate actually ran — not just that the sprint started.
-- **Workflow self-audit.** Sprint Close step 6: cross-reference integrity check. Do `CLAUDE.md` references match their target files? Are step/phase counts consistent? Catches the workflow's own drift before it causes skipped checks.
+- **AI gate assessment.** Entry Gate step 12c: the AI provides its own blocker/risk/scope assessment and recommendation before asking the user to approve. The user gets a reasoned opinion, not just a "ready?" prompt.
+- **Sprint-scoped Entry Gate report.** The full Entry Gate analysis is written to `Docs/Planning/S<N>_ENTRY_GATE.md` as a living reference during the sprint. Implementation sessions can check API readiness, failure modes, or architecture decisions without re-reading source files. Deleted at Sprint Close — `TRACKING.md` gate log persists as the permanent record.
+- **Workflow self-audit.** Sprint Close step 6: cross-reference integrity check. Do `CLAUDE.md` references match their target files? Catches the workflow's own drift before it causes skipped checks.
 - **Failure mode retrospective.** Sprint Close step 7: predicted failure modes (from Entry Gate 9d) are compared against what actually happened. Unpredicted failures become new guardrail rules. Same category failing across 2+ sprints is flagged as an architectural issue, not a per-sprint fix.
-- **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9d reads this history before predicting new modes. Sprint Close step 7 writes to it after comparing predictions vs reality. The AI doesn't start from zero — it learns which failure categories recur.
+- **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9d reads this history before predicting new modes. Sprint Close step 7 writes to it after comparing predictions vs reality. History is archived after 5 sprints to prevent TRACKING.md bloat.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
+- **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
+- **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
+- **Session recovery.** Session Start Protocol distinguishes new sprint, mid-sprint, and interrupted session states. `in_progress` items signal partial work that needs verification, not rework.
 
 ## Supported Languages
 
@@ -168,7 +179,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 
 | Project Size | Recommendation |
 |---|---|
-| **Small** (1-5 files) | Skip Entry Gate Phase 2, skip sprint-audit.sh |
+| **Small** (1-5 files) | Abbreviated Entry Gate (Phase 0 + steps 1-2, 8, 10, 12 only), skip Phase 2, skip sprint-audit.sh |
 | **Medium** (5-50 files) | Full workflow. Audit script valuable at ~10+ files |
 | **Large** (50+ files) | Add CI integration, per-subsystem guardrails |
 
@@ -176,7 +187,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 |---|---|---|
 | Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
 | Review | Self-verify + AI agent | Peer review + AI agent |
-| Entry Gate | Abbreviated (Phase 1 + 3) | Full (all 3 phases) |
+| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (all 4 phases) |
 | Close Gate | Full | Full + peer sign-off |
 
 | Starting Point | What Happens |
