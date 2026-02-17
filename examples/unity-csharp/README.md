@@ -97,7 +97,7 @@ ProjectRoot/
 │   └── Archive/
 │       └── changelog-S1-S3.md             # Archived changelogs
 ├── Tools/
-│   ├── sprint-audit.sh                    # 10-section heuristic scan
+│   ├── sprint-audit.sh                    # 11-section heuristic scan
 │   ├── ci-guardrail-check.sh             # Hard-fail forbidden patterns
 │   └── perf-regression-check.sh          # Performance regression gate
 └── Assets/
