@@ -128,8 +128,8 @@ Separated files   = AI reads only what's needed        (~200-300 lines)
 ```
 
 Context window is finite. Separation lets the agent load CLAUDE.md (always),
-TRACKING.md (session start), and guardrails sections (per-task) —
-not the entire project history.
+TRACKING.md (session start), guardrails sections (per-task), and
+SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 
 ## Key Design Decisions
 
@@ -142,6 +142,7 @@ not the entire project history.
 - **Item-level test coverage.** Close Gate Phase 4b: every completed item (Must + Should + Could) must have a behavioral test — not just file-level test existence. Missing test → write one or document why untestable.
 - **Performance baseline tracking.** Sprint Close step 5: key metrics are recorded to `TRACKING.md` each sprint. Regressions vs. the previous sprint are flagged automatically.
 - **Algorithmic invariant checks.** Entry Gate step 9b: for items involving algorithms or mathematical systems, the verification plan must include invariant tests (properties that must always hold), not just "does it run?" checks.
+- **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 
 ## Supported Languages
 
