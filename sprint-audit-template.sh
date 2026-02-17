@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
+# Note: -e is intentionally omitted. Individual check failures should not abort
+# the entire audit. Each section handles its own errors with || true.
 
 # sprint-audit.sh — Automated sprint close gate checks
 #
@@ -8,11 +10,11 @@ set -euo pipefail
 #
 # Usage:
 #   Tools/sprint-audit.sh                       # Full scan
-#   Tools/sprint-audit.sh --files "A.cs B.cs"   # Scoped to specific files
 #
 # Exit codes:
 #   0 = Clean (0 findings)
 #   1 = Findings exist (review needed, not necessarily failures)
+#   2 = Setup error (fix script configuration before audit)
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_DIR="$ROOT/src"         # ← adjust to your source directory
@@ -20,11 +22,26 @@ TEST_DIR="$ROOT/tests"      # ← adjust to your test directory
 EXT="*"                     # ← adjust: "cs", "ts", "py", "java", "go", "rs", "cpp"
 
 total=0
+errors=0
+blockers=0    # Non-dismissible findings (cannot be marked as false positive)
+
+# Verify required directories exist
+for dir_var in SRC_DIR TEST_DIR; do
+  dir_val="${!dir_var}"
+  if [[ ! -d "$dir_val" ]]; then
+    echo "ERROR  $dir_var ($dir_val) does not exist. Adjust path in script header."
+    errors=$((errors + 1))
+  fi
+done
 
 # ── Helper ──
 
 check() {
   local name="$1" pattern="$2" dir="${3:-$SRC_DIR}"
+  if [[ ! -d "$dir" ]]; then
+    echo "SKIP  [$name] — directory $dir not found"
+    return
+  fi
   local results count
   results=$(grep -rn "$pattern" --include="*.${EXT}" "$dir" 2>/dev/null || true)
   count=$(echo "$results" | grep -c . 2>/dev/null || echo 0)
@@ -161,7 +178,9 @@ total=$((total + missing))
 
 # ═══════════════════════════════════════════════════════
 # SECTION 11: Roadmap ↔ TRACKING.md Sync
-# Catches premature ticks and forgotten ticks
+# 11a: Catches premature ticks and forgotten ticks
+# 11b: Orphan detection (items in one file but not other)
+# 11c: Checkbox format check (CORE-### without - [ ] syntax)
 # ═══════════════════════════════════════════════════════
 
 echo ""
@@ -173,7 +192,7 @@ ID_PATTERN="CORE-[0-9]+"
 sync_findings=0
 
 if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
-  # Extract item statuses from TRACKING.md (looks for ID + open/fixed/verified in same line)
+  # 11a. Extract item statuses from TRACKING.md
   declare -A tracking_status
   while IFS= read -r line; do
     item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
@@ -182,11 +201,17 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
         tracking_status["$item_id"]="verified"
       elif echo "$line" | grep -qiw "fixed"; then
         tracking_status["$item_id"]="fixed"
+      elif echo "$line" | grep -qiw "in_progress"; then
+        tracking_status["$item_id"]="in_progress"
+      elif echo "$line" | grep -qiw "blocked"; then
+        tracking_status["$item_id"]="blocked"
+      elif echo "$line" | grep -qiw "deferred"; then
+        tracking_status["$item_id"]="deferred"
       elif echo "$line" | grep -qiw "open"; then
         tracking_status["$item_id"]="open"
       fi
     fi
-  done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" | grep -E "open|fixed|verified" || true)
+  done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" | grep -E "open|in_progress|fixed|verified|deferred|blocked" || true)
 
   # Check roadmap checkboxes against TRACKING statuses
   while IFS= read -r line; do
@@ -194,17 +219,23 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
     [[ -z "$item_id" ]] && continue
 
     is_checked=false
-    if echo "$line" | grep -qE "^\s*-\s*\[x\]"; then
-      is_checked=true
-    fi
+    is_skipped=false
+    echo "$line" | grep -qE "^\s*-\s*\[x\]" && is_checked=true
+    echo "$line" | grep -qE "^\s*-\s*\[~\]" && is_skipped=true
 
     t_status="${tracking_status[$item_id]:-unknown}"
 
     if $is_checked && [[ "$t_status" != "verified" ]]; then
       echo "  MISMATCH  $item_id: Roadmap=[x] but TRACKING=$t_status (premature tick)"
       sync_findings=$((sync_findings + 1))
-    elif ! $is_checked && [[ "$t_status" == "verified" ]]; then
+    elif ! $is_checked && ! $is_skipped && [[ "$t_status" == "verified" ]]; then
       echo "  MISMATCH  $item_id: Roadmap=[ ] but TRACKING=verified (forgotten tick)"
+      sync_findings=$((sync_findings + 1))
+    elif $is_skipped && [[ "$t_status" != "deferred" ]]; then
+      echo "  MISMATCH  $item_id: Roadmap=[~] but TRACKING=$t_status (should be deferred)"
+      sync_findings=$((sync_findings + 1))
+    elif ! $is_skipped && [[ "$t_status" == "deferred" ]]; then
+      echo "  MISMATCH  $item_id: Roadmap=[ ] but TRACKING=deferred (missing [~] mark)"
       sync_findings=$((sync_findings + 1))
     fi
   done < <(grep -E "\- \[.\].*$ID_PATTERN" "$ROADMAP_FILE" || true)
@@ -212,10 +243,131 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
   if [[ $sync_findings -eq 0 ]]; then
     echo "  (roadmap checkboxes consistent with TRACKING.md)"
   fi
+
+  # 11b. Orphan detection — items in one file but not the other
+  echo ""
+  echo "── ORPHAN CHECK ──"
+  orphans=0
+
+  # Items in TRACKING but not in Roadmap
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+    if ! grep -q "$item_id" "$ROADMAP_FILE" 2>/dev/null; then
+      echo "  ORPHAN  $item_id: exists in TRACKING but not in Roadmap"
+      orphans=$((orphans + 1))
+    fi
+  done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" 2>/dev/null | head -200 || true)
+
+  # Items in Roadmap but not in TRACKING
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+    if ! grep -q "$item_id" "$TRACKING_FILE" 2>/dev/null; then
+      echo "  ORPHAN  $item_id: exists in Roadmap but not in TRACKING"
+      orphans=$((orphans + 1))
+    fi
+  done < <(grep -E "$ID_PATTERN" "$ROADMAP_FILE" 2>/dev/null | head -200 || true)
+
+  [[ $orphans -eq 0 ]] && echo "  No orphan items found."
+  total=$((total + orphans))
+
+  # 11c. Checkbox format check — detect CORE-### items without checkbox
+  echo ""
+  echo "── CHECKBOX FORMAT CHECK ──"
+  fmt_errors=0
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+    # Skip lines that already have checkbox format
+    echo "$line" | grep -qE "^\s*-\s*\[.\]" && continue
+    echo "  FORMAT  $item_id: missing checkbox — use '- [ ] $item_id: ...' (breaks close gate tracking)"
+    fmt_errors=$((fmt_errors + 1))
+  done < <(grep -E "$ID_PATTERN" "$ROADMAP_FILE" 2>/dev/null | grep -E "^\s*-\s" | head -200 || true)
+  [[ $fmt_errors -eq 0 ]] && echo "  All roadmap items have checkbox format."
+  total=$((total + fmt_errors))
 else
   echo "  (TRACKING.md or Roadmap.md not found — skipping)"
 fi
 total=$((total + sync_findings))
+
+# ═══════════════════════════════════════════════════════
+# SECTION 12: Metric ↔ Test Coverage
+# Each roadmap metric must have a matching test.
+# Extracts metric lines from Roadmap.md (two formats):
+#   Format A: "Metric: description" or "**Metric:** description"
+#   Format B: Bullet lines under "**Metric gates:**" header
+# Searches TEST_DIR for corresponding test evidence.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── METRIC ↔ TEST COVERAGE ──"
+metric_gaps=0
+
+if [[ -f "$ROADMAP_FILE" ]]; then
+  # Extract metric lines using awk (handles both formats):
+  #   Format A: lines with "Metric:" directly (but not "Metric gate" headers)
+  #   Format B: bullet lines under "Metric gates:" headers
+  metric_lines=$(awk '
+    /[Mm]etric[s]?[[:space:]]*[:：]/ && !/[Mm]etric[[:space:]]+gate/ { print; next }
+    /[Mm]etric[[:space:]]+gate/ { in_gate=1; next }
+    in_gate && /^[[:space:]]*-[[:space:]]/ { print; next }
+    in_gate && /^[[:space:]]*$/ { next }
+    in_gate { in_gate=0 }
+  ' "$ROADMAP_FILE" 2>/dev/null)
+
+  if [[ -z "$metric_lines" ]]; then
+    echo "  (no metric lines found in Roadmap — check format)"
+  else
+    while IFS= read -r mline; do
+      # Extract metric description based on format
+      if echo "$mline" | grep -qiE "[Mm]etric[s]?\s*[:：]"; then
+        # Format A: "Metric: description"
+        metric_desc=$(echo "$mline" | sed -E 's/.*[Mm]etric[s]?\s*[:：]\s*//' | sed 's/[*`]//g' | xargs)
+      else
+        # Format B: "- description" (bullet under Metric gates header)
+        metric_desc=$(echo "$mline" | sed -E 's/^\s*-\s*//' | sed 's/[*`]//g' | xargs)
+      fi
+      [[ -z "$metric_desc" ]] && continue
+
+      # Extract keywords (3+ chars, skip common filler)
+      keywords=$(echo "$metric_desc" | tr '[:upper:]' '[:lower:]' | \
+        sed -E 's/[^a-z0-9 ]/ /g' | \
+        tr ' ' '\n' | \
+        grep -vE '^(the|a|an|is|are|be|to|of|in|for|and|or|no|not|with|must|should|each|per|all|any|same|than|from|has|have|does|when|will|can|at|by)$' | \
+        grep -E '.{3,}' | \
+        sort -u | head -8)
+
+      # Search TEST_DIR for any keyword match
+      found=false
+      for kw in $keywords; do
+        if grep -rli "$kw" "$TEST_DIR" --include="*.${EXT}" 2>/dev/null | grep -q .; then
+          found=true
+          break
+        fi
+      done
+
+      if ! $found; then
+        echo "  BLOCKER  NO TEST COVERAGE: $metric_desc"
+        echo "    (keywords searched: $(echo $keywords | tr '\n' ', '))"
+        metric_gaps=$((metric_gaps + 1))
+      fi
+    done <<< "$metric_lines"
+  fi
+
+  if [[ $metric_gaps -eq 0 ]]; then
+    echo "  All roadmap metrics have matching test coverage."
+  else
+    echo ""
+    echo "  $metric_gaps metric(s) without test coverage."
+    echo "  BLOCKER — these are NOT false-positive-eligible. Gate cannot close."
+    echo "  Action: write tests, or escalate via unmet-metric procedure (Close Gate Phase 0)."
+  fi
+else
+  echo "  (Roadmap file not found — skipping metric coverage check)"
+fi
+total=$((total + metric_gaps))
+blockers=$((blockers + metric_gaps))
 
 # ═══════════════════════════════════════════════════════
 # SUMMARY
@@ -223,9 +375,17 @@ total=$((total + sync_findings))
 
 echo ""
 echo "════════════════════════════════════"
-if [[ $total -eq 0 ]]; then
+if [[ $errors -gt 0 ]]; then
+  echo "Sprint audit: $errors setup error(s) — fix script configuration before audit."
+  exit 2
+elif [[ $total -eq 0 ]]; then
   echo "Sprint audit CLEAN — 0 findings."
   exit 0
+elif [[ $blockers -gt 0 ]]; then
+  echo "Sprint audit: $total finding(s), $blockers BLOCKER(s) — gate cannot close."
+  echo "BLOCKER findings require action (write test or escalate). They cannot be dismissed as false positive."
+  [[ $((total - blockers)) -gt 0 ]] && echo "Remaining $((total - blockers)) finding(s): review each, fix or mark as false positive."
+  exit 1
 else
   echo "Sprint audit: $total finding(s) — review needed."
   echo "(Not all findings are bugs. Review each, fix or mark as false positive.)"

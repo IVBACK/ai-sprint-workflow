@@ -35,7 +35,7 @@ Every session starts from zero. This workflow solves three problems:
 ```
                   ┌──────────────┐
                   │  ENTRY GATE  │  "Are we building the right thing?"
-                  │(4ph,12 step)│  Sprint detail + alignment + dependency check
+                  │(ph0-3,12 st)│  Sprint detail + alignment + dependency check
                   └──────┬───────┘
                          │
                          ▼
@@ -137,29 +137,54 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
 - **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
 - **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
-- **Automated + manual review.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output). Manual review catches semantic issues (logic errors, resource leaks, design flaws).
+- **Automated + manual review.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output) including metric-vs-test coverage (Section 12). Manual review (Phase 1b) catches semantic issues (logic errors, resource leaks, design flaws) with per-file structured output. Findings are presented to the user at every phase boundary (Phase 0→1a, 1a→1b, 1b→2, 2→3, 4→close) — no silent phase transitions.
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
 - **Rich item status model.** Items track `open → in_progress → fixed → verified`, plus `blocked` and `deferred` statuses. `in_progress` prevents wasted rework after session interruptions. Reverse transition `verified → open` is allowed for regressions.
 - **Sprint detail on demand.** Entry Gate Phase 0: if a sprint is still a one-line sketch from Initial Planning, decompose it into Must/Should/Could before proceeding. Later sprints are detailed only when reached — not up front.
-- **Mid-sprint scope changes.** Urgent items (critical bugs, security fixes) can be added mid-sprint with a documented procedure. AI never initiates scope changes — user decides.
+- **Mid-sprint scope changes.** Urgent items (critical bugs, security fixes) can be added mid-sprint with a documented procedure. AI never initiates scope changes — user decides. Hotfixes skip formal gates but still require Change Log entry, test, and retrospective inclusion.
 - **Immutable contract revision.** Contracts are not truly permanent — they have an explicit revision procedure when project direction changes, including blast radius assessment and regression tracking.
 - **Metric sufficiency check.** Entry Gate step 9c: if a roadmap item has no metric gate, the AI proposes one before the sprint starts. For each metric, four checks: measurable by sprint end? Test scenario defined? Threshold non-trivial (can it pass while the system is broken)? Every failure mode from 9a covered? No item ships without sufficient success criteria.
+- **Structured metric verification.** Close Gate Phase 0 requires a filled Metric Verification table — every sprint metric must be explicitly marked PASS, DEFERRED, FAIL, or MISSING with evidence or escalation reason. Each metric also records the action taken (existing, written, fixed, revised, added, escalated) so the user sees the journey, not just the final state. Empty cells block the gate. All-DEFERRED also blocks the gate — at least one metric must PASS for the sprint to close. A compact summary line is logged to TRACKING.md (not the full table — tests in the codebase are the persistent evidence). `sprint-audit.sh` Section 12 cross-checks roadmap metrics against test files — unmatched metrics cannot be marked as false positives.
 - **Unmet-metric escalation.** Close Gate Phase 0 + Sprint Close step 1: when a metric is partially met or blocked by an unfinished prerequisite, the AI must not silently mark `[ ]` and move on. Required: explain the gap, check if the blocker is tracked in the roadmap, propose a target sprint with reasoning, and get user approval before deferring.
 - **Item-level test coverage.** Close Gate Phase 4b: every completed item (Must + Should + Could) must have a behavioral test — not just file-level test existence. Missing test → write one or document why untestable.
 - **Performance baseline tracking.** Sprint Close step 5: key metrics are recorded to `TRACKING.md` each sprint. Regressions vs. the previous sprint are flagged automatically. Early sprints with no measurable metrics log a target sprint for establishing baselines.
 - **Algorithmic invariant checks.** Entry Gate step 9b: for items involving algorithms or mathematical systems, the verification plan must include invariant tests (properties that must always hold), not just "does it run?" checks.
-- **Priority & rigor review.** Entry Gate Phase 0 challenges the Must/Should/Could breakdown with two questions per Should/Could item: (Q1) would removing it cause a Must metric to fail? → promote to Must. (Q2) Does it have its own metrics or complex failure modes? → mark as Must-gated (★). Must-gated items receive Must-level planning rigor while remaining non-blocking for sprint completion. Misplacements in either direction (Should that should be Must, Must that should be Should) are flagged to the user.
-- **Failure mode analysis.** Entry Gate step 9a + Close Gate Phase 0: every Must item's and Must-gated item's failure modes are categorized as direct (item-internal), interaction (cross-system), or stress/edge-case (extreme-condition). Each category requires at least one identified mode with a corresponding metric or test. Failure modes are analyzed first (9a) so they drive metric requirements (9c). "Has a metric" ≠ "has the right metrics."
+- **Priority & rigor review.** Entry Gate Phase 0 challenges the Must/Should/Could breakdown: all items receive metric gates and full planning rigor regardless of priority. Should/Could items that would cause a Must metric to fail are promoted to Must. Misplacements in either direction are flagged to the user. Priority determines sprint-blocking status, not rigor level.
+- **Step 8 outcome mechanics.** Entry Gate step 8: user reviews each item with four explicit responses — keep (unchanged), modify (re-run 9a-9c), defer (with reason + target sprint), or remove (delete from Roadmap + TRACKING.md). No implicit pass-through.
+- **Failure mode analysis.** Entry Gate step 9a + Close Gate Phase 0: every item's failure modes are categorized as direct (item-internal), interaction (cross-system), or stress/edge-case (extreme-condition). Each category requires at least one identified mode with a corresponding metric or test. Failure modes are analyzed first (9a) so they drive metric requirements (9c). "Has a metric" ≠ "has the right metrics."
 - **Gate execution evidence.** Entry Gate step 12 logs which steps were executed and what was decided. The log goes to `TRACKING.md` so future sessions can verify the gate actually ran — not just that the sprint started.
-- **AI gate assessment.** Entry Gate step 12c: the AI provides its own blocker/risk/scope assessment and recommendation before asking the user to approve. The user gets a reasoned opinion, not just a "ready?" prompt.
+- **AI gate assessment.** Both gates end with an AI assessment before user approval. Entry Gate step 12b: blocker/risk/scope assessment + recommendation. Close Gate verdict: metric summary with action breakdown (how many existing, written, fixed, revised, added, escalated), findings summary, risk assessment, and recommendation. The user gets a reasoned opinion at both boundaries, not just a "ready?" prompt. If the user does not approve, the AI returns to the relevant phase for rework; if the direction is fundamentally wrong, the Sprint Abort procedure applies.
 - **Sprint-scoped Entry Gate report.** The full Entry Gate analysis is written to `Docs/Planning/S<N>_ENTRY_GATE.md` as a living reference during the sprint. Implementation sessions can check API readiness, failure modes, or architecture decisions without re-reading source files. Deleted at Sprint Close — `TRACKING.md` gate log persists as the permanent record.
 - **Workflow self-audit.** Sprint Close step 6: cross-reference integrity check. Do `CLAUDE.md` references match their target files? Catches the workflow's own drift before it causes skipped checks.
-- **Failure mode retrospective.** Sprint Close step 7: predicted failure modes (from Entry Gate 9a) are compared against what actually happened. Unpredicted failures become new guardrail rules. Same category failing across 2+ sprints is flagged as an architectural issue, not a per-sprint fix.
-- **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9a reads this history before predicting new modes. Sprint Close step 7 writes to it after comparing predictions vs reality. History is archived after 5 sprints to prevent TRACKING.md bloat.
+- **Failure mode retrospective.** Sprint Close step 7: structured retrospective table (every predicted mode answered, every actual failure listed) is filled and presented to the user. Unpredicted failures trigger the Update Rule (7 steps including LESSONS_INDEX.md entry). Same category 2+ sprints triggers Architecture Review with root cause tracing across sprints.
+- **Failure encounter logging.** Implementation loop step E: failures encountered during coding are logged to `TRACKING.md §Failure Encounters` with category and detection metadata. Sprint Close step 7a reads this structured data instead of reconstructing from memory.
+- **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9a reads this history before predicting new modes and checks for escalation triggers (Architecture Review, proxy test questions). Sprint Close step 7 writes to it after comparing predictions vs reality. History is archived after 5 sprints to prevent TRACKING.md bloat.
+- **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
 - **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
 - **Session recovery.** Session Start Protocol distinguishes new sprint, mid-sprint, and interrupted session states. `in_progress` items signal partial work that needs verification, not rework.
+
+## Self-Validation
+
+The workflow validates itself at three levels:
+
+| Level | Script | What it catches | When to run |
+|-------|--------|----------------|-------------|
+| **Structural** | `bash validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity (19 checks) | After any edit to TEMPLATE.md, README.md, or sprint-audit-template.sh |
+| **Path simulation** | `bash validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete (40 checks) | Same as above |
+| **Negative tests** | `bash validate-paths.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies script catches it (7 tests) | After changing validate-paths.sh or gap-related TEMPLATE.md text |
+| **Semantic** | Copy `verify-workflow-semantic.md` into an AI session | Logic gaps, dead ends, missing user approvals, information flow, state machine coverage (31 questions) | After major workflow changes or periodically |
+
+CI runs structural + path checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
+
+```bash
+# Quick local check (< 5 seconds)
+bash validate-workflow.sh && bash validate-paths.sh
+
+# Full local check including negative tests
+bash validate-workflow.sh && bash validate-paths.sh && bash validate-paths.sh --self-test
+```
 
 ## Supported Languages
 
@@ -169,7 +194,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 | Language | Hot Path Alloc | Cached Ref | Anti-Pattern |
 |----------|---------------|-----------|-------------|
 | **C#/Unity** | `new List<`, `new Dictionary<` | `Camera.main`, `GetComponent` | `AppendStructuredBuffer` |
-| **TypeScript** | `new Array(`, spread in render | `querySelector` in loop | `dangerouslySetInnerHTML`, `any` |
+| **TypeScript/React** | `new Array(`, spread in render | `querySelector` in loop | `dangerouslySetInnerHTML`, `any` |
 | **Python** | list comprehension in hot loop | repeated `os.path.exists` | `eval()`, bare `except:` |
 | **Java** | `new ArrayList<>` in loop | repeated `getBean()` | `e.printStackTrace()` |
 | **Go** | `append` in tight loop | repeated `os.Getenv` | `panic()` in library code |
@@ -188,7 +213,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 |---|---|---|
 | Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
 | Review | Self-verify + AI agent | Peer review + AI agent |
-| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (all 4 phases) |
+| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (phases 0-3) |
 | Close Gate | Full | Full + peer sign-off |
 
 | Starting Point | What Happens |

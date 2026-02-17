@@ -112,7 +112,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | 0 | Language and framework? ¹ | Audit script, guardrails, test conventions | Auto-detect; empty project → ask explicitly ¹ |
 | 1 | Solo developer or team? | Commit policy, review gate | Solo |
 | 2 | Sprint scope size? (small: 3-5 / medium: 5-8 / large: 8-12) ² | Entry gate scope threshold | Medium (5-8) |
-| 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md ³ |
+| 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md; Yes → validate format, convert to Must/Should/Could if needed ³ |
 | 4 | Performance-sensitive? (game, real-time, HFT) | Profiling rules, hot path checks | No |
 | 5 | Target platforms? (web, mobile, desktop, embedded) | Platform-specific guardrails | Desktop |
 
@@ -246,7 +246,7 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 - Sprint `Must` items must be complete before sprint is "done".
 - Roadmap checkbox `[x]` only when item is `verified` in TRACKING.md. `[~]` only when `deferred`. Intermediate states (in_progress, fixed-untested) are not shown in roadmap — TRACKING.md is the single source. `sprint-audit.sh` Section 11 catches mismatches automatically.
 - Sprint close gate:
-  - Run `Tools/sprint-audit.sh` (automated scan, 11 sections).
+  - Run `Tools/sprint-audit.sh` (automated scan, 12 sections).
   - Manual review (see `CODING_GUARDRAILS.md` §Close Gate).
 - All code, comments, commit messages in [English/language].
 - Commit policy: atomic commits preferred (one logical change per commit).
@@ -265,7 +265,7 @@ New session sequence:
 2. `Docs/Planning/Roadmap.md` → active sprint section
 
 Sprint start (new sprint transition):
-- `Docs/SPRINT_WORKFLOW.md` §Entry Gate (4 phases, 12 steps) — read and execute. No code before plan is confirmed.
+- `Docs/SPRINT_WORKFLOW.md` §Entry Gate (phases 0-3, 12 steps) — read and execute. No code before plan is confirmed.
 
 Sprint close:
 - `Docs/SPRINT_WORKFLOW.md` §Close Gate (5 phases) + §Sprint Close — read and execute.
@@ -323,6 +323,17 @@ Pattern rules:
 | Sprint | Category | Predicted? | Detection | Mode | Impact | Root Cause | Guardrail | Escalate? |
 |--------|----------|------------|-----------|------|--------|------------|-----------|-----------|
 
+## Failure Encounters — Current Sprint
+
+Log failures as they are discovered during implementation (bugs, test failures, unexpected behavior).
+Sprint Close step 7a reads this for retrospective comparison. Replace at each new sprint.
+
+| Item | Category | Failure Description | Detection | Date |
+|------|----------|-------------------|-----------|------|
+
+Category: direct / interaction / stress-edge.
+Detection: test / user-visual / profiler / code-review.
+
 ## Change Log
 
 [Sprint-scoped entries. Archived to Docs/Archive/ at sprint close.]
@@ -345,7 +356,7 @@ Engineering rules derived from real bugs. Review before writing code.
 | [task type 1] | §1, §2 |
 | [task type 2] | §1, §3 |
 | Sprint workflow | §Entry Gate, §Close Gate |
-| Anti-pattern quick check | §Anti-Patterns |
+| Anti-pattern quick check | §Anti-Pattern Quick Reference |
 
 ---
 
@@ -372,33 +383,37 @@ If the sprint is still a one-line sketch from Initial Planning:
 0b. Decompose into Must/Should/Could items with CORE-### IDs
     Format: `- [ ] CORE-###: [description]` — checkbox is mandatory.
     Plain bullets break close gate tracking (sprint-audit.sh Section 11).
-0c. Add metric gates for each Must item
+0c. Add metric gates for each item (Must, Should, and Could — all get metrics)
 0d. Priority & rigor review — two passes:
     **Pass 1 — Distribution check (on initial 0b decomposition, before any promotions):**
     - All items in Must? → decomposition didn't actually prioritize — re-sort.
     - Zero Should/Could? → check if Must includes nice-to-haves that should move down.
     - Must item has no dependencies and no metric? → should it be Should?
     Flag misplacements to user with reasoning. User decides final placement.
-    **Pass 2 — Should/Could rigor scan (after distribution is validated):**
-    Q1: Would removing this item cause a Must item's metric gate to FAIL?
-        YES → promote to Must. It was misclassified — it's a real dependency.
-        NO  → continue to Q2.
-    Q2: Does this item have its own metric gate, complex failure modes (multi-step,
-        cross-system), or interact with Must items in non-trivial ways?
-        YES → mark as **Must-gated** (★). Stays Should/Could (not sprint-blocking)
-              but receives Must-level Entry Gate rigor (steps 8, 9a, 9c apply).
-        NO  → normal Should/Could. Light gate only.
+    **Pass 2 — Dependency promotion (after distribution is validated):**
+    Q: Would removing this Should/Could item cause a Must item's metric gate to FAIL?
+       YES → promote to Must. It was misclassified — it's a real dependency.
+       NO  → stays at current priority.
     Post-promotion Must count may exceed initial count — this is valid.
     These are verified dependencies, not lazy grouping.
 0e. Present detailed sprint plan to user for approval before proceeding to Phase 1
+    User does not approve → identify concerns → rework 0b-0d → re-present.
+    If user decides the sprint direction is fundamentally wrong → §Sprint Abort procedure.
 This is the same process as Initial Planning step 4, applied to the next sprint.
 If items exceed scope limit → apply §Scope Negotiation.
 
 **Phase 1 — State Review (read-only):**
 1. Read TRACKING.md → open items, blockers, in_progress items from interrupted sessions
+   Clear §Predicted Failure Modes and §Failure Encounters sections
+   (replace previous sprint's content for the new sprint).
 2. Read Roadmap → Must/Should/Could for this sprint
-3. Check deferred/blocked items from previous sprints — carry forward or drop (user decides)
-4. Identify applicable GUARDRAILS sections
+3. Check non-verified items from previous sprints (all non-terminal statuses):
+   - `blocked`: is the blocker still active? Resolved → update status to `open`.
+     Still blocked → carry forward as `blocked` or drop (user decides).
+   - `deferred`: still relevant? Carry forward or drop (user decides).
+   - `open` / `in_progress`: still in scope? Carry forward (user decides).
+   - `fixed` (not yet verified): verify now or carry forward for verification (user decides).
+4. Identify applicable GUARDRAILS sections (consumed by implementation loop step A)
 
 **Phase 2 — Dependency Verification (read-only):**
 *(Sprint 1: skip this phase — no prior sprints exist.)*
@@ -407,20 +422,35 @@ If items exceed scope limit → apply §Scope Negotiation.
    the current sprint actually depends on those specific items. If not → dependency met.
    If yes → flag to user: "Sprint N depends on [deferred item] — resolve before proceeding?"
 6. Read dependency API source files, confirm contracts match
-7. List open architectural decisions
+7. List open architectural decisions — include in step 12a report.
+   If any decision directly affects this sprint's scope or approach, flag in step 8.
 
 **Phase 3 — Strategic Validation & Confirmation:**
-8. Strategic alignment check — for each Must item + Must-gated Should/Could:
+8. Strategic alignment check — for each item (Must, Should, Could):
    a. Still relevant? (superseded, already delivered?)
    b. Goal alignment? (does it serve core project goals?)
    c. Approach still valid? (has new info invalidated the method?)
    d. Metrics still appropriate? (measuring the right thing?)
-   Non-gated Should/Could: quick relevance check only (a. still relevant?).
    If any fails → flag to user with evidence + options (keep/modify/defer/remove).
+   User response mechanics:
+   - keep → item unchanged, continue gate.
+   - modify → update item description/scope/metrics in Roadmap, re-run steps 9a-9c for that item.
+   - defer → TRACKING.md status `deferred` + roadmap `[~]`, requires reason + target sprint.
+   - remove → delete from Roadmap + TRACKING.md, log removal in Change Log.
    AI does not unilaterally change sprint scope — user decides.
 9. Verification plan:
-   a. Failure mode analysis (per Must item + Must-gated Should/Could):
+   a. Failure mode analysis (per item — Must, Should, and Could):
       First: read TRACKING.md §Failure Mode History — which categories failed before?
+      Check for escalation triggers in §Failure Mode History and §Open Risks:
+      - Same category 2+ times in last 3 sprints → Architecture Review Required (see below).
+      - Same detection=user-visual 2+ times → propose automated proxy test before proceeding.
+      If Architecture Review triggered:
+        1. Identify the recurring category (direct/interaction/stress-edge)
+        2. Trace root causes across sprints — are they symptoms of the same design flaw?
+        3. Propose architectural fix (not per-sprint patch) with scope and effort estimate
+        4. Present to user: "Category [X] has failed [N] times across sprints [list].
+           Root causes: [list]. Proposed architectural fix: [description]. Proceed or defer?"
+        5. User decides: fix now (add to sprint scope) or defer (log with target sprint)
       Then: list known failure modes in 3 categories:
       - Direct: item breaks on its own (wrong calc, null ref, off-by-one)
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
@@ -430,44 +460,76 @@ If items exceed scope limit → apply §Scope Negotiation.
    b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
       "It runs" ≠ "it is correct".
-   c. Metric sufficiency (per Must item + Must-gated Should/Could):
-      Item has no metric gate? Propose one. Non-gated Should/Could: skip.
+   c. Metric sufficiency (per item — Must, Should, and Could):
+      Item has no metric gate? Propose one.
       For each metric, all four must hold:
       - Measurable by sprint end?
       - Test scenario defined? (inputs, environment, data size, repetition count)
       - Threshold non-trivial? (construct a scenario where metric passes but system is broken
         — if one exists, tighten threshold or add scenario constraints)
       - Coverage: every failure mode from 9a maps to a metric or test? Missing → add.
-      Any change (new metric, revised threshold, added test scenario) → update roadmap.
-      User approves metric changes before sprint starts (presented in step 12).
-10. Is scope realistic? (1-8 Must items. 0 Must → sprint is empty, redesign or skip.)
+      Any change (new metric, revised threshold, added test scenario) → propose in Entry Gate
+      report (step 12a). Do NOT update roadmap yet — user approves metric changes at step 12c.
+      If approved → update roadmap. If rejected → rework at step 9c, re-present.
+10. Is scope realistic? (1-8 Must items. 0 Must → sprint is empty: return to Phase 0 step 0b
+    to redesign scope, or run §Sprint Abort if the sprint goal is no longer viable.)
 11. Produce dependency-ordered implementation list
 12. Gate assessment, report & user approval
     a. Write full Entry Gate report to `Docs/Planning/S<N>_ENTRY_GATE.md`
        Contains: complete analysis from phases 0-3 (state review, dependency/API checks,
        strategic alignment, failure modes, implementation order, etc.)
-       Must include §Metric Changes from 9c: for each metric that was added, revised,
+       Must include a Metric Changes section from step 9c: for each metric that was added, revised,
        or had test scenarios defined — show before/after and rationale.
        This file serves as a living reference during the sprint and is deleted at Sprint Close.
-    b. Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
-    c. AI provides its own gate assessment before asking for approval:
+    b. AI provides its own gate assessment before asking for approval:
        - **Blocker summary:** any step that failed or raised concerns? (list or "none")
        - **Risk assessment:** clean / attention points exist (list them) / blocker found
        - **Scope assessment:** conservative / reasonable / aggressive
        - **Key watch items:** implementation-time risks that aren't gate blockers
          but require careful attention (e.g., specific interaction risks from Architecture Review)
        - **Recommendation:** "Gate passed — recommend proceeding" or "Gate blocked by [X]"
-    d. Log to TRACKING.md: "Entry Gate: [date], phases 0-3 ✓ (steps executed: [list])"
-    e. User approves before coding begins
+    c. User approves before coding begins
+       User does not approve → identify blocking concerns → return to the relevant phase
+       (Phase 0 for scope issues, Phase 3 for strategic/metric issues) → rework → re-present.
+       If user decides the sprint direction is fundamentally wrong → §Sprint Abort procedure.
+    d. After approval: log to TRACKING.md: "Entry Gate: [date], phases 0-3 ✓ (steps executed: [list])"
+       Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
+       Update roadmap with any metric changes approved at step c.
 
 ---
 
 ## Close Gate — Sprint-End Audit
 
 **Phase 0 — Metric gate check:**
-- Can each metric be measured? Evidence exists? (Must items + Must-gated Should/Could)
+- Can each metric be measured? Evidence exists? (all sprint metrics — every item has a metric gate)
 - Failure mode coverage: for each modified subsystem, are failure modes listed in 3 categories (direct / interaction / stress-edge)? Each has a metric or test? Missing → add, or document as known gap with target sprint.
-- Unmet metric escalation — when a metric is partially met or blocked:
+- **Structured metric verification** — fill this table for EVERY metric in the sprint.
+  Empty cells = gate cannot close.
+  ```
+  ## Metric Verification — Sprint N
+  | #  | Item(s)             | Metric              | Action Taken         | Status   | Evidence / Escalation                   |
+  |----|---------------------|---------------------|----------------------|----------|-----------------------------------------|
+  | 1  | CORE-001            | [metric from roadmap] | [what was done]    | ?        | [test link / escalation reason]         |
+  | ...| ...                 | ...                 | ...                  | ...      | ...                                     |
+  Action Taken values:
+    existing   = test already existed and passed — no action needed
+    written    = new test written this sprint
+    fixed      = test existed but failed — code fixed to pass
+    revised    = metric threshold or definition revised (note original → new)
+    added      = metric was missing at sprint start — added during Entry/Close Gate
+    escalated  = could not resolve — escalated as DEFERRED with reason
+  Status values:
+    PASS     = test exists + passes (link to test file:line)
+    DEFERRED = blocked by prerequisite (must follow escalation below)
+    FAIL     = test exists but fails (fix before closing; if unfixable → escalate as DEFERRED)
+    MISSING  = no test exists (write one; if untestable → escalate as DEFERRED with reason)
+  Rule: every row must be PASS or DEFERRED (with escalation). MISSING/FAIL → gate blocked.
+  If a FAIL/MISSING metric cannot be resolved: escalate to user — present options
+  (accept gap with target sprint, or §Sprint Abort if the metric is critical).
+  Guard: if ALL metrics are DEFERRED → gate blocked. At least one metric must PASS.
+  A sprint with zero verified metrics accomplished no verified work → §Sprint Abort procedure.
+  ```
+- Unmet metric escalation — when a metric is DEFERRED or MISSING:
   Do NOT silently mark `[ ]` and move on. Required steps:
   1. **Explain** — what is blocking completion? (missing data, unfinished prerequisite, external dependency)
   2. **Trace** — is the blocker tracked in the roadmap? (has a CORE-### entry?)
@@ -477,15 +539,30 @@ If items exceed scope limit → apply §Scope Negotiation.
      Include: what's done, what's missing, which sprint should finish it, and why.
   4. **User decides** — user picks target sprint and priority. Agent does not decide alone.
   5. **Log** — TRACKING.md: status = `deferred`, reason + target sprint documented.
+- **Present completed table to user** — after all metrics are resolved (PASS or DEFERRED),
+  present the full Metric Verification table to the user before proceeding to Phase 1a.
+  This is mandatory regardless of which path was taken (test written or escalated).
+  User sees every metric's final status and evidence. No silent close.
+- **Log compact summary to TRACKING.md** — do NOT copy the full table.
+  Write a one-line summary: `**Metric Verification:** X/Y PASS, Z DEFERRED (item-id reason → S<N>, ...)`
+  The full table lives in the session; tests in the codebase are the persistent evidence.
+  DEFERRED items already have their target sprint logged via the escalation procedure above.
 
 **Phase 1a — Automated scan:**
 - Run `Tools/sprint-audit.sh`
 - Exit code 2 (setup error): fix script configuration (paths, patterns) before proceeding.
   Do not skip the automated scan — fix the script first.
-- Exit code 1 (findings): review each finding, fix immediately or log with target sprint.
-- Exit code 0 (clean): proceed.
+  If the script cannot be adapted (unsupported language, missing tooling): skip automated scan,
+  log `sprint-audit.sh: not applicable — [reason]` in TRACKING.md Change Log, and rely on
+  Phase 1b (manual audit) for full coverage.
+- Exit code 1 (findings): review each finding, fix immediately or log with target sprint
+  (user decides which findings to defer — same principle as Phase 2).
+  Present automated scan summary to user before proceeding to Phase 1b.
+- Exit code 0 (clean): proceed (note "clean" to user before Phase 1b).
 
 **Phase 1b — Manual audit:**
+Identify modified files via `git diff` against the sprint start commit (or Entry Gate commit).
+Read each modified file and check:
 1. Memory/resource leaks
 2. Unnecessary allocations in hot paths
 3. O(n) → O(1) opportunities
@@ -495,8 +572,14 @@ If items exceed scope limit → apply §Scope Negotiation.
 7. Dead code and orphan scaffolding
 8. Debug path parity with production
 
+Output: per-file summary (file name + CLEAN or list of findings).
+Present summary to user before proceeding to Phase 2.
+Do not declare "manual audit complete" without per-file acknowledgment.
+
 **Phase 2 — Fix:**
-- Fix immediately or log with target sprint
+- Fix immediately or log with target sprint (user decides which findings to defer).
+- After Phase 2: present fix/defer summary to user before proceeding to Phase 3.
+  Show: which findings were fixed, which logged to target sprint with reason.
 
 **Phase 3 — Regression test:**
 - All tests must PASS after fixes
@@ -505,14 +588,26 @@ If items exceed scope limit → apply §Scope Negotiation.
 - 4a. File-level: new/modified code → matching test file exists?
 - 4b. Item-level: every completed item (Must+Should+Could) → behavioral test exists?
   Log item → test mapping in TRACKING.md evidence. No test → write one or document why untestable.
+- Present coverage gap summary to user before final test run:
+  Show: which gaps were found, which tests were written, which items documented as untestable.
 - Final test run PASS
+
+**Close Gate verdict & user approval:**
+- AI provides close gate assessment:
+  - **Metric summary:** X/Y PASS, Z DEFERRED (list deferred items + target sprints).
+    Include action breakdown: N existing, M written, K fixed, J revised, L added, P escalated.
+  - **Findings summary:** N fixed, M deferred to target sprint, K untestable items
+  - **Risk assessment:** clean / attention points exist (list them)
+  - **Recommendation:** "Gate passed — recommend closing sprint" or "Gate blocked by [X]"
+- User approves before Sprint Close begins.
+  User does not approve → identify concern → return to the relevant phase for rework.
 
 ---
 
 ## Sprint Close — Post-Gate
 
 1. Roadmap checkmarks
-   Run `sprint-audit.sh` Section 11 (Roadmap ↔ TRACKING sync).
+   Run `sprint-audit.sh` (full script runs — focus on Section 11 output for sync).
    Fix all mismatches before ticking.
    [x] = TRACKING.md verified (gate evidence logged)
    [~] = skipped + reason documented inline
@@ -520,7 +615,8 @@ If items exceed scope limit → apply §Scope Negotiation.
    Every [ ] item requires action — do NOT silently skip:
    → apply the unmet-metric escalation from Close Gate Phase 0
      (explain gap, trace blocker, propose target sprint, user decides).
-2. TRACKING.md update (all Must verified with evidence)
+2. TRACKING.md update (all Must verified with evidence;
+   completed Should/Could also updated with final status and evidence)
 3. CLAUDE.md checkpoint update (date, status, next focus)
 4. Changelog archive (move entries to Docs/Archive/)
 5. Performance baseline capture:
@@ -533,14 +629,30 @@ If items exceed scope limit → apply §Scope Negotiation.
    - Guardrails §Entry Gate / §Close Gate → consistent with SPRINT_WORKFLOW.md procedures?
    - Do not manually count steps/phases. Instead: verify that each numbered step in
      SPRINT_WORKFLOW.md has a corresponding action (not that counts match across files).
-   - Mismatch → fix before closing sprint
+   - Mismatch → fix before closing sprint.
+     If irreconcilable → document discrepancy in TRACKING.md §Open Risks with target sprint.
 7. Failure mode retrospective:
-   - Read TRACKING.md §Predicted Failure Modes (written at 9a)
-   - Compare: predicted vs actually encountered
-   - Add row to TRACKING.md §Failure Mode History (include Detection: test / user-visual / profiler)
-   - Unpredicted failure → new guardrail rule
-   - Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate
-   - Same detection=user-visual 2+ times → "Can automated proxy test replace visual check?" at next Entry Gate
+   a. Reconstruct actual failures: review Sprint Board for items that went through fix cycles,
+      Change Log for bug-related entries, and §Failure Encounters (if logged during implementation).
+      List every failure encountered with: Item, Category (direct/interaction/stress-edge), Detection method.
+   b. Read TRACKING.md §Predicted Failure Modes (written at 9a).
+   c. **Fill structured retrospective table** — one row per predicted mode + one row per actual failure:
+      ```
+      ## Failure Mode Retrospective — Sprint N
+      | Predicted Mode | Predicted? | Actually Occurred? | Detection | Impact | Root Cause | New Guardrail? |
+      |---------------|------------|-------------------|-----------|--------|------------|----------------|
+      Every predicted mode must have an "Actually Occurred?" answer (yes/no).
+      Every actual failure must appear — including unpredicted ones (Predicted? = no).
+      Empty rows = step incomplete.
+      ```
+   d. Transfer rows to TRACKING.md §Failure Mode History (include Detection column: test / user-visual / profiler).
+   e. Unpredicted failure → new guardrail rule. Follow CODING_GUARDRAILS.md §Update Rule
+      (7 steps: dedup check, root cause, rule, anti-pattern, code comment, sprint-audit.sh, LESSONS_INDEX.md).
+   f. Check §Failure Mode History for escalation triggers:
+      - Same category 2+ times in last 3 sprints → flag "Architecture Review Required" at next Entry Gate
+      - Same detection=user-visual 2+ times → flag "Can automated proxy test replace visual check?" at next Entry Gate
+      Record flags in TRACKING.md §Open Risks so Entry Gate 9a picks them up.
+   g. **Present completed retrospective table to user** before proceeding to step 8.
 8. Failure Mode History maintenance:
    - If §Failure Mode History exceeds 30 rows: archive rows older than 5 sprints
      to Docs/Archive/failure-history-S1-S[N].md. Keep last 5 sprints in TRACKING.md.
@@ -563,11 +675,14 @@ If items exceed scope limit → apply §Scope Negotiation.
 
 ## Update Rule
 
-1. Identify root cause of bug
-2. Add rule to relevant section
-3. Add to anti-pattern table
-4. Reference in code comment
-5. Update sprint-audit.sh if pattern is grep-detectable
+1. Check LESSONS_INDEX.md and anti-pattern table — does a rule for this root cause already exist?
+   Yes → strengthen existing rule (tighten scope, add example). No → continue.
+2. Identify root cause of bug
+3. Add rule to relevant section
+4. Add to anti-pattern table
+5. Reference in code comment
+6. Update sprint-audit.sh if pattern is grep-detectable
+7. Add entry to Docs/LESSONS_INDEX.md (RuleID, root cause, guardrail section, sprint, source item)
 ```
 
 ### Mid-Sprint Scope Change
@@ -579,13 +694,18 @@ that has already passed Entry Gate:
 1. User requests scope change (AI never initiates scope changes unilaterally)
 2. AI assesses impact:
    a. Does the new item conflict with in-progress items?
-   b. Does it invalidate any verified items? (if yes → regression, see §State Transitions)
+   b. Does it invalidate any verified items? (if yes → regression, see §State Transitions;
+      if no → no regression impact, continue to next check)
    c. Will it push the sprint over scope limit?
 3. AI presents options to user:
    - Add as new Must item (may push Should/Could to next sprint)
-   - Add as new Must item + defer an existing Must item to make room (user picks which)
-   - Add as hotfix outside sprint scope (no ID, no gate — emergency only)
-   - Defer to next sprint
+   - Add as new Must item + defer an existing Must item to make room (user picks which).
+     Deferred item: TRACKING.md status → `deferred` + reason, Roadmap → `[~]`.
+   - Add as hotfix outside sprint scope (no ID, no gate — emergency only).
+     Hotfix still requires: TRACKING.md Change Log entry with description,
+     test if testable, and inclusion in Sprint Close step 7 retrospective.
+     Only the formal ID assignment and gate process are skipped.
+   - Defer to next sprint (item not added now: log in Roadmap as future sprint sketch item)
 4. User decides
 5. Log decision in TRACKING.md Change Log:
    "Scope change: [date] — added [ID] mid-sprint. Reason: [why]. Impact: [what shifted]."
@@ -679,7 +799,7 @@ Rule: abort ≠ failure. Verified work persists, unfinished work is deferred, no
 
 **Should:** (if budget remains after Must)
 - [ ] CORE-003: [item description]
-- [ ] CORE-004: ★ [item description] — Must-gated (has metric / affects Must / complex failure modes)
+- [ ] CORE-004: [item description]
 
 **Could:** (stretch goals)
 - [ ] CORE-005: [item description]
@@ -749,10 +869,10 @@ This file starts empty on new projects. Add entries when:
 │  If sprint is a one-line sketch:                                │
 │    0a. Read sketch + previous sprint outcomes                   │
 │    0b. Decompose into Must/Should/Could with IDs                │
-│    0c. Add metric gates (Must items)                            │
+│    0c. Add metric gates (all items)                             │
 │    0d. Priority & rigor review (2 passes):                      │
 │        Pass 1: distribution check (all Must? re-sort)           │
-│        Pass 2: Q1 promote / Q2 ★ Must-gate Should/Could         │
+│        Pass 2: dependency promotion (Should/Could → Must?)       │
 │    0e. User approves detailed plan                              │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -786,7 +906,7 @@ This file starts empty on new projects. Add entries when:
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 3 — Strategic Validation & Confirmation                  │
 │                                                                 │
-│  For each Must item + ★ Must-gated, 4-question check:           │
+│  For each item (Must, Should, Could), 4-question check:         │
 │  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌─────────────────┐    │
 │  │ Still    │ │ Goal      │ │ Approach │ │ Metrics still   │    │
 │  │ relevant?│ │ aligned?  │ │ valid?   │ │ appropriate?    │    │
@@ -795,20 +915,23 @@ This file starts empty on new projects. Add entries when:
 │  Then:                                                          │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ 9. Verification plan:                                     │  │
-│  │    a. Metrics measurable?   b. How verified? (invariants) │  │
-│  │    c. Metric gap? → add    d. Failure modes? (3 types):   │  │
+│  │    a. Failure modes (3 types per item):                   │  │
 │  │       Read TRACKING §Failure Mode History first           │  │
+│  │       Check escalation triggers (category 2+/3 sprints    │  │
+│  │       → Architecture Review; visual 2+ → proxy test)      │  │
 │  │       • Direct  • Interaction  • Stress/edge              │  │
 │  │       >=1 per category, each with metric or test          │  │
 │  │       Write to TRACKING §Predicted Failure Modes          │  │
+│  │    b. How verified? (unit/integration/manual, invariants) │  │
+│  │    c. Metric sufficiency (measurable? non-trivial? 9a     │  │
+│  │       coverage? gap → add metric, update roadmap)         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────────────────────┐ │
 │  │ 10.Scope │ │ 11.Impl  │ │ 12. Gate assessment + report:     ││
 │  │ check    │ │ order    │ │  a. Write S<N>_ENTRY_GATE.md     │ │
-│  └──────────┘ └──────────┘ │  b. Ref in TRACKING.md           │ │
-│                             │  c. AI own assessment + recommend││
-│                             │  d. Log gate execution           ││
-│                             │  e. User approves before coding  ││
+│  └──────────┘ └──────────┘ │  b. AI own assessment + recommend│ │
+│                             │  c. User approves before coding  ││
+│                             │  d. Log + update (post-approval) ││
 │                             └──────────────────────────────────┘│
 │                                                                 │
 │                "Should we build this, this way?"                │
@@ -856,6 +979,10 @@ This file starts empty on new projects. Add entries when:
 │  │              ┌─────────┴─────────┐                      │    │
 │  │              │ All pass?         │                      │    │
 │  │              │  NO → fix, recheck│                      │    │
+│  │              │  (max 3 rounds;  │                      │    │
+│  │              │   still failing → │                      │    │
+│  │              │   escalate to     │                      │    │
+│  │              │   user)           │                      │    │
 │  │              │  YES ↓            │                      │    │
 │  │              └───────────────────┘                      │    │
 │  │                        │                                │    │
@@ -875,7 +1002,9 @@ This file starts empty on new projects. Add entries when:
 │  │     │ 2. User runs, responds:                    │      │    │
 │  │     │    "OK" → proceed                          │      │    │
 │  │     │    "Problem" → log CORE-###, AI fixes,     │      │    │
-│  │     │    ask user again (loop until resolved)    │      │    │
+│  │     │    ask user again (resolved = user         │      │    │
+│  │     │    confirms "OK"; max 3 attempts, then     │      │    │
+│  │     │    log as known gap with target sprint)    │      │    │
 │  │     │ 3. Automated proxy test exists?            │      │    │
 │  │     │    → still ask user for visual confirm     │      │    │
 │  │     └────────────────────────────────────────────┘      │    │
@@ -883,6 +1012,9 @@ This file starts empty on new projects. Add entries when:
 │  │                        ▼                                │    │
 │  │  E. Update TRACKING.md                                  │    │
 │  │     Mark item fixed (in_progress → fixed), log decisions│    │
+│  │     If bugs/failures encountered during this item:      │    │
+│  │     → log to §Failure Encounters (item, category,       │    │
+│  │       description, detection method)                    │    │
 │  │                                                         │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                             │                                   │
@@ -911,7 +1043,7 @@ This file starts empty on new projects. Add entries when:
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 0 — Metric Gate Sufficiency                              │
 │                                                                 │
-│  For each sprint metric (Must + ★ Must-gated):                  │
+│  For each sprint metric (every item has a metric gate):          │
 │  □ Measurable with current infrastructure?                      │
 │  □ Test evidence sufficient?                                    │
 │  □ Threshold reasonable for current scale?                      │
@@ -920,6 +1052,13 @@ This file starts empty on new projects. Add entries when:
 │    • Interaction (cross-system) — >=1 identified?               │
 │    • Stress/edge (extreme-condition) — >=1 identified?          │
 │    Each mode has metric or test? Missing → add or document gap  │
+│                                                                 │
+│  OUTPUT: Structured Metric Verification table                   │
+│  Every metric → PASS / DEFERRED / FAIL / MISSING                │
+│  Empty cells or MISSING/FAIL → gate BLOCKED (cannot proceed)    │
+│  Present completed table to user before proceeding to Phase 1a  │
+│  Log compact summary to TRACKING (not full table):              │
+│    "Metric Verification: X/Y PASS, Z DEFERRED (id → S<N>)"     │
 │                                                                 │
 │  FAIL: unmeasurable + no evidence → fix scope                   │
 │  PARTIAL: blocked by unfinished prerequisite?                   │
@@ -947,10 +1086,12 @@ This file starts empty on new projects. Add entries when:
 │  │ 11a.Roadmap sync (item ID ↔ checkbox status)               │ │
 │  │ 11b.Orphan detection (items in one file but not other)     │ │
 │  │ 11c.Checkbox format (CORE-### without - [ ] syntax)        │ │
+│  │ 12. Metric coverage (roadmap metric ↔ test evidence)      │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  Exit codes: 0=clean, 1=findings, 2=setup error (fix script)    │
-│  Output: WARN candidates — review each, fix or mark FP          │
+│  Output: WARN (dismissible) + BLOCKER (non-dismissible)          │
+│  BLOCKER = metric without test (Section 12) — cannot mark as FP  │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -966,6 +1107,9 @@ This file starts empty on new projects. Add entries when:
 │  6. Missing observability (logging, metrics, profiling)         │
 │  7. Dead code (unused, orphan scaffolding, output-discarded)    │
 │  8. Debug/test path parity with production                      │
+│                                                                 │
+│  OUTPUT: per-file summary (CLEAN or findings list)              │
+│  Present summary to user before proceeding to Phase 2           │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -992,7 +1136,19 @@ This file starts empty on new projects. Add entries when:
               ┌──────────────┴──────────────┐
               │ All phases pass?            │
               │  NO  → fix, re-run          │
-              │  YES → sprint close         │
+              │  (max 2 full re-runs; still │
+              │   failing → escalate to user│
+              │   with remaining findings)  │
+              │  YES ↓                      │
+              └──────────────┬──────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────────┐
+              │ Close Gate verdict:          │
+              │  AI assessment (metrics,     │
+              │  findings, risk, recommend)  │
+              │  User approves → close       │
+              │  User rejects → rework phase │
               └──────────────┬──────────────┘
                              │
            ══════════════════╪═══════════════
@@ -1002,14 +1158,14 @@ This file starts empty on new projects. Add entries when:
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. Roadmap checkmarks                                          │
-│     → Run sprint-audit.sh Section 11 (Roadmap ↔ TRACKING sync)  │
+│     → Run sprint-audit.sh (focus on Section 11 sync output)     │
 │     → Fix all mismatches before ticking                         │
 │     [x] = TRACKING.md verified (gate evidence logged)           │
 │     [~] = skipped + reason documented inline                    │
 │     [ ] = not verified (open, in_progress, or fixed)            │
 │                                                                 │
 │  2. TRACKING.md update                                          │
-│     Sprint board: all Must verified with evidence               │
+│     All Must verified; completed Should/Could also updated      │
 │                                                                 │
 │  3. CLAUDE.md checkpoint update                                 │
 │     Date, status, next sprint focus                             │
@@ -1028,13 +1184,18 @@ This file starts empty on new projects. Add entries when:
 │     → Mismatch → fix before closing sprint                      │
 │                                                                 │
 │  7. Failure mode retrospective                                  │
-│     → Read TRACKING §Predicted Failure Modes (from 9a)          │
-│     → Compare predictions vs actual failures                    │
-│     → Add row to TRACKING.md §Failure Mode History              │
-│       (Detection column: test / user-visual / profiler)         │
-│     → Unpredicted → new guardrail rule                          │
-│     → Same category 2+/3 sprints → Architecture Review Required │
-│     → Same detection=user-visual 2+ → proxy test question       │
+│     a. Reconstruct actual failures from Sprint Board +          │
+│        Change Log + §Failure Encounters                         │
+│     b. Read TRACKING §Predicted Failure Modes (from 9a)         │
+│     c. Fill structured retrospective table:                     │
+│        predicted mode + actual? + detection + root cause        │
+│        Every predicted mode answered. Every failure listed.     │
+│     d. Transfer to TRACKING §Failure Mode History               │
+│     e. Unpredicted → new guardrail (follow §Update Rule)        │
+│     f. Check escalation triggers → flag in §Open Risks:         │
+│        same category 2+/3 sprints → Architecture Review         │
+│        same visual 2+ → proxy test question                     │
+│     g. Present retrospective table to user                      │
 │                                                                 │
 │  8. Failure Mode History maintenance                            │
 │     → >30 rows? Archive older entries to Docs/Archive/          │
@@ -1071,6 +1232,7 @@ TEST_DIR="$ROOT/tests"      # ← adjust to your test directory
 
 total=0
 errors=0
+blockers=0    # Non-dismissible findings (cannot be marked as false positive)
 
 # Verify required directories exist
 for dir_var in SRC_DIR TEST_DIR; do
@@ -1230,6 +1392,56 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
 fi
 total=$((total + sync))
 
+# 12. Metric ↔ Test Coverage
+# Each roadmap metric must have a matching test in TEST_DIR.
+# Handles two formats:
+#   Format A: "Metric: description" or "**Metric:** description"
+#   Format B: Bullet lines under "**Metric gates:**" header
+echo ""
+echo "METRIC COVERAGE:"
+metric_gaps=0
+
+if [[ -f "$ROADMAP_FILE" ]]; then
+  metric_lines=$(awk '
+    /[Mm]etric[s]?[[:space:]]*[:：]/ && !/[Mm]etric[[:space:]]+gate/ { print; next }
+    /[Mm]etric[[:space:]]+gate/ { in_gate=1; next }
+    in_gate && /^[[:space:]]*-[[:space:]]/ { print; next }
+    in_gate && /^[[:space:]]*$/ { next }
+    in_gate { in_gate=0 }
+  ' "$ROADMAP_FILE" 2>/dev/null)
+
+  if [[ -z "$metric_lines" ]]; then
+    echo "  (no metric lines found in Roadmap — check format)"
+  else
+    while IFS= read -r mline; do
+      if echo "$mline" | grep -qiE "[Mm]etric[s]?\s*[:：]"; then
+        metric_desc=$(echo "$mline" | sed -E 's/.*[Mm]etric[s]?\s*[:：]\s*//' | sed 's/[*`]//g' | xargs)
+      else
+        metric_desc=$(echo "$mline" | sed -E 's/^\s*-\s*//' | sed 's/[*`]//g' | xargs)
+      fi
+      [[ -z "$metric_desc" ]] && continue
+      keywords=$(echo "$metric_desc" | tr '[:upper:]' '[:lower:]' | \
+        sed -E 's/[^a-z0-9 ]/ /g' | tr ' ' '\n' | \
+        grep -vE '^(the|a|an|is|are|be|to|of|in|for|and|or|no|not|with|must|should|each|per|all|any|same|than|from|has|have|does|when|will|can|at|by)$' | \
+        grep -E '.{3,}' | sort -u | head -8)
+      found=false
+      for kw in $keywords; do
+        if grep -rli "$kw" "$TEST_DIR" --include="*.${EXT:-*}" 2>/dev/null | grep -q .; then
+          found=true; break
+        fi
+      done
+      if ! $found; then
+        echo "  BLOCKER  NO TEST: $metric_desc"
+        metric_gaps=$((metric_gaps + 1))
+      fi
+    done <<< "$metric_lines"
+  fi
+  [[ $metric_gaps -eq 0 ]] && echo "  All metrics have test coverage."
+  [[ $metric_gaps -gt 0 ]] && echo "  $metric_gaps BLOCKER(s) — not false-positive-eligible. Write tests or escalate."
+fi
+total=$((total + metric_gaps))
+blockers=$((blockers + metric_gaps))
+
 # ── Summary ──
 echo ""
 if [[ $errors -gt 0 ]]; then
@@ -1238,6 +1450,10 @@ if [[ $errors -gt 0 ]]; then
 elif [[ $total -eq 0 ]]; then
   echo "Sprint audit CLEAN — 0 findings."
   exit 0
+elif [[ $blockers -gt 0 ]]; then
+  echo "Sprint audit: $total finding(s), $blockers BLOCKER(s) — gate cannot close."
+  echo "BLOCKER findings require action (write test or escalate). Cannot be dismissed."
+  exit 1
 else
   echo "Sprint audit: $total finding(s) — review needed."
   exit 1
@@ -1322,21 +1538,34 @@ Bug discovered
       │
       ▼
 ┌──────────────┐     ┌────────────────────┐
-│ Fix the bug  │────►│ Add guardrail rule │
-└──────────────┘     │ (never-again)      │
+│ Fix the bug  │────►│ Check: rule exists │
+└──────────────┘     │ in LESSONS_INDEX?  │
                      └────────┬───────────┘
-                              │
-                              ▼
-                     ┌────────────────────┐
-                     │ Add to anti-pattern│
-                     │ quick-ref table    │
-                     └────────┬───────────┘
-                              │
-                              ▼
-                     ┌────────────────────┐
-                     │ Update sprint-audit│
-                     │ if grep-detectable │
-                     └────────────────────┘
+                      no      │      yes
+                 ┌────────────┴────────────┐
+                 ▼                         ▼
+        ┌────────────────────┐   ┌─────────────────┐
+        │ Add guardrail rule │   │ Strengthen       │
+        │ (never-again)      │   │ existing rule    │
+        └────────┬───────────┘   └─────────────────┘
+                 │
+                 ▼
+        ┌────────────────────┐
+        │ Add to anti-pattern│
+        │ quick-ref table    │
+        └────────┬───────────┘
+                 │
+                 ▼
+        ┌────────────────────┐
+        │ Update sprint-audit│
+        │ if grep-detectable │
+        └────────┬───────────┘
+                 │
+                 ▼
+        ┌────────────────────┐
+        │ Add entry to       │
+        │ LESSONS_INDEX.md   │
+        └────────────────────┘
 
 Guardrails grow organically from real bugs.
 Never add hypothetical rules — only rules from production experience.
@@ -1350,23 +1579,26 @@ Never add hypothetical rules — only rules from production experience.
 
 ```
   open ─── work started ───► in_progress ─── implementation done ───► fixed ─── test evidence ───► verified
-                                  │                                     │                              │
-                                  │ (external blocker)                  │ (no evidence provided)       │ (regression found)
-                                  ▼                                     └── stays fixed (blocks close) │
-                              blocked                                                                  │
-                                  │ (blocker resolved)                                                 │
-                                  └──► in_progress                        open ◄───────────────────────┘
-                                                                          (log reason in Change Log)
+    │                             │                                     │                              │
+    │ (dependency                 │ (external blocker)                  │ (rework needed               │ (regression found)
+    │  discovered)                ▼                                     │  before verification)        │
+    │                         blocked                                   ▼                              │
+    │                             │ (blocker resolved)              in_progress                        │
+    └──► blocked                  └──► in_progress                  (re-fix cycle)                    │
+                                                                                                      │
+                                                                        open ◄────────────────────────┘
+                                                                        (log reason in Change Log)
   Any status ──► deferred (intentional skip, requires reason + target sprint)
 ```
 
 ### Sprint Lifecycle
 
 ```
-  planned → entry gate PASS → in progress → Must done → close gate PASS → done
-                │                                            │
-                │ (fail)                                     │ (fail)
-                └── flag to user, user decides              └── fix, re-run
+  planned → entry gate PASS → in progress → Must done → close gate PASS → done → next sprint (planned)
+                │                   │                        │
+                │ (fail)            │ (user aborts)          │ (fail)
+                └── flag to user,   └──► aborted             └── fix, re-run
+                    user decides         (abbreviated close)
 ```
 
 ### Document Update Triggers
@@ -1381,7 +1613,8 @@ Never add hypothetical rules — only rules from production experience.
 │ Item blocked     │ TRACKING.md (status → blocked + risk entry)   │
 │ Item deferred    │ TRACKING.md (status → deferred + reason)      │
 │ Regression found │ TRACKING.md (verified → open + change log)    │
-│ New rule found   │ GUARDRAILS.md (rule + anti-pattern)           │
+│ New rule found   │ GUARDRAILS.md (rule + anti-pattern) +         │
+│                  │ LESSONS_INDEX.md (traceability entry)          │
 │ Sprint starts    │ TRACKING.md (Current Focus)                   │
 │ Sprint closes    │ Roadmap (checkmarks), CLAUDE.md (checkpoint)  │
 │ Sprint archived  │ Docs/Archive/changelog-S<N>.md                │
@@ -1390,6 +1623,10 @@ Never add hypothetical rules — only rules from production experience.
 │ Scope change     │ TRACKING.md (change log + new/modified items) │
 │ Contract revised │ CLAUDE.md §Immutable Contracts + change log   │
 │ Sprint aborted   │ TRACKING.md (items → deferred + change log)   │
+│ Entry Gate run   │ Docs/Planning/S<N>_ENTRY_GATE.md (created)    │
+│ Sprint closed    │ Docs/Planning/S<N>_ENTRY_GATE.md (deleted)    │
+│ Failure logged   │ TRACKING.md §Failure Encounters               │
+│ Perf baseline    │ TRACKING.md (metrics recorded, compare prev)  │
 └──────────────────┴───────────────────────────────────────────────┘
 ```
 
@@ -1411,6 +1648,9 @@ Use this checklist when bootstrapping a new project:
     □ Current Focus section
     □ Sprint Board table (ID, summary, status, sprint, evidence)
     □ Open Risks / Blockers table
+    □ Predicted Failure Modes section (Entry Gate 9a writes, Sprint Close 7 reads)
+    □ Failure Encounters section (implementation logging, Sprint Close 7a reads)
+    □ Failure Mode History section (Sprint Close 7d writes, Entry Gate 9a reads)
     □ Change Log section
 
 □ Docs/CODING_GUARDRAILS.md exists with:
@@ -1419,6 +1659,10 @@ Use this checklist when bootstrapping a new project:
     □ Entry Gate procedure
     □ Close Gate procedure
     □ Anti-pattern quick reference table
+
+□ Docs/LESSONS_INDEX.md exists with:
+    □ RuleID / Root Cause / Guardrail Section / Sprint / Source table
+    □ Starts empty on new projects (grows as bugs are found)
 
 □ Docs/Planning/Roadmap.md exists with:
     □ Sprint list with Must/Should/Could per sprint
@@ -1468,5 +1712,5 @@ Consider: separate guardrails per subsystem (linked from main index).
 |--------|------|------|
 | Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
 | Review | Self-verify + AI agent | Peer review + AI agent |
-| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (all 4 phases) |
+| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (phases 0-3) |
 | Close Gate | Full (quality is non-negotiable) | Full + peer sign-off |
