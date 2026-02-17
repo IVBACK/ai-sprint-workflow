@@ -307,7 +307,7 @@ Reverse transition: `verified` → `open` is allowed ONLY when a regression is d
 
 ## Predicted Failure Modes — Current Sprint
 
-Written at Entry Gate step 9d. Read at Sprint Close step 7 (retrospective comparison).
+Written at Entry Gate step 9a. Read at Sprint Close step 7 (retrospective comparison).
 Replace this section at each new sprint's Entry Gate.
 
 | Item | Category | Predicted Mode | Detection Plan |
@@ -315,7 +315,7 @@ Replace this section at each new sprint's Entry Gate.
 
 ## Failure Mode History
 
-Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9d (failure mode analysis).
+Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9a (failure mode analysis).
 Pattern rules:
 - Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate.
 - Same detection=user-visual 2+ times → "Can an automated proxy test replace visual check?" mandatory question at next Entry Gate.
@@ -386,7 +386,7 @@ If the sprint is still a one-line sketch from Initial Planning:
     Q2: Does this item have its own metric gate, complex failure modes (multi-step,
         cross-system), or interact with Must items in non-trivial ways?
         YES → mark as **Must-gated** (★). Stays Should/Could (not sprint-blocking)
-              but receives Must-level Entry Gate rigor (steps 8, 9c, 9d apply).
+              but receives Must-level Entry Gate rigor (steps 8, 9a, 9c apply).
         NO  → normal Should/Could. Light gate only.
     Post-promotion Must count may exceed initial count — this is valid.
     These are verified dependencies, not lazy grouping.
@@ -419,26 +419,35 @@ If items exceed scope limit → apply §Scope Negotiation.
    If any fails → flag to user with evidence + options (keep/modify/defer/remove).
    AI does not unilaterally change sprint scope — user decides.
 9. Verification plan:
-   a. Can all metrics be measured by sprint end?
-   b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
-      Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
-      "It runs" ≠ "it is correct".
-   c. Item has no metric gate? Propose one and add to roadmap. User approves before sprint starts.
-      Applies to: all Must items + Must-gated Should/Could. Non-gated Should/Could: skip.
-   d. Failure mode analysis (per Must item + Must-gated Should/Could):
+   a. Failure mode analysis (per Must item + Must-gated Should/Could):
       First: read TRACKING.md §Failure Mode History — which categories failed before?
       Then: list known failure modes in 3 categories:
       - Direct: item breaks on its own (wrong calc, null ref, off-by-one)
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
       - Stress/edge: invisible in normal use (rapid oscillation, pool exhaustion, cascade)
-      Each category: >=1 mode. Each mode: metric or test that detects it? Missing → add to plan.
+      Each category: >=1 mode.
       Write predictions to TRACKING.md §Predicted Failure Modes (step 7 reads this).
+   b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
+      Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
+      "It runs" ≠ "it is correct".
+   c. Metric sufficiency (per Must item + Must-gated Should/Could):
+      Item has no metric gate? Propose one. Non-gated Should/Could: skip.
+      For each metric, all four must hold:
+      - Measurable by sprint end?
+      - Test scenario defined? (inputs, environment, data size, repetition count)
+      - Threshold non-trivial? (construct a scenario where metric passes but system is broken
+        — if one exists, tighten threshold or add scenario constraints)
+      - Coverage: every failure mode from 9a maps to a metric or test? Missing → add.
+      Any change (new metric, revised threshold, added test scenario) → update roadmap.
+      User approves metric changes before sprint starts (presented in step 12).
 10. Is scope realistic? (1-8 Must items. 0 Must → sprint is empty, redesign or skip.)
 11. Produce dependency-ordered implementation list
 12. Gate assessment, report & user approval
     a. Write full Entry Gate report to `Docs/Planning/S<N>_ENTRY_GATE.md`
        Contains: complete analysis from phases 0-3 (state review, dependency/API checks,
        strategic alignment, failure modes, implementation order, etc.)
+       Must include §Metric Changes from 9c: for each metric that was added, revised,
+       or had test scenarios defined — show before/after and rationale.
        This file serves as a living reference during the sprint and is deleted at Sprint Close.
     b. Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
     c. AI provides its own gate assessment before asking for approval:
@@ -526,7 +535,7 @@ If items exceed scope limit → apply §Scope Negotiation.
      SPRINT_WORKFLOW.md has a corresponding action (not that counts match across files).
    - Mismatch → fix before closing sprint
 7. Failure mode retrospective:
-   - Read TRACKING.md §Predicted Failure Modes (written at 9d)
+   - Read TRACKING.md §Predicted Failure Modes (written at 9a)
    - Compare: predicted vs actually encountered
    - Add row to TRACKING.md §Failure Mode History (include Detection: test / user-visual / profiler)
    - Unpredicted failure → new guardrail rule
@@ -535,7 +544,7 @@ If items exceed scope limit → apply §Scope Negotiation.
 8. Failure Mode History maintenance:
    - If §Failure Mode History exceeds 30 rows: archive rows older than 5 sprints
      to Docs/Archive/failure-history-S1-S[N].md. Keep last 5 sprints in TRACKING.md.
-   - Entry Gate 9d only needs recent history (last 3 sprints) for pattern detection.
+   - Entry Gate 9a only needs recent history (last 3 sprints) for pattern detection.
 9. Entry Gate report cleanup:
    - Delete `Docs/Planning/S<N>_ENTRY_GATE.md` — its purpose (sprint-scoped reference) is fulfilled.
    - The gate execution log in TRACKING.md (from Entry Gate step 12d) persists as the permanent record.
@@ -1019,7 +1028,7 @@ This file starts empty on new projects. Add entries when:
 │     → Mismatch → fix before closing sprint                      │
 │                                                                 │
 │  7. Failure mode retrospective                                  │
-│     → Read TRACKING §Predicted Failure Modes (from 9d)          │
+│     → Read TRACKING §Predicted Failure Modes (from 9a)          │
 │     → Compare predictions vs actual failures                    │
 │     → Add row to TRACKING.md §Failure Mode History              │
 │       (Detection column: test / user-visual / profiler)         │
@@ -1439,8 +1448,8 @@ Abbreviated Entry Gate for small projects:
 - Phase 1: steps 1-2 only (read TRACKING + Roadmap). Skip deferred item review and guardrails index.
 - Phase 2: skip entirely
 - Phase 3: steps 8 + 10 + 12 only (strategic alignment, scope check, confirm).
-  Skip failure mode analysis (step 9d) — overhead exceeds value for <=5 items.
-  Skip verification plan detail (step 9a-c) — cover in self-verify during implementation.
+  Skip failure mode analysis (step 9a) — overhead exceeds value for <=5 items.
+  Skip verification plan detail (step 9b-c) — cover in self-verify during implementation.
 
 ### Medium Project (5-50 files)
 
