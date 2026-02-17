@@ -264,6 +264,14 @@ Status values: `open` → `fixed` → `verified`
 |----|------|------------|--------|
 | R-001 | [description] | [plan] | S1 |
 
+## Failure Mode History
+
+Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9d (failure mode analysis).
+Pattern rule: same category appears 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate.
+
+| Sprint | Category | Predicted? | Mode | Impact | Root Cause | Guardrail | Escalate? |
+|--------|----------|------------|------|--------|------------|-----------|-----------|
+
 ## Change Log
 
 [Sprint-scoped entries. Archived to Docs/Archive/ at sprint close.]
@@ -332,7 +340,9 @@ Before writing code for a new sprint:
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
       "It runs" ≠ "it is correct".
    c. Item has no metric gate? Propose one and add to roadmap. User approves before sprint starts.
-   d. Failure mode analysis (per Must item): list known failure modes in 3 categories:
+   d. Failure mode analysis (per Must item):
+      First: read TRACKING.md §Failure Mode History — which categories failed before?
+      Then: list known failure modes in 3 categories:
       - Direct: item breaks on its own (wrong calc, null ref, off-by-one)
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
       - Stress/edge: invisible in normal use (rapid oscillation, pool exhaustion, cascade)
@@ -393,9 +403,11 @@ Before writing code for a new sprint:
    - Step/phase counts consistent across all docs?
    - Mismatch → fix before closing sprint
 7. Failure mode retrospective:
-   - Entry Gate predicted modes vs actually encountered
-   - Unpredicted failure → add to guardrails as new rule + add to step 9d examples
-   - Same category failed 2+ sprints → flag as architectural issue (not per-sprint fix)
+   - Read Entry Gate 9d predictions for this sprint
+   - Compare: predicted vs actually encountered
+   - Add row to TRACKING.md §Failure Mode History
+   - Unpredicted failure → new guardrail rule
+   - Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate
 8. Sprint "done"
 
 ---
@@ -536,6 +548,7 @@ This file starts empty on new projects. Add entries when:
 │  │ 9. Verification plan:                                     │  │
 │  │    a. Metrics measurable?   b. How verified? (invariants) │  │
 │  │    c. Metric gap? → add    d. Failure modes? (3 types):  │  │
+│  │       Read TRACKING §Failure Mode History first           │  │
 │  │       • Direct  • Interaction  • Stress/edge             │  │
 │  │       >=1 per category, each with metric or test         │  │
 │  └───────────────────────────────────────────────────────────┘  │
@@ -735,9 +748,10 @@ This file starts empty on new projects. Add entries when:
 │     → Mismatch → fix before closing sprint                      │
 │                                                                 │
 │  7. Failure mode retrospective                                  │
-│     → Predicted modes vs actually encountered                   │
-│     → Unpredicted failure → new guardrail rule + step 9d update │
-│     → Same category 2+ sprints → flag architectural issue       │
+│     → Compare 9d predictions vs actual failures                 │
+│     → Add row to TRACKING.md §Failure Mode History              │
+│     → Unpredicted → new guardrail rule                          │
+│     → Same category 2+/3 sprints → Architecture Review Required │
 │                                                                 │
 │  8. Sprint "done" ──────────► next sprint Entry Gate            │
 └─────────────────────────────────────────────────────────────────┘

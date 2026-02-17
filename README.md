@@ -146,6 +146,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **Gate execution evidence.** Entry Gate step 12 logs which steps were executed and what was decided. The log goes to `TRACKING.md` so future sessions can verify the gate actually ran — not just that the sprint started.
 - **Workflow self-audit.** Sprint Close step 6: cross-reference integrity check. Do `CLAUDE.md` references match their target files? Are step/phase counts consistent? Catches the workflow's own drift before it causes skipped checks.
 - **Failure mode retrospective.** Sprint Close step 7: predicted failure modes (from Entry Gate 9d) are compared against what actually happened. Unpredicted failures become new guardrail rules. Same category failing across 2+ sprints is flagged as an architectural issue, not a per-sprint fix.
+- **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9d reads this history before predicting new modes. Sprint Close step 7 writes to it after comparing predictions vs reality. The AI doesn't start from zero — it learns which failure categories recur.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 
 ## Supported Languages
