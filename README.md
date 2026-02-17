@@ -135,7 +135,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 ## Key Design Decisions
 
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
-- **Sprint scope, not duration.** A sprint is 3-12 items (an "item" = one deliverable behavior), not a calendar week. AI can finish a "sprint" in hours.
+- **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
 - **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
 - **Automated + manual review.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output). Manual review catches semantic issues (logic errors, resource leaks, design flaws).
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
