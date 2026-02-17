@@ -340,6 +340,9 @@ Before writing code for a new sprint:
 10. Is scope realistic? (<=8 Must items)
 11. Produce dependency-ordered implementation list
 12. Present plan to user for approval
+    - Summary: steps executed, files read, decisions made
+    - Log to TRACKING.md: "Entry Gate: [date], steps 1-12 ✓"
+    - User approves before coding begins
 
 ---
 
@@ -374,6 +377,26 @@ Before writing code for a new sprint:
 - 4b. Item-level: every completed item (Must+Should+Could) → behavioral test exists?
   Log item → test mapping in TRACKING.md evidence. No test → write one or document why untestable.
 - Final test run PASS
+
+---
+
+## Sprint Close — Post-Gate
+
+1. Roadmap checkmarks ([x] done, [~] skipped + reason)
+2. TRACKING.md update (all Must verified with evidence)
+3. CLAUDE.md checkpoint update (date, status, next focus)
+4. Changelog archive (move entries to Docs/Archive/)
+5. Performance baseline capture (record metrics, compare vs previous sprint, flag regressions)
+6. Workflow integrity check:
+   - CLAUDE.md references match target file sections?
+   - Guardrails pointer matches SPRINT_WORKFLOW.md content?
+   - Step/phase counts consistent across all docs?
+   - Mismatch → fix before closing sprint
+7. Failure mode retrospective:
+   - Entry Gate predicted modes vs actually encountered
+   - Unpredicted failure → add to guardrails as new rule + add to step 9d examples
+   - Same category failed 2+ sprints → flag as architectural issue (not per-sprint fix)
+8. Sprint "done"
 
 ---
 
@@ -516,10 +539,11 @@ This file starts empty on new projects. Add entries when:
 │  │       • Direct  • Interaction  • Stress/edge             │  │
 │  │       >=1 per category, each with metric or test         │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐                  │
-│  │ 10.Scope │ │ 11.Impl  │ │ 12. Present    │                  │
-│  │ check    │ │ order    │ │ plan → confirm │                  │
-│  └──────────┘ └──────────┘ └────────────────┘                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────────────────────┐│
+│  │ 10.Scope │ │ 11.Impl  │ │ 12. Present + confirm:           ││
+│  │ check    │ │ order    │ │  Log gate execution to TRACKING  ││
+│  └──────────┘ └──────────┘ │  User approves before coding     ││
+│                             └──────────────────────────────────┘│
 │                                                                 │
 │                "Should we build this, this way?"                │
 └────────────────────────────┬────────────────────────────────────┘
@@ -658,16 +682,22 @@ This file starts empty on new projects. Add entries when:
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 2 — Fix                                                  │
-│  Fix immediately OR log with target sprint (forward note)       │
-│                                                                 │
+│  Each finding: fix immediately OR log with target sprint        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 3 — Regression Test                                      │
-│  All tests PASS after Phase 2 fixes                             │
-│                                                                 │
+│  All tests PASS after Phase 2 fixes (no regressions)            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 4 — Test Coverage Gap                                    │
 │  4a. File-level: new/modified code → test file exists?          │
 │  4b. Item-level: every completed item → behavioral test exists? │
 │      Log: ID → test name(s) in TRACKING.md evidence             │
-│  Final test run PASS.                                           │
+│  Final test run PASS (including new tests).                     │
 └────────────────────────────┬────────────────────────────────────┘
                              │
               ┌──────────────┴──────────────┐
@@ -698,7 +728,18 @@ This file starts empty on new projects. Add entries when:
 │     Record key metrics to TRACKING.md, compare vs previous      │
 │     sprint. Flag regressions. Skip metrics not yet measurable.  │
 │                                                                 │
-│  6. Sprint "done" ──────────► next sprint Entry Gate            │
+│  6. Workflow integrity check                                    │
+│     → CLAUDE.md refs match target file sections?                │
+│     → Guardrails pointer matches workflow content?              │
+│     → Step/phase counts consistent across docs?                 │
+│     → Mismatch → fix before closing sprint                      │
+│                                                                 │
+│  7. Failure mode retrospective                                  │
+│     → Predicted modes vs actually encountered                   │
+│     → Unpredicted failure → new guardrail rule + step 9d update │
+│     → Same category 2+ sprints → flag architectural issue       │
+│                                                                 │
+│  8. Sprint "done" ──────────► next sprint Entry Gate            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
