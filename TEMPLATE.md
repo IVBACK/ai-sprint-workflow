@@ -320,7 +320,9 @@ Before writing code for a new sprint:
    d. Metrics still appropriate? (measuring the right thing?)
    If any fails → flag to user with evidence + options (keep/modify/defer/remove).
    AI does not unilaterally change sprint scope — user decides.
-9. Can all metrics be measured by sprint end?
+9. Verification plan:
+   a. Can all metrics be measured by sprint end?
+   b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
 10. Is scope realistic? (<=8 Must items)
 11. Produce dependency-ordered implementation list
 12. Present plan to user for approval
@@ -353,7 +355,9 @@ Before writing code for a new sprint:
 - All tests must PASS after fixes
 
 **Phase 4 — Test coverage gap:**
-- New code → matching test exists?
+- 4a. File-level: new/modified code → matching test file exists?
+- 4b. Item-level: every completed item (Must+Should+Could) → behavioral test exists?
+  Log item → test mapping in TRACKING.md evidence. No test → write one or document why untestable.
 - Final test run PASS
 
 ---
@@ -490,10 +494,10 @@ This file starts empty on new projects. Add entries when:
 │  └──────────┘ └───────────┘ └──────────┘ └─────────────────┘  │
 │                                                                 │
 │  Then:                                                          │
-│  ┌───────────┐ ┌──────────┐ ┌─────────────────────────┐       │
-│  │ Metrics   │ │ Scope    │ │ Present plan → confirm  │       │
-│  │ measurable│ │ check    │ └─────────────────────────┘       │
-│  └───────────┘ └──────────┘                                    │
+│  ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
+│  │ Verif.    │ │ Scope    │ │ Impl.    │ │ Present plan   │  │
+│  │ plan      │ │ check    │ │ order    │ │ → confirm      │  │
+│  └───────────┘ └──────────┘ └──────────┘ └────────────────┘  │
 │                                                                 │
 │                "Should we build this, this way?"                │
 └────────────────────────────┬────────────────────────────────────┘
@@ -633,7 +637,9 @@ This file starts empty on new projects. Add entries when:
 │  All tests PASS after Phase 2 fixes                             │
 │                                                                 │
 │  PHASE 4 — Test Coverage Gap                                    │
-│  New/modified code → matching test exists? Write if missing.    │
+│  4a. File-level: new/modified code → test file exists?          │
+│  4b. Item-level: every completed item → behavioral test exists? │
+│      Log: ID → test name(s) in TRACKING.md evidence             │
 │  Final test run PASS.                                           │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -661,7 +667,11 @@ This file starts empty on new projects. Add entries when:
 │  4. Changelog archive                                           │
 │     Move entries to Docs/Archive/changelog-S<N>.md              │
 │                                                                 │
-│  5. Sprint "done" ──────────► next sprint Entry Gate            │
+│  5. Performance baseline capture (if applicable)                │
+│     Record key metrics to TRACKING.md, compare vs previous      │
+│     sprint. Flag regressions. Skip metrics not yet measurable.  │
+│                                                                 │
+│  6. Sprint "done" ──────────► next sprint Entry Gate            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
