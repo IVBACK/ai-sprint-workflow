@@ -370,6 +370,8 @@ Before writing code for a new sprint:
 If the sprint is still a one-line sketch from Initial Planning:
 0a. Read the sketch description + previous sprint's outcomes
 0b. Decompose into Must/Should/Could items with CORE-### IDs
+    Format: `- [ ] CORE-###: [description]` — checkbox is mandatory.
+    Plain bullets break close gate tracking (sprint-audit.sh Section 11).
 0c. Add metric gates for each Must item
 0d. Priority & rigor review — two passes:
     **Pass 1 — Distribution check (on initial 0b decomposition, before any promotions):**
@@ -693,6 +695,8 @@ Checkbox notation:
 Rule: checkbox tracks TRACKING.md status.
 - `[x]` ↔ `verified`, `[~]` ↔ `deferred`. All other statuses → `[ ]`.
 - Intermediate states (in_progress, fixed-untested) are NOT shown in roadmap.
+- Checkbox format is mandatory. Plain bullets (`- CORE-###: ...`) break close gate tracking —
+  `sprint-audit.sh` Section 11a/11c will not find them. Always use `- [ ] CORE-###: ...`.
 - `sprint-audit.sh` Section 11 catches mismatches (including `[~]` ↔ `deferred` sync) automatically.
 
 ### LESSONS_INDEX.md Template
@@ -933,6 +937,7 @@ This file starts empty on new projects. Add entries when:
 │  │ 10. API parity (same config set at all call sites)         │ │
 │  │ 11a.Roadmap sync (item ID ↔ checkbox status)               │ │
 │  │ 11b.Orphan detection (items in one file but not other)     │ │
+│  │ 11c.Checkbox format (CORE-### without - [ ] syntax)        │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  Exit codes: 0=clean, 1=findings, 2=setup error (fix script)    │
@@ -1198,6 +1203,21 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
 
   [[ $orphans -eq 0 ]] && echo "  No orphan items found."
   total=$((total + orphans))
+
+  # 11c. Checkbox format check — detect CORE-### items without checkbox
+  echo ""
+  echo "CHECKBOX FORMAT CHECK:"
+  fmt_errors=0
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+    # Skip lines that already have checkbox format
+    echo "$line" | grep -qE "^\s*-\s*\[.\]" && continue
+    echo "  FORMAT $item_id: missing checkbox — use '- [ ] $item_id: ...' (breaks close gate tracking)"
+    fmt_errors=$((fmt_errors + 1))
+  done < <(grep -E "$ID_PATTERN" "$ROADMAP_FILE" 2>/dev/null | grep -E "^\s*-\s" | head -200 || true)
+  [[ $fmt_errors -eq 0 ]] && echo "  All roadmap items have checkbox format."
+  total=$((total + fmt_errors))
 fi
 total=$((total + sync))
 
