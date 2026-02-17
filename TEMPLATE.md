@@ -456,6 +456,16 @@ If items exceed scope limit → apply §Scope Negotiation.
 **Phase 0 — Metric gate check:**
 - Can each metric be measured? Evidence exists? (Must items + Must-gated Should/Could)
 - Failure mode coverage: for each modified subsystem, are failure modes listed in 3 categories (direct / interaction / stress-edge)? Each has a metric or test? Missing → add, or document as known gap with target sprint.
+- Unmet metric escalation — when a metric is partially met or blocked:
+  Do NOT silently mark `[ ]` and move on. Required steps:
+  1. **Explain** — what is blocking completion? (missing data, unfinished prerequisite, external dependency)
+  2. **Trace** — is the blocker tracked in the roadmap? (has a CORE-### entry?)
+     - Not tracked → propose adding it with a recommended sprint and priority level.
+     - Tracked but no sprint assigned → propose a target sprint with reasoning.
+  3. **Recommend** — present the gap analysis and a concrete proposal to the user.
+     Include: what's done, what's missing, which sprint should finish it, and why.
+  4. **User decides** — user picks target sprint and priority. Agent does not decide alone.
+  5. **Log** — TRACKING.md: status = `deferred`, reason + target sprint documented.
 
 **Phase 1a — Automated scan:**
 - Run `Tools/sprint-audit.sh`
@@ -496,6 +506,9 @@ If items exceed scope limit → apply §Scope Negotiation.
    [x] = TRACKING.md verified (gate evidence logged)
    [~] = skipped + reason documented inline
    [ ] = not verified (open, in_progress, or fixed without evidence)
+   Every [ ] item requires action — do NOT silently skip:
+   → apply the unmet-metric escalation from Close Gate Phase 0
+     (explain gap, trace blocker, propose target sprint, user decides).
 2. TRACKING.md update (all Must verified with evidence)
 3. CLAUDE.md checkpoint update (date, status, next focus)
 4. Changelog archive (move entries to Docs/Archive/)
@@ -896,6 +909,8 @@ This file starts empty on new projects. Add entries when:
 │    Each mode has metric or test? Missing → add or document gap  │
 │                                                                 │
 │  FAIL: unmeasurable + no evidence → fix scope                   │
+│  PARTIAL: blocked by unfinished prerequisite?                   │
+│  → escalate: explain gap, propose target sprint, user decides   │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
