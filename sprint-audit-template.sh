@@ -160,6 +160,64 @@ total=$((total + missing))
 # check "PARITY" "SetInt\|SetFloat\|SetVector\|SetBuffer" and verify parity manually
 
 # ═══════════════════════════════════════════════════════
+# SECTION 11: Roadmap ↔ TRACKING.md Sync
+# Catches premature ticks and forgotten ticks
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── ROADMAP ↔ TRACKING SYNC ──"
+TRACKING_FILE="$ROOT/TRACKING.md"        # ← adjust if different location
+ROADMAP_FILE="$ROOT/Docs/Planning/Roadmap.md"  # ← adjust to your roadmap path
+# Adjust the ID pattern below to match your project's item IDs (e.g., CORE-[0-9]+, TASK-[0-9]+)
+ID_PATTERN="CORE-[0-9]+"
+sync_findings=0
+
+if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
+  # Extract item statuses from TRACKING.md (looks for ID + open/fixed/verified in same line)
+  declare -A tracking_status
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    if [[ -n "$item_id" ]]; then
+      if echo "$line" | grep -qiw "verified"; then
+        tracking_status["$item_id"]="verified"
+      elif echo "$line" | grep -qiw "fixed"; then
+        tracking_status["$item_id"]="fixed"
+      elif echo "$line" | grep -qiw "open"; then
+        tracking_status["$item_id"]="open"
+      fi
+    fi
+  done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" | grep -E "open|fixed|verified" || true)
+
+  # Check roadmap checkboxes against TRACKING statuses
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+
+    is_checked=false
+    if echo "$line" | grep -qE "^\s*-\s*\[x\]"; then
+      is_checked=true
+    fi
+
+    t_status="${tracking_status[$item_id]:-unknown}"
+
+    if $is_checked && [[ "$t_status" != "verified" ]]; then
+      echo "  MISMATCH  $item_id: Roadmap=[x] but TRACKING=$t_status (premature tick)"
+      sync_findings=$((sync_findings + 1))
+    elif ! $is_checked && [[ "$t_status" == "verified" ]]; then
+      echo "  MISMATCH  $item_id: Roadmap=[ ] but TRACKING=verified (forgotten tick)"
+      sync_findings=$((sync_findings + 1))
+    fi
+  done < <(grep -E "\- \[.\].*$ID_PATTERN" "$ROADMAP_FILE" || true)
+
+  if [[ $sync_findings -eq 0 ]]; then
+    echo "  (roadmap checkboxes consistent with TRACKING.md)"
+  fi
+else
+  echo "  (TRACKING.md or Roadmap.md not found — skipping)"
+fi
+total=$((total + sync_findings))
+
+# ═══════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════
 

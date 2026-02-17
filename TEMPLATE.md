@@ -211,8 +211,9 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 - `fixed → verified` transition requires evidence (test run ID + results).
 - Check `Docs/CODING_GUARDRAILS.md` before writing new code.
 - Sprint `Must` items must be complete before sprint is "done".
+- Roadmap checkbox `[x]` only when item is `verified` in TRACKING.md. Intermediate states (WIP, fixed-untested) are not shown in roadmap — TRACKING.md is the single source. `sprint-audit.sh` Section 11 catches mismatches automatically.
 - Sprint close gate:
-  - Run `Tools/sprint-audit.sh` (automated scan).
+  - Run `Tools/sprint-audit.sh` (automated scan, 11 sections).
   - Manual review (see `CODING_GUARDRAILS.md` §Close Gate).
 - All code, comments, commit messages in [English/language].
 - Commit policy: atomic commits preferred (one logical change per commit).
@@ -403,7 +404,12 @@ Before writing code for a new sprint:
 
 ## Sprint Close — Post-Gate
 
-1. Roadmap checkmarks ([x] done, [~] skipped + reason)
+1. Roadmap checkmarks
+   Run `sprint-audit.sh` Section 11 (Roadmap ↔ TRACKING sync).
+   Fix all mismatches before ticking.
+   [x] = TRACKING.md verified (gate evidence logged)
+   [~] = skipped + reason documented inline
+   [ ] = not verified (open or fixed without evidence)
 2. TRACKING.md update (all Must verified with evidence)
 3. CLAUDE.md checkpoint update (date, status, next focus)
 4. Changelog archive (move entries to Docs/Archive/)
@@ -481,9 +487,13 @@ Before writing code for a new sprint:
 ```
 
 Checkbox notation:
-- `- [ ]` = not started
-- `- [x]` = done + verified (evidence in TRACKING.md)
+- `- [ ]` = not verified (open or fixed — no gate evidence yet)
+- `- [x]` = verified (TRACKING.md status = verified, gate evidence logged)
 - `- [~]` = skipped / deferred (reason documented inline)
+
+Rule: checkbox tracks TRACKING.md verified status ONLY.
+Intermediate states (WIP, done-untested) are NOT shown in roadmap.
+`sprint-audit.sh` Section 11 catches mismatches automatically.
 
 ### LESSONS_INDEX.md Template
 
@@ -698,6 +708,7 @@ This file starts empty on new projects. Add entries when:
 │  │  8. String allocation in hot paths                        │ │
 │  │  9. Test coverage gap (source file ↔ test file match)     │ │
 │  │ 10. API parity (same config set at all call sites)        │ │
+│  │ 11. Roadmap sync (item ID ↔ checkbox status)              │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  Output: WARN candidates — review each, fix or mark FP         │
@@ -752,7 +763,11 @@ This file starts empty on new projects. Add entries when:
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. Roadmap checkmarks                                          │
-│     [x] done + verified    [~] skipped + reason                 │
+│     → Run sprint-audit.sh Section 11 (Roadmap ↔ TRACKING sync) │
+│     → Fix all mismatches before ticking                         │
+│     [x] = TRACKING.md verified (gate evidence logged)           │
+│     [~] = skipped + reason documented inline                    │
+│     [ ] = not verified (open or fixed without evidence)         │
 │                                                                 │
 │  2. TRACKING.md update                                          │
 │     Sprint board: all Must verified with evidence               │
@@ -852,6 +867,47 @@ while IFS= read -r f; do
   fi
 done < <(find "$SRC_DIR" -name "*.${EXT:-*}" -not -path "*/test*" 2>/dev/null)
 total=$((total + missing))
+
+# 11. Roadmap ↔ TRACKING.md sync
+echo ""
+echo "ROADMAP SYNC:"
+TRACKING_FILE="$ROOT/TRACKING.md"
+ROADMAP_FILE="$ROOT/Docs/Planning/Roadmap.md"  # ← adjust path
+ID_PATTERN="CORE-[0-9]+"                        # ← adjust to your item ID format
+sync=0
+
+if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
+  declare -A tracking_status
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    if [[ -n "$item_id" ]]; then
+      if echo "$line" | grep -qiw "verified"; then
+        tracking_status["$item_id"]="verified"
+      elif echo "$line" | grep -qiw "fixed"; then
+        tracking_status["$item_id"]="fixed"
+      elif echo "$line" | grep -qiw "open"; then
+        tracking_status["$item_id"]="open"
+      fi
+    fi
+  done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" | grep -E "open|fixed|verified" || true)
+
+  while IFS= read -r line; do
+    item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
+    [[ -z "$item_id" ]] && continue
+    is_checked=false
+    echo "$line" | grep -qE "^\s*-\s*\[x\]" && is_checked=true
+    t_status="${tracking_status[$item_id]:-unknown}"
+    if $is_checked && [[ "$t_status" != "verified" ]]; then
+      echo "  MISMATCH $item_id: Roadmap=[x] but TRACKING=$t_status (premature tick)"
+      sync=$((sync + 1))
+    elif ! $is_checked && [[ "$t_status" == "verified" ]]; then
+      echo "  MISMATCH $item_id: Roadmap=[ ] but TRACKING=verified (forgotten tick)"
+      sync=$((sync + 1))
+    fi
+  done < <(grep -E "\- \[.\].*$ID_PATTERN" "$ROADMAP_FILE" || true)
+  [[ $sync -eq 0 ]] && echo "  All checkboxes consistent."
+fi
+total=$((total + sync))
 
 # ── Summary ──
 echo ""
