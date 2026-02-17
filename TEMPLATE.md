@@ -264,6 +264,14 @@ Status values: `open` → `fixed` → `verified`
 |----|------|------------|--------|
 | R-001 | [description] | [plan] | S1 |
 
+## Predicted Failure Modes — Current Sprint
+
+Written at Entry Gate step 9d. Read at Sprint Close step 7 (retrospective comparison).
+Replace this section at each new sprint's Entry Gate.
+
+| Item | Category | Predicted Mode | Detection Plan |
+|------|----------|---------------|----------------|
+
 ## Failure Mode History
 
 Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9d (failure mode analysis).
@@ -349,6 +357,7 @@ Before writing code for a new sprint:
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
       - Stress/edge: invisible in normal use (rapid oscillation, pool exhaustion, cascade)
       Each category: >=1 mode. Each mode: metric or test that detects it? Missing → add to plan.
+      Write predictions to TRACKING.md §Predicted Failure Modes (step 7 reads this).
 10. Is scope realistic? (<=8 Must items)
 11. Produce dependency-ordered implementation list
 12. Present plan to user for approval
@@ -405,7 +414,7 @@ Before writing code for a new sprint:
    - Step/phase counts consistent across all docs?
    - Mismatch → fix before closing sprint
 7. Failure mode retrospective:
-   - Read Entry Gate 9d predictions for this sprint
+   - Read TRACKING.md §Predicted Failure Modes (written at 9d)
    - Compare: predicted vs actually encountered
    - Add row to TRACKING.md §Failure Mode History (include Detection: test / user-visual / profiler)
    - Unpredicted failure → new guardrail rule
@@ -554,6 +563,7 @@ This file starts empty on new projects. Add entries when:
 │  │       Read TRACKING §Failure Mode History first           │  │
 │  │       • Direct  • Interaction  • Stress/edge             │  │
 │  │       >=1 per category, each with metric or test         │  │
+│  │       Write to TRACKING §Predicted Failure Modes         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────────────────────┐│
 │  │ 10.Scope │ │ 11.Impl  │ │ 12. Present + confirm:           ││
@@ -764,7 +774,8 @@ This file starts empty on new projects. Add entries when:
 │     → Mismatch → fix before closing sprint                      │
 │                                                                 │
 │  7. Failure mode retrospective                                  │
-│     → Compare 9d predictions vs actual failures                 │
+│     → Read TRACKING §Predicted Failure Modes (from 9d)          │
+│     → Compare predictions vs actual failures                    │
 │     → Add row to TRACKING.md §Failure Mode History              │
 │       (Detection column: test / user-visual / profiler)         │
 │     → Unpredicted → new guardrail rule                          │
