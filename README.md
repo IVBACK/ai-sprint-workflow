@@ -58,7 +58,10 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
-1. Copy `TEMPLATE.md` into your project root
+1. Download `TEMPLATE.md` into your project root:
+   ```bash
+   curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md
+   ```
 2. Start an AI coding session
 3. Tell the agent: "Read TEMPLATE.md and bootstrap this project"
 4. The agent will:
