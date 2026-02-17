@@ -187,6 +187,7 @@ This file provides quick context for every AI session.
 - `TRACKING.md`: single source of truth for item status (ID-###, open/fixed/verified).
 - `Docs/Planning/Roadmap.md`: sprint plan (Must/Should/Could per sprint).
 - `Docs/CODING_GUARDRAILS.md`: engineering rules (check before writing code).
+- `Docs/SPRINT_WORKFLOW.md`: sprint lifecycle (Entry Gate, Close Gate, Sprint Close) — read at sprint boundaries.
 - `Docs/LESSONS_INDEX.md`: RuleID → root cause → target file mapping.
 - `CLAUDE.md` (this file): operational rules + checkpoint summary.
 
@@ -228,10 +229,15 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 New session sequence:
 1. `TRACKING.md` → Current Focus + Sprint Board + Blockers
 2. `Docs/Planning/Roadmap.md` → active sprint section
-3. `Docs/CODING_GUARDRAILS.md` → Section Index → relevant sections only
 
-Sprint start:
-- Run Entry Gate (CODING_GUARDRAILS.md §Entry Gate) before writing code.
+Sprint start (new sprint transition):
+- `Docs/SPRINT_WORKFLOW.md` §Entry Gate (3 phases, 12 steps) — read and execute. No code before plan is confirmed.
+
+Sprint close:
+- `Docs/SPRINT_WORKFLOW.md` §Close Gate (5 phases) + §Sprint Close — read and execute.
+
+Before writing code:
+- `Docs/CODING_GUARDRAILS.md` → Section Index → relevant sections only
 ```
 
 ### TRACKING.md Template
