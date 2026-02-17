@@ -267,10 +267,12 @@ Status values: `open` → `fixed` → `verified`
 ## Failure Mode History
 
 Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9d (failure mode analysis).
-Pattern rule: same category appears 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate.
+Pattern rules:
+- Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate.
+- Same detection=user-visual 2+ times → "Can an automated proxy test replace visual check?" mandatory question at next Entry Gate.
 
-| Sprint | Category | Predicted? | Mode | Impact | Root Cause | Guardrail | Escalate? |
-|--------|----------|------------|------|--------|------------|-----------|-----------|
+| Sprint | Category | Predicted? | Detection | Mode | Impact | Root Cause | Guardrail | Escalate? |
+|--------|----------|------------|-----------|------|--------|------------|-----------|-----------|
 
 ## Change Log
 
@@ -405,9 +407,10 @@ Before writing code for a new sprint:
 7. Failure mode retrospective:
    - Read Entry Gate 9d predictions for this sprint
    - Compare: predicted vs actually encountered
-   - Add row to TRACKING.md §Failure Mode History
+   - Add row to TRACKING.md §Failure Mode History (include Detection: test / user-visual / profiler)
    - Unpredicted failure → new guardrail rule
    - Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate
+   - Same detection=user-visual 2+ times → "Can automated proxy test replace visual check?" at next Entry Gate
 8. Sprint "done"
 
 ---
@@ -611,6 +614,19 @@ This file starts empty on new projects. Add entries when:
 │  │     └────────────────────────────────────────────┘      │   │
 │  │                        │                                │   │
 │  │                        ▼                                │   │
+│  │  D.5 Visual Verification (visual items only)            │   │
+│  │     Trigger: item marked "manual+screenshot" in 9b      │   │
+│  │     ┌────────────────────────────────────────────┐      │   │
+│  │     │ 1. AI asks specific visual questions       │      │   │
+│  │     │ 2. User runs, responds:                    │      │   │
+│  │     │    "OK" → proceed                          │      │   │
+│  │     │    "Problem" → log CORE-###, AI fixes,     │      │   │
+│  │     │    ask user again (loop until resolved)    │      │   │
+│  │     │ 3. Automated proxy test exists?            │      │   │
+│  │     │    → still ask user for visual confirm     │      │   │
+│  │     └────────────────────────────────────────────┘      │   │
+│  │                        │                                │   │
+│  │                        ▼                                │   │
 │  │  E. Update TRACKING.md                                  │   │
 │  │     Mark item fixed, log decisions                      │   │
 │  │                                                         │   │
@@ -750,8 +766,10 @@ This file starts empty on new projects. Add entries when:
 │  7. Failure mode retrospective                                  │
 │     → Compare 9d predictions vs actual failures                 │
 │     → Add row to TRACKING.md §Failure Mode History              │
+│       (Detection column: test / user-visual / profiler)         │
 │     → Unpredicted → new guardrail rule                          │
 │     → Same category 2+/3 sprints → Architecture Review Required │
+│     → Same detection=user-visual 2+ → proxy test question       │
 │                                                                 │
 │  8. Sprint "done" ──────────► next sprint Entry Gate            │
 └─────────────────────────────────────────────────────────────────┘
