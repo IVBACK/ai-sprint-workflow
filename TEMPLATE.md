@@ -332,6 +332,11 @@ Before writing code for a new sprint:
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
       "It runs" ≠ "it is correct".
    c. Item has no metric gate? Propose one and add to roadmap. User approves before sprint starts.
+   d. Failure mode analysis (per Must item): list known failure modes in 3 categories:
+      - Direct: item breaks on its own (wrong calc, null ref, off-by-one)
+      - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
+      - Stress/edge: invisible in normal use (rapid oscillation, pool exhaustion, cascade)
+      Each category: >=1 mode. Each mode: metric or test that detects it? Missing → add to plan.
 10. Is scope realistic? (<=8 Must items)
 11. Produce dependency-ordered implementation list
 12. Present plan to user for approval
@@ -342,6 +347,7 @@ Before writing code for a new sprint:
 
 **Phase 0 — Metric gate check:**
 - Can each metric be measured? Evidence exists?
+- Failure mode coverage: for each modified subsystem, are failure modes listed in 3 categories (direct / interaction / stress-edge)? Each has a metric or test? Missing → add, or document as known gap with target sprint.
 
 **Phase 1a — Automated scan:**
 - Run `Tools/sprint-audit.sh`
@@ -595,6 +601,11 @@ This file starts empty on new projects. Add entries when:
 │  □ Measurable with current infrastructure?                      │
 │  □ Test evidence sufficient?                                    │
 │  □ Threshold reasonable for current scale?                      │
+│  □ Failure mode coverage per modified subsystem?                │
+│    • Direct (item-internal) — >=1 identified?                   │
+│    • Interaction (cross-system) — >=1 identified?               │
+│    • Stress/edge (extreme-condition) — >=1 identified?          │
+│    Each mode has metric or test? Missing → add or document gap  │
 │                                                                 │
 │  FAIL: unmeasurable + no evidence → fix scope                   │
 └────────────────────────────┬────────────────────────────────────┘
