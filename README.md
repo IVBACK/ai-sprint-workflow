@@ -141,6 +141,7 @@ not the entire project history.
 - **Metric gap detection.** Entry Gate step 9c: if a roadmap item has no metric gate, the AI proposes one before the sprint starts. No item ships without a measurable success criterion.
 - **Item-level test coverage.** Close Gate Phase 4b: every completed item (Must + Should + Could) must have a behavioral test — not just file-level test existence. Missing test → write one or document why untestable.
 - **Performance baseline tracking.** Sprint Close step 5: key metrics are recorded to `TRACKING.md` each sprint. Regressions vs. the previous sprint are flagged automatically.
+- **Algorithmic invariant checks.** Entry Gate step 9b: for items involving algorithms or mathematical systems, the verification plan must include invariant tests (properties that must always hold), not just "does it run?" checks.
 
 ## Supported Languages
 
