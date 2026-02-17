@@ -1,0 +1,56 @@
+name: Validate Workflow
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - TEMPLATE.md
+      - sprint-audit-template.sh
+      - validate-workflow.sh
+      - validate-paths.sh
+  pull_request:
+    branches: [master]
+    paths:
+      - README.md
+      - TEMPLATE.md
+      - sprint-audit-template.sh
+      - validate-workflow.sh
+      - validate-paths.sh
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Structural consistency
+        run: |
+          chmod +x validate-workflow.sh
+          set +e
+          ./validate-workflow.sh
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -eq 2 ]; then exit 1; fi
+          # Exit 1 (WARN) is non-blocking → treat as success
+          exit 0
+
+      - name: Path simulation
+        run: |
+          chmod +x validate-paths.sh
+          set +e
+          ./validate-paths.sh
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -eq 2 ]; then exit 1; fi
+          exit 0
+
+      - name: Path simulation self-test
+        run: |
+          chmod +x validate-paths.sh
+          set +e
+          ./validate-paths.sh --self-test
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -eq 2 ]; then exit 1; fi
+          exit 0
