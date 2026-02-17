@@ -323,6 +323,7 @@ Before writing code for a new sprint:
 9. Verification plan:
    a. Can all metrics be measured by sprint end?
    b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
+   c. Item has no metric gate? Propose one and add to roadmap. User approves before sprint starts.
 10. Is scope realistic? (<=8 Must items)
 11. Produce dependency-ordered implementation list
 12. Present plan to user for approval
