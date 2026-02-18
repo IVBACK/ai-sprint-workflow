@@ -41,18 +41,18 @@ Every session starts from zero. This workflow solves three problems:
                          ▼
                   ┌──────────────┐
                   │ IMPLEMENTATION│  "Are we building it correctly?"
-                  │    LOOP      │  Pre-code guardrails → code → self-verify → test
+                  │    LOOP      │  Pre-code guardrails → code → self-verify → test → run all tests
                   └──────┬───────┘
                          │
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
-                  │  (5 phases)  │  Automated scan + manual audit + item-level tests
+                  │  (5 phases)  │  Automated scan + spec-driven audit + item-level tests
                   └──────┬───────┘
                          │
                          ▼
                   ┌──────────────┐
-                  │ SPRINT CLOSE │  Checkmarks, archive, baseline, self-audit, retrospective
+                  │ SPRINT CLOSE │  Checkmarks, archive, baseline, retrospective, user handoff
                   └──────────────┘
 ```
 
@@ -137,7 +137,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
 - **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
 - **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
-- **Automated + manual review.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output) including metric-vs-test coverage (Section 12). Manual review (Phase 1b) catches semantic issues (logic errors, resource leaks, design flaws) with per-file structured output. Findings are presented to the user at every phase boundary (Phase 0→1a, 1a→1b, 1b→2, 2→3, 4→close) — no silent phase transitions.
+- **Automated + spec-driven audit.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output) including metric-vs-test coverage (Section 12). Close Gate Phase 1b is spec-driven: it loads Entry Gate failure mode predictions (9a) and verification plan invariants (9b), then checks per item whether predicted failure modes are handled in code. Generic checks (resource leaks, dead code, observability) run as supplemental. Output is per-item (HANDLED/MISSED/N/A), not per-file. Significant findings pause the gate; clean phases are batched into one report — no approval fatigue on clean sprints.
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
 - **Rich item status model.** Items track `open → in_progress → fixed → verified`, plus `blocked` and `deferred` statuses. `in_progress` prevents wasted rework after session interruptions. Reverse transition `verified → open` is allowed for regressions.
 - **Sprint detail on demand.** Entry Gate Phase 0: if a sprint is still a one-line sketch from Initial Planning, decompose it into Must/Should/Could before proceeding. Later sprints are detailed only when reached — not up front.
@@ -159,6 +159,10 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **Failure mode retrospective.** Sprint Close step 7: structured retrospective table (every predicted mode answered, every actual failure listed) is filled and presented to the user. Unpredicted failures trigger the Update Rule (7 steps including LESSONS_INDEX.md entry). Same category 2+ sprints triggers Architecture Review with root cause tracing across sprints.
 - **Failure encounter logging.** Implementation loop step E: failures encountered during coding are logged to `TRACKING.md §Failure Encounters` with category and detection metadata. Sprint Close step 7a reads this structured data instead of reconstructing from memory.
 - **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9a reads this history before predicting new modes and checks for escalation triggers (Architecture Review, proxy test questions). Sprint Close step 7 writes to it after comparing predictions vs reality. History is archived after 5 sprints to prevent TRACKING.md bloat.
+- **Incremental testing.** Implementation loop step D.6: after each item, all tests written so far (current + previous items) are run before moving to the next item. Regressions are caught immediately — not accumulated until Close Gate. Tests that need unavailable infrastructure are marked "pending" and run at Close Gate Phase 3.
+- **Verification plan quality gate.** Entry Gate step 12c: user reviews each item's test scenario before coding begins. Trivial scenarios ("it runs", "no crash") are sent back for revision. Acceptable scenario must specify inputs, expected outputs or invariants, and at least one failure-inducing case. Prevents the chain from starting with weak verification.
+- **User handoff summary.** Sprint Close step 10: before marking the sprint done, the AI presents each completed item with before/after behavior, one-sentence implementation summary, where to find it, what to verify in the running application, and what should not have changed. Invisible sprints (no visual change) include explicit diagnostic instructions. Never skipped — serves as both explanation and session handoff record.
+- **Workflow evolution guard.** AI Agent Operational Rules: before adding any new step or check to the workflow, three questions must pass — does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Does it verify a new class of failure rather than just confirming a previous check ran? The last question is the "who watches the watchers" test. Complexity is a cost paid on every sprint.
 - **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
