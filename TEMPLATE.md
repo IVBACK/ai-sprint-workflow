@@ -883,6 +883,452 @@ When the user decides to abandon a sprint mid-way (wrong direction, requirements
 
 Rule: abort ≠ failure. Verified work persists, unfinished work is deferred, not deleted.
 
+### Retroactive Sprint Audit
+
+**Purpose:** Systematically audit a completed sprint when its output is found to be broken,
+non-functional, or inconsistent with Close Gate claims in a later session.
+This is evidence-based archaeology — not a blame exercise. Goal: locate the gap, classify it,
+and resolve it with minimal disruption to the current sprint.
+
+**Triggers — any one is sufficient to open an audit:**
+- A runtime metric contradicts a Close Gate verdict
+  (e.g., cache hit rate = 0% when Close Gate logged "verified"; FPS budget exceeded when sprint claimed "< Xms")
+- A later sprint cannot build on a completed sprint's output (integration failure, API mismatch, missing output)
+- A guardrail check now fails on code that was verified in the target sprint (sprint-audit.sh regression)
+- A profiler shows a system that should be active is not running (cost = 0 → system is off, not optimized)
+- User observes behavior that explicitly contradicts a verified item ("this was supposed to work")
+- §Failure Mode History shows the same category 2+ times in recent sprints, tracing back to a specific earlier sprint
+- Entry Gate §Open Risks contains a flag pointing at a specific past sprint's output
+
+**Who initiates:** User or AI. AI may propose opening an audit if a trigger is observed during implementation;
+the user decides whether to proceed. AI never opens an audit without user confirmation.
+
+**Scope rule:** One audit open at a time. If symptoms span multiple sprints, open the oldest
+implicated sprint first. Resolve before opening the next.
+
+**Audit depth limit:** Maximum 3 months back. For older sprints, use §Rollback Plan instead.
+
+**Current sprint impact:** An audit does not pause the current sprint. Resolution items are added
+to the current sprint (via Mid-Sprint Scope Change) or the next sprint's backlog.
+
+```
+Trigger observed
+      │
+      ▼
+Phase 0: Setup
+  ├── identify target sprint + symptom + Close Gate claim
+  └── estimate blast radius → user confirms → audit opens
+      │
+      ▼
+Phase 1: Evidence Collection
+  └── read all Close Gate artifacts for target sprint
+      │
+      ▼
+Phase 2: Current State Assessment
+  └── run same measurements as Close Gate today
+      │
+      ▼
+Phase 3: Gap Analysis
+  └── compare claim vs current → produce gap table
+      │
+      ▼
+Phase 4: Root Cause Classification
+  └── classify each gap: REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION /
+                         COLD_STATE / SCOPE_DRIFT / ENVIRONMENT_DELTA
+      │
+      ▼
+Phase 5: Dependency Impact Assessment
+  └── which subsequent sprints are affected? → mark re-verification required
+      │
+      ▼
+Phase 6: Resolution Plan
+  └── for each gap: fix now / fix next sprint / accept+document / rollback
+      │
+      ▼
+Phase 7: Audit Close
+  └── write to TRACKING.md §Retroactive Audits → present to user → resume current work
+```
+
+---
+
+#### Phase 0 — Audit Setup
+
+Before doing any file reading or measurement, establish:
+
+```
+1. Target sprint number: S[N]
+2. Symptom (observable, measurable — not vague):
+   BAD:  "S6 cache seems broken"
+   GOOD: "S6 SDF Cache: Hit=0, Miss=122, Rate=0% — Close Gate claimed 'cache verified'"
+3. Close Gate claim being questioned:
+   Quote the exact verified item or metric from TRACKING.md or S<N>_CLOSE_GATE.md.
+   If no record exists → this becomes a FALSE_VERIFICATION finding immediately (Phase 4).
+4. Blast radius estimate:
+   List sprints that depend on target sprint's output (from Roadmap dependency map).
+   Example: S6 (SDF Cache) → S7 (Streaming depends on cache), S8 (profiler uses cache stats)
+5. Present setup summary to user:
+   "Opening Retroactive Audit for S[N]. Symptom: [X]. Claim questioned: [Y]. Depends-on chain: [Z].
+    Proceeding with Phase 1 evidence collection."
+   Wait for user confirmation before proceeding.
+```
+
+---
+
+#### Phase 1 — Evidence Collection
+
+Read all available artifacts from the target sprint in this order:
+
+```
+1. S<N>_CLOSE_GATE.md (Docs/Planning/) — if it still exists
+   → read Phase 1b audit table, Phase 2 verdict, all metrics
+   → if deleted (Sprint Close step 9 ran): proceed to TRACKING.md
+
+2. TRACKING.md §Sprint N
+   → all verified items (status = verified) with their evidence logs
+   → all metric gate values recorded
+   → Failure Mode Retrospective for Sprint N
+   → Change Log entries dated within Sprint N
+
+3. Roadmap.md Sprint N section
+   → which items are [x] (verified) vs [~] (deferred)?
+   → note any items that were silently [~] without documented reason
+
+4. Git log for target sprint
+   → git log --oneline <phase-tag-before>...<phase-tag-after> (if tags exist)
+   → git log --oneline --since="[sprint start date]" --until="[sprint end date]"
+   → look for: last-minute commits, hotfix commits, revert commits
+
+5. sprint-audit.sh output (if preserved in TRACKING.md or Docs/)
+   → section 11 output: were all items verified?
+   → any check that was WARN or SKIP at close?
+
+6. CODING_GUARDRAILS.md rules added during Sprint N
+   → what rules existed at Sprint N time? (git blame or log)
+
+7. Failure Mode History entries from Sprint N
+   → what was predicted? what actually occurred?
+```
+
+Evidence collection output — fill before proceeding to Phase 2:
+```
+## Audit Evidence — Sprint N
+Close Gate record found: YES / NO (if NO → FALSE_VERIFICATION likely)
+Verified items at Close Gate: [list of CORE-### with their claimed evidence]
+Metric gates at Close Gate: [list of metric name + value]
+Git commits in sprint: [count] — notable: [any reversions/hotfixes]
+sprint-audit.sh at close: PASS / WARN / SKIP / not preserved
+Failure modes predicted: [list]
+Failure modes that actually occurred: [list]
+```
+
+---
+
+#### Phase 2 — Current State Assessment
+
+Measure the system as it stands today — using the same measurement method as Close Gate.
+
+```
+1. Run sprint-audit.sh (full run)
+   → record which sections PASS / FAIL / WARN vs Close Gate state
+
+2. Run the target system's specific measurement:
+   → If performance claim: profiler capture in relevant test scene (same camera, same conditions)
+   → If test claim: re-run the exact test suite that was verified
+   → If integration claim: trace the data flow from entry point to output
+   → If metric claim: reproduce the metric (frame count, cache rate, memory, etc.)
+
+3. Enable diagnostic output if available:
+   → debug overlays, log verbose, counters, HUD metrics
+   → capture: screenshots, log excerpts, profiler screenshots
+
+4. Check kill-switch state:
+   → Is the system enabled? (PlanetProfile toggle, feature flag, build define)
+   → Is it conditionally disabled? (scene-only, platform-only, requires init sequence?)
+
+5. Check initialization sequence:
+   → Does the system require warm-up frames before metrics are meaningful?
+   → If yes: measure after warm-up (document warm-up frame count)
+
+6. Dependency check:
+   → Does the system depend on a previous system's output?
+   → If yes: verify that previous system is running and producing output
+```
+
+Current state output — fill before proceeding to Phase 3:
+```
+## Current State — Sprint N Audit
+Date of measurement: [date]
+sprint-audit.sh result: [PASS/FAIL, section list]
+System enabled (kill-switch): YES / NO / N/A
+Measurements:
+  [metric name]: [current value] (method: [how measured])
+  [metric name]: [current value] (method: [how measured])
+Dependency systems running: YES / NO / PARTIAL
+Notes: [anything unusual about measurement conditions]
+```
+
+---
+
+#### Phase 3 — Gap Analysis
+
+Compare Phase 1 (Close Gate claims) vs Phase 2 (current measurements) systematically.
+
+**Item-level comparison:**
+
+```
+For each verified item [x] in the target sprint:
+```
+
+| Item ID | Close Gate Claim | Current State | Match? | Notes |
+|---------|-----------------|---------------|--------|-------|
+| CORE-### | [exact claim from evidence] | [current observation] | YES / NO | [discrepancy detail] |
+
+**Metric-level comparison:**
+
+| Metric | Close Gate Value | Current Value | Delta | Within Tolerance? |
+|--------|-----------------|---------------|-------|-------------------|
+| [name] | [value at close] | [value now] | [±%] | YES / NO |
+
+**Gap tolerance rules:**
+```
+Continuous metrics (ms, MB, %, count):
+  < 5% delta    → measurement variance; note but do not classify as gap
+  5-20% delta   → borderline; classify as gap, investigate root cause
+  > 20% delta   → definitive gap; classify and resolve
+  0 vs non-zero → always a gap (system on vs off is not variance)
+
+Binary metrics (PASS/FAIL, exists/missing):
+  Any difference → gap; no tolerance
+
+Edge case — warm-start vs cold-start:
+  If metric requires warm-up (e.g., cache hit rate needs N frames to populate):
+  Measure at warm-start. If warm-start also fails → gap. If only cold-start fails → COLD_STATE.
+```
+
+**Gap summary table (fill before Phase 4):**
+```
+## Gap Summary — Sprint N Audit
+Total items compared: [N]
+Items with NO match: [list of CORE-###]
+Metrics with gap: [list]
+Items with YES match (confirmed working): [list]
+```
+
+---
+
+#### Phase 4 — Root Cause Classification
+
+For each gap identified in Phase 3, assign exactly one category:
+
+| Category | Definition | Key Question |
+|----------|-----------|-------------|
+| **REGRESSION** | Was working at Close Gate; broken by code merged in a subsequent sprint | "Which commit after Sprint N broke this?" |
+| **INTEGRATION_GAP** | Worked in isolation (sandbox/EditMode test) but was never wired into the runtime path | "Does the system actually get called in the live game loop?" |
+| **FALSE_VERIFICATION** | Close Gate metrics were insufficient: test measured the wrong thing, or passed a cherry-picked case | "Would the Close Gate metric have caught this failure if it occurred then?" |
+| **COLD_STATE** | Current behavior is correct for the current conditions (cache empty after clean build, kill-switch OFF, first run) | "Is this the expected state given current conditions?" |
+| **SCOPE_DRIFT** | A later sprint changed requirements or contracts that made the earlier implementation invalid | "Did a later sprint's design decision break this retroactively?" |
+| **ENVIRONMENT_DELTA** | Works in original environment; fails due to engine version, platform, or dependency change since Sprint N | "Did anything in the build environment change between Sprint N and now?" |
+
+**Classification priority rule:**
+If multiple categories could apply, choose the earliest in this order:
+`REGRESSION > INTEGRATION_GAP > FALSE_VERIFICATION > COLD_STATE > SCOPE_DRIFT > ENVIRONMENT_DELTA`
+
+**Classification procedure for each gap:**
+```
+1. REGRESSION check:
+   → git log --oneline <sprint-N-tag>..HEAD -- [affected files]
+   → Did any commit after Sprint N modify the affected system?
+   → If yes → candidate for REGRESSION. Identify the responsible commit.
+
+2. INTEGRATION_GAP check:
+   → Trace the call chain from the game loop entry point to the system.
+   → Is there a missing hook, missing registration, or path that never reaches the system?
+   → If yes → INTEGRATION_GAP.
+
+3. FALSE_VERIFICATION check:
+   → Read the Close Gate evidence for the item.
+   → Would that evidence have caught the current failure mode at Sprint N time?
+   → If not → FALSE_VERIFICATION.
+
+4. COLD_STATE check:
+   → What conditions would make the current behavior correct?
+   → Are those conditions present? (kill-switch, cold cache, first run, missing asset)
+   → If yes → COLD_STATE. Document expected behavior explicitly.
+
+5. SCOPE_DRIFT check:
+   → Did a subsequent sprint change an interface, format, or contract that this system depends on?
+   → Check: Roadmap.md for contract revisions, TRACKING.md Change Log after Sprint N.
+   → If yes → SCOPE_DRIFT.
+
+6. ENVIRONMENT_DELTA check:
+   → Engine/SDK/package version changes since Sprint N?
+   → Platform target changes?
+   → If yes → ENVIRONMENT_DELTA.
+```
+
+**Classification output:**
+```
+## Classification — Sprint N Audit
+| Gap | Category | Evidence for Classification |
+|-----|----------|-----------------------------|
+| CORE-### [description] | REGRESSION | Commit [hash] on [date] modified [file] |
+| [metric] gap | FALSE_VERIFICATION | Close Gate tested [X], current failure is [Y] — different scenario |
+```
+
+---
+
+#### Phase 5 — Dependency Impact Assessment
+
+For each gap classified as REGRESSION, INTEGRATION_GAP, FALSE_VERIFICATION, or SCOPE_DRIFT:
+
+```
+1. List all subsequent sprints that depend on the target sprint's output:
+   → Use Roadmap.md dependency map (or TRACKING.md if dependency is documented there)
+
+2. For each dependent sprint:
+   a. Identify which of its verified items rely on the broken output
+   b. Answer: does the gap affect the dependent item's correctness?
+      - YES → mark that item as `open (regression)` in TRACKING.md
+              Add note: "Re-verification required — see Retroactive Audit Sprint N, [date]"
+      - NO  → document: "unaffected — gap is in [subsystem X], Sprint M used [subsystem Y]"
+
+3. Re-verification scope rule:
+   If ≥ 3 items require re-verification across dependent sprints →
+   flag "Sprint Re-verification Cluster" in TRACKING.md §Open Risks.
+   Present to user: "This gap affects [N] verified items across [M] sprints.
+   Recommend scheduling a dedicated re-verification sprint."
+
+4. Guardrail coverage check:
+   For each classified gap: which guardrail rule should have prevented this?
+   - Rule exists → was it present at Sprint N time? If not → when was it added?
+   - Rule does not exist → create now (follow §Update Rule 7-step process)
+   - Rule exists but was not enforced → add enforcement to sprint-audit.sh
+
+5. Test coverage check:
+   - Was there an automated test for the broken behavior?
+   - If yes: why did it not catch the gap? (wrong assertion, wrong scenario, not run at gate)
+   - If no: would one have been feasible? If yes → add as Must item for resolution sprint
+```
+
+**Dependency impact output:**
+```
+## Dependency Impact — Sprint N Audit
+| Sprint | Dependent Item | Affected? | Action |
+|--------|---------------|-----------|--------|
+| S[M] | CORE-### [description] | YES | Mark open (regression) |
+| S[M] | CORE-### [description] | NO | Unaffected — [reason] |
+
+Re-verification cluster: YES (N items) / NO
+New guardrail rules needed: [list or "none"]
+New automated tests needed: [list or "none"]
+```
+
+---
+
+#### Phase 6 — Resolution Plan
+
+For each classified gap, define exactly one resolution path. Present all options to user; user decides.
+
+**Resolution options:**
+
+| Option | When to Use | Process |
+|--------|------------|---------|
+| **Fix now (current sprint)** | Gap is a blocker for current or next sprint's Must items | Add via §Mid-Sprint Scope Change as Must item |
+| **Fix next sprint** | Gap is important but not immediately blocking | Add to next sprint Entry Gate backlog; log in TRACKING.md §Open Risks |
+| **Accept + document** | Gap is COLD_STATE or acceptable limitation; no code change needed | Document expected behavior in TRACKING.md; update Close Gate metric definition |
+| **Revert target sprint** | Gap is fundamental; fix would require redoing Sprint N from scratch | Follow §Rollback Plan for target sprint's phase |
+| **Quarantine** | Gap affects untested future scope only; no current sprint is broken | Add guard comment in code; flag at relevant future sprint's Entry Gate |
+
+**Resolution output (one row per gap):**
+```
+## Resolution Plan — Sprint N Audit
+| Gap | Category | Resolution Option | Target Sprint | Must-item ID | Blocker? |
+|-----|----------|--------------------|--------------|--------------|---------|
+| [description] | REGRESSION | Fix now | Current | CORE-[new] | YES |
+| [description] | FALSE_VERIFICATION | Accept + document | Immediate | N/A | NO |
+| [metric] gap | COLD_STATE | Accept + document | Immediate | N/A | NO |
+```
+
+**Blocking escalation rule:**
+If a gap is REGRESSION or INTEGRATION_GAP and affects any current sprint Must item →
+the gap is automatically a blocker. It must be resolved before the current sprint's Close Gate.
+Present to user: "This audit found a blocker for the current sprint.
+Recommend addressing [gap] before continuing with CORE-###."
+
+---
+
+#### Phase 7 — Audit Close
+
+Required before marking audit complete and returning to current work:
+
+```
+1. Write audit summary to TRACKING.md §Retroactive Audits:
+
+   ## Retroactive Audit — Sprint N
+   Opened: [date] | Closed: [date]
+   Trigger: [exact symptom that opened audit]
+   Gaps found: [count]
+   Classifications:
+     REGRESSION: [count] — [brief description of each]
+     INTEGRATION_GAP: [count] — [brief description]
+     FALSE_VERIFICATION: [count] — [brief description]
+     COLD_STATE: [count] — [brief description]
+     SCOPE_DRIFT: [count] — [brief description]
+     ENVIRONMENT_DELTA: [count] — [brief description]
+   Items requiring re-verification: [list of CORE-### or "none"]
+   New guardrail rules added: [list of rule IDs or "none"]
+   New tests added: [list or "none"]
+   Resolution: [summary — what was fixed now, what is deferred, what was accepted]
+   Audit status: CLOSED
+
+2. If FALSE_VERIFICATION found:
+   Update Close Gate metric gate definition for Sprint N in TRACKING.md:
+   "Metric gate updated post-audit [date]: [old gate] → [new gate]. Reason: [why original was insufficient]."
+   Add improved metric to CODING_GUARDRAILS.md as a mandatory gate check.
+
+3. If REGRESSION found:
+   Add to TRACKING.md Change Log:
+   "Regression identified [date]: Sprint N [system] broken by Sprint M commit [hash].
+    Fix: [approach]. Responsible item: CORE-[new]."
+
+4. If new guardrail rules created:
+   Complete §Update Rule 7-step process for each rule.
+
+5. If ≥ 1 item marked `open (regression)`:
+   Ensure Entry Gate for next sprint will surface these at step 3 (deferred items review).
+
+6. Present audit summary to user:
+   "Audit closed. Found [N] gaps: [classification breakdown].
+    [X] items need re-verification. [Y] new guardrail rules added.
+    Resolution: [brief]. Resuming current sprint at [CORE-###]."
+
+7. Resume current sprint work.
+```
+
+---
+
+#### Integration with Existing Workflow
+
+**Entry Gate step 3** (deferred items review):
+→ Check TRACKING.md §Retroactive Audits for pending re-verification items.
+   Items marked `open (regression)` from a past audit appear here as deferred items.
+
+**Entry Gate step 9a** (failure mode history):
+→ Audits closed in last 3 sprints are included in pattern analysis.
+   Multiple audits of same category → "Architecture Review Required" flag.
+
+**Close Gate Phase 1b** (abbreviated check):
+→ If any current sprint item depends on an audited sprint's output:
+   verify the dependency is using the corrected post-audit state, not the broken pre-audit state.
+
+**Sprint Close step 7** (failure mode retrospective):
+→ Cross-reference: if a gap was found via Close Gate (not audit),
+   did a past audit predict this category? Pattern tracking.
+
+**Sprint Close step 6** (workflow integrity check):
+→ §Retroactive Audits section exists in TRACKING.md and is current?
+   Audits without `status: CLOSED` → must be resolved before sprint marks "done".
+
 ### Roadmap.md Template
 
 ```markdown
