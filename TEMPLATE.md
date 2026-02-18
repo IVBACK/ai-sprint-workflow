@@ -171,6 +171,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | 11 | Preferred commit style? (conventional, free-form) ⁵ | Commit message format in rules | Free-form — **skip if VCS=none** |
 | 12 | Anything that must NEVER change? (API contracts, data formats) | Seed "Immutable Contracts" in CLAUDE.md | None → discover during implementation ⁶ |
 | 13 | Anything else the AI should know? (e.g., recurring pain points, integration constraints, team conventions, things that burned you before) | Catch requirements not covered above | None |
+| 14 | What is this project's #1 non-negotiable quality axis? (security / performance / reliability / correctness / other: ...) | Sets Critical Axis — findings in this category can never be silently deferred | Infer from domain: payment/auth → security; game/realtime → performance; medical/finance → correctness |
 
 > ⁵ **Q11 details:** Only ask if VCS≠none. If VCS=none, skip entirely — no commits exist.
 >
@@ -250,6 +251,7 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 
 [One paragraph: language, framework, architecture, target platform, key goals]
 VCS: [git | svn | none]
+Critical Axis: [security | performance | reliability | correctness | other: ...]
 
 ## Immutable Contracts
 
@@ -493,6 +495,10 @@ If items exceed scope limit → apply §Scope Negotiation.
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
       - Stress/edge: invisible in normal use (rapid oscillation, pool exhaustion, cascade)
       Each category: >=1 mode.
+      Critical Axis scrutiny: read CLAUDE.md §Project Summary → Critical Axis.
+      For items that touch the Critical Axis domain: require >=2 predicted failure modes
+      in that axis's most relevant category. Example: security axis → >=2 Direct modes
+      covering attack surfaces. Performance axis → >=2 Stress/edge modes covering load scenarios.
       Write predictions to TRACKING.md §Predicted Failure Modes (step 7 reads this).
    b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
@@ -654,8 +660,17 @@ Do not declare "audit complete" without per-item acknowledgment.
 
 **Phase 2 — Fix:**
 - Fix immediately or log with target sprint (user decides which findings to defer).
+- Critical Axis rule: read CLAUDE.md §Project Summary → Critical Axis.
+  Any finding that touches the Critical Axis domain cannot be silently deferred.
+  If deferral is proposed for a Critical Axis finding:
+    → Stop. Present to user explicitly: "This finding touches [Critical Axis].
+       Deferring [security/performance/...] findings is high risk in this project.
+       Options: (1) fix now, (2) defer with explicit written rationale + target sprint,
+       (3) invoke Sprint Abort if the risk is unacceptable."
+    → User must choose explicitly. AI does not decide alone.
 - After Phase 2: present fix/defer summary to user before proceeding to Phase 3.
   Show: which findings were fixed, which logged to target sprint with reason.
+  Flag any deferred Critical Axis findings separately.
 
 **Phase 3 — Regression test:**
 - All tests must PASS after fixes
