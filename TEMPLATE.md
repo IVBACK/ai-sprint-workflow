@@ -529,6 +529,10 @@ If items exceed scope limit → apply §Scope Negotiation.
     d. After approval: log to TRACKING.md: "Entry Gate: [date], phases 0-3 ✓ (steps executed: [list])"
        Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
        Update roadmap with any metric changes approved at step c.
+       Update CLAUDE.md §Last Checkpoint: "Entry Gate complete — Sprint N approved, ready for implementation."
+       Session recommendation: Entry Gate consumes significant context. If context is limited,
+       recommend starting a new session for implementation ("Continue sprint N").
+       If context is ample (long context window), continuing in the same session is fine.
 
 ---
 
@@ -1678,7 +1682,16 @@ Three interruption types and how to handle each:
 │   Read every source file for mechanical checks          │
 │   Duplicate information across documents                │
 │   Store detailed tech notes in CLAUDE.md                │
+│   Load all of S<N>_ENTRY_GATE.md at once — read        │
+│   only the relevant item's section per task             │
 └─────────────────────────────────────────────────────────┘
+
+Session boundaries:
+  Entry Gate → heavy context use (analysis + source reads)
+  Implementation → light start (CLAUDE.md + TRACKING.md only)
+  Recommended: start a new session after Entry Gate approval
+  if context is limited. Long context window? Same session is fine.
+  S<N>_ENTRY_GATE.md persists on disk — no context loss.
 ```
 
 ### Guardrail Evolution
