@@ -104,7 +104,7 @@ Every session starts from zero. This workflow solves three problems:
    - Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
    - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
    - Adapt audit script patterns to your detected language (multi-language projects supported)
-   - Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections for a lean ~550-line workflow reference)
+   - Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
    - Confirm the setup with you before writing any feature code
 5. Start your first sprint — the agent will ask before running Entry Gate
 6. For subsequent sessions: tell the agent **"Continue sprint N"** or **"Resume"**
