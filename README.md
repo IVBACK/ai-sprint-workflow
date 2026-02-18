@@ -51,24 +51,43 @@ Every session starts from zero. This workflow solves three problems:
                   ┌──────────────┐
                   │  ENTRY GATE  │  "Are we building the right thing?"
                   │(ph0-3,12 st)│  Sprint detail + alignment + dependency check
-                  └──────┬───────┘
-                         │
+                  └──────┬───────┘  ◄─── Auto-Detection Checkpoint 1 (metric regression)
+                         │               Auto-Detection Checkpoint 2 (failure pattern)
                          ▼
                   ┌──────────────┐
                   │ IMPLEMENTATION│  "Are we building it correctly?"
                   │    LOOP      │  Pre-code guardrails → code → self-verify → test → run all tests
-                  └──────┬───────┘
+                  └──────┬───────┘  ◄─── Auto-Detection Checkpoint 3 (broken past-sprint output)
                          │
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
                   │  (5 phases)  │  Automated scan + spec-driven audit + item-level tests
-                  └──────┬───────┘
+                  └──────┬───────┘  ◄─── Auto-Detection Checkpoint 4 (Must item unverifiable)
                          │
                          ▼
                   ┌──────────────┐
                   │ SPRINT CLOSE │  Checkmarks, archive, baseline, retrospective, user handoff
                   └──────────────┘
+
+                         ┌────────────────────────────────────────────┐
+        When any         │  RETROACTIVE SPRINT AUDIT  (optional)      │
+        checkpoint  ───► │  7-phase archaeology of a completed sprint  │
+        fires:           │  when its output is found broken or         │
+                         │  inconsistent with Close Gate claims        │
+                         │                                            │
+                         │  Phase 0: Setup (target sprint + symptom)  │
+                         │  Phase 1: Evidence collection              │
+                         │  Phase 2: Current state measurement        │
+                         │  Phase 3: Gap analysis (5% tolerance rule) │
+                         │  Phase 4: Classification                   │
+                         │    REGRESSION / INTEGRATION_GAP /          │
+                         │    FALSE_VERIFICATION / COLD_STATE /       │
+                         │    SCOPE_DRIFT / ENVIRONMENT_DELTA         │
+                         │  Phase 5: Dependency impact assessment     │
+                         │  Phase 6: Resolution plan                  │
+                         │  Phase 7: Audit close → TRACKING.md        │
+                         └────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -190,6 +209,7 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 - **Verification plan quality gate.** Entry Gate step 12c: user reviews each item's test scenario before coding begins. Trivial scenarios ("it runs", "no crash") are sent back for revision. Acceptable scenario must specify inputs, expected outputs or invariants, and at least one failure-inducing case. Prevents the chain from starting with weak verification.
 - **User handoff summary.** Sprint Close step 10: before marking the sprint done, the AI presents each completed item with before/after behavior, one-sentence implementation summary, where to find it, what to verify in the running application, and what should not have changed. Invisible sprints (no visual change) include explicit diagnostic instructions. Never skipped — serves as both explanation and session handoff record.
 - **Critical Axis enforcement.** Every project declares a #1 non-negotiable quality axis (security, performance, reliability, correctness) at Bootstrap. Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis. Close Gate Phase 2 cannot silently defer findings in this domain — the AI stops, presents options (fix now / defer with explicit rationale / Sprint Abort), and waits for user decision. Prevents an AI agent from treating a payment security gap the same as a missing log line.
+- **Retroactive Sprint Audit.** When a completed sprint's output is found broken or inconsistent with its Close Gate claims, a 7-phase audit procedure opens: evidence collection from the original Close Gate record, current state measurement, gap analysis (5% tolerance on continuous metrics; 0 vs non-zero is always a gap), root cause classification (REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION / COLD_STATE / SCOPE_DRIFT / ENVIRONMENT_DELTA), dependency impact assessment, resolution plan, and audit close written to `TRACKING.md §Retroactive Audits`. The AI actively watches for suspicious signals at 4 checkpoints — Entry Gate (metric regression, failure pattern), Implementation session (broken past-sprint API or failing test), and Close Gate (Must item unverifiable due to past-sprint dependency). When a signal fires, the AI must surface it to the user — it cannot silently continue. Dismissed signals are logged and re-surfaced next sprint; dismissed twice for the same system, they are suppressed (but Checkpoint 3 and 4 are never suppressed by prior dismissals). COLD_STATE classification is valid for a maximum of 2 consecutive sprints — after that, a warm-start measurement is mandatory.
 - **Workflow evolution guard.** AI Agent Operational Rules: before adding any new step or check to the workflow, three questions must pass — does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Does it verify a new class of failure rather than just confirming a previous check ran? The last question is the "who watches the watchers" test. Complexity is a cost paid on every sprint.
 - **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
