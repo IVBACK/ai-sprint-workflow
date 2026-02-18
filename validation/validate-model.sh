@@ -74,14 +74,19 @@ else
 fi
 echo ""
 
-if [[ "$failures" -gt 0 ]]; then
+IGNORE_HASH=false
+for arg in "$@"; do [[ "$arg" == "--ignore-hash" ]] && IGNORE_HASH=true; done
+
+if [[ "$failures" -gt 0 ]] && [[ "$IGNORE_HASH" == false ]]; then
   echo "══════════════════════════════════════════════════════"
   echo "Model validation FAILED  — hash mismatch blocks further checks."
+  echo "  Use --ignore-hash to run all checks despite mismatch (debug only)."
   exit 2
 fi
 
 # ─── PYTHON DRIVER: all remaining checks ──────────────────────────────────────
-SELF_TEST="${1:-}"
+SELF_TEST=""
+for arg in "$@"; do [[ "$arg" == "--self-test" ]] && SELF_TEST="--self-test"; done
 
 python3 - "$MODEL" "$WORKFLOW" "$SELF_TEST" <<'PYEOF'
 import sys, yaml, re, hashlib
@@ -368,7 +373,7 @@ EXIT_CODE=$?
 [[ "$EXIT_CODE" -ge 2 ]] && exit 2
 
 # ─── SELF-TEST MODE (do NOT run in main CI — use separate optional job) ───────
-if [[ "${1:-}" == "--self-test" ]]; then
+if [[ "$SELF_TEST" == "--self-test" ]]; then
   echo ""
   echo "── Self-test: Negative checks ──"
   echo "Running negative tests against temp copies of WORKFLOW.md..."

@@ -20,11 +20,11 @@ Run these first. If any fail, fix before running this prompt.
 
 ```
 First run the deterministic checks:
-  bash validate-workflow.sh
-  bash validate-paths.sh
-  bash validate-paths.sh --self-test
-  bash validate-model.sh
-  bash validate-model.sh --self-test
+  bash validation/validate-workflow.sh
+  bash validation/validate-paths.sh
+  bash validation/validate-paths.sh --self-test
+  bash validation/validate-model.sh
+  bash validation/validate-model.sh --self-test
 
 Then read WORKFLOW.md and answer every question below.
 Format: PASS/FAIL + line number(s) as evidence.
