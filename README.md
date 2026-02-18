@@ -62,7 +62,7 @@ Every session starts from zero. This workflow solves three problems:
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
-                  │  (5 phases)  │  Automated scan + spec-driven audit + item-level tests
+                  │  (6 phases)  │  Automated scan + spec-driven audit + item-level tests
                   └──────┬───────┘
                          │
                          ▼
