@@ -21,8 +21,17 @@ The AI agent reads this document and bootstraps the project structure automatica
       "What problem does this solve?" / "Who is the user?" / "What is the core interaction?"
       Minimum viable goal: a subject ("who"), an action ("does what"), and a constraint ("using/for").
    b. Propose high-level phases (titles only, 3-6 phases)
-   c. Detail Sprint 1 only: Must items with CORE-### IDs
+      Each phase should be: independently deliverable (something works at the end),
+      user-visible or measurably different from the previous phase, and roughly similar in scope.
+      If a phase only "prepares" for the next with nothing to show → merge or split differently.
+   c. Detail Sprint 1 only: Must/Should/Could items with CORE-### IDs
       (later sprints stay as one-line sketches — they will be detailed when reached)
+      Must/Should/Could criteria:
+      - Must: without this item, the sprint goal is not met. Sprint does not close without it.
+      - Should: improves quality or completeness, but sprint ships without it if time runs out.
+      - Could: nice to have, first to drop. No Must item depends on it.
+      Item granularity rule: if an item needs more than one focused session to implement,
+      consider splitting. If two items are meaningless without each other, consider merging.
    d. Identify immutable contracts discovered during planning
       → feed into CLAUDE.md §Immutable Contracts
       *(Greenfield/early project with no clear contracts yet? Write "None identified yet — to be discovered during Sprint 1." This is valid. Do not invent artificial contracts.)*
@@ -111,7 +120,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 |---|----------|---------------|----------------------|
 | 0 | Language and framework? ¹ | Audit script, guardrails, test conventions | Auto-detect; empty project → ask explicitly ¹ |
 | 1 | Solo developer or team? | Commit policy, review gate | Solo |
-| 2 | Sprint scope size? (small: 3-5 / medium: 5-8 / large: 8-12) ² | Entry gate scope threshold | Medium (5-8) |
+| 2 | Sprint scope size? (small: 3-5 / medium: 5-8 / large: 8-12) — an item = one deliverable behavior (a feature, a fix, a refactor), not a subtask ² | Entry gate scope threshold | Medium (5-8) |
 | 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md; Yes → validate format, convert to Must/Should/Could if needed ³ |
 | 4 | Performance-sensitive? (game, real-time, HFT) | Profiling rules, hot path checks | No |
 | 5 | Target platforms? (web, mobile, desktop, embedded) | Platform-specific guardrails | Desktop |
@@ -157,7 +166,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | 10 | Language for docs and commit messages? | Consistency across project | English |
 | 11 | Preferred commit style? (conventional, free-form) ⁵ | Commit message format in rules | Free-form — **skip if VCS=none** |
 | 12 | Anything that must NEVER change? (API contracts, data formats) | Seed "Immutable Contracts" in CLAUDE.md | None → discover during implementation ⁶ |
-| 13 | Anything else the AI should know? | Catch requirements not covered above | None |
+| 13 | Anything else the AI should know? (e.g., recurring pain points, integration constraints, team conventions, things that burned you before) | Catch requirements not covered above | None |
 
 > ⁵ **Q11 details:** Only ask if VCS≠none. If VCS=none, skip entirely — no commits exist.
 >
