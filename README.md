@@ -62,7 +62,7 @@ Every session starts from zero. This workflow solves three problems:
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
-                  │  (6 phases)  │  Automated scan + spec-driven audit + item-level tests
+                  │  (5 phases)  │  Automated scan + spec-driven audit + item-level tests
                   └──────┬───────┘
                          │
                          ▼
@@ -81,7 +81,7 @@ Every session starts from zero. This workflow solves three problems:
 3. Tell the agent: "Read TEMPLATE.md and bootstrap this project"
 4. The agent will:
    - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
-   - Ask 14 discovery questions (skipping ones it can infer from project files)
+   - Ask 15 discovery questions (skipping ones it can infer from project files)
    - Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
    - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
    - Adapt audit script patterns to your detected language (multi-language projects supported)
@@ -94,7 +94,7 @@ Every session starts from zero. This workflow solves three problems:
 
 ```
 1. Scan project     → detect language, framework, build system, test framework
-2. Discovery Q's    → 14 questions (batch, skip inferrable ones)
+2. Discovery Q's    → 15 questions (batch, skip inferrable ones)
 3. Create structure → CLAUDE.md, TRACKING.md, GUARDRAILS.md, Roadmap.md, Tools/
 4. Initial Planning → if no sprint plan exists: goal → phases → detail S1 → contracts
 5. Populate CLAUDE.md with project context
@@ -106,7 +106,7 @@ Every session starts from zero. This workflow solves three problems:
 
 Empty project? Step 1 is skipped — Discovery Questions cover language/framework.
 
-### Discovery Questions (14)
+### Discovery Questions (15)
 
 Questions are asked in a single batch. Answers inferrable from project files
 (e.g., `package.json` → TypeScript + Jest) are stated as inferred and confirmed.
