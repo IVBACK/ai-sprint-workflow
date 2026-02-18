@@ -41,7 +41,7 @@ When in doubt: try it on one sprint. If the Entry Gate feels like bureaucracy fo
 AI coding agents (Claude Code, Cursor, Copilot, etc.) are powerful but stateless.
 Every session starts from zero. This workflow solves three problems:
 
-1. **Context loss** — Structured files (`CLAUDE.md`, `TRACKING.md`, `GUARDRAILS.md`) give the agent instant context on every session start.
+1. **Context loss** — Structured files (`CLAUDE.md`, `TRACKING.md`, `CODING_GUARDRAILS.md`) give the agent instant context on every session start.
 2. **Quality drift** — Three gates (Entry, Self-Verification, Close) catch mistakes before they compound.
 3. **Scope creep** — Must/Should/Could prioritization and strategic alignment checks keep sprints focused.
 
@@ -112,8 +112,8 @@ Then tell the agent: "Read WORKFLOW.md and bootstrap this project."
 - Detect whether this is a greenfield or existing project (Step 0)
 - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
 - Ask 15 discovery questions (skipping ones it can infer from project files)
-- Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
-  - Existing project: skips files that already exist; asks before touching `TRACKING.md`, `Roadmap.md`, `GUARDRAILS.md`
+- Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/LESSONS_INDEX.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
+  - Existing project: skips files that already exist; asks before touching `TRACKING.md`, `Roadmap.md`, `CODING_GUARDRAILS.md`
 - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
 - Adapt audit script patterns to your detected language (multi-language projects supported)
@@ -143,12 +143,12 @@ lessons to capture), design the roadmap in a separate focused session before boo
                      Migration: read conflict rules before touching any file
 1. Scan project    → detect language, framework, build system, test framework
 2. Discovery Q's   → 15 questions (batch, skip inferrable ones)
-3. Create structure→ CLAUDE.md, TRACKING.md, GUARDRAILS.md, Roadmap.md, Tools/
+3. Create structure→ CLAUDE.md, TRACKING.md, CODING_GUARDRAILS.md, LESSONS_INDEX.md, Roadmap.md, Tools/
                      Migration: skip files that already exist; ask before touching
 4. Initial Planning→ if no sprint plan exists: goal → phases → detail S1 → contracts
                      Migration: current work = Sprint 1 (no retrospective)
 5. Populate CLAUDE.md with project context
-6. Populate GUARDRAILS.md with framework-specific rules
+6. Populate CODING_GUARDRAILS.md with framework-specific rules
 7. Adapt audit script to detected language
                      Migration: call existing CI commands, don't duplicate checks
 8. WORKFLOW.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
@@ -197,7 +197,8 @@ your-project/
 ├── Docs/
 │   ├── CODING_GUARDRAILS.md      # Engineering rules from real bugs
 │   ├── LESSONS_INDEX.md          # Bug → rule traceability (starts empty)
-│   ├── SPRINT_WORKFLOW.md        # Workflow reference (moved from WORKFLOW.md)
+│   ├── SPRINT_WORKFLOW.md        # Workflow reference (copied from WORKFLOW.md)
+│   ├── Archive/                  # Archived sprint changelogs and failure history
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
 │       └── S<N>_ENTRY_GATE.md    # Entry Gate report (lives during sprint, deleted at close)
