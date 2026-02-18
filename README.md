@@ -87,7 +87,8 @@ Every session starts from zero. This workflow solves three problems:
    - Adapt audit script patterns to your detected language (multi-language projects supported)
    - Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections for a lean ~550-line workflow reference)
    - Confirm the setup with you before writing any feature code
-5. Start your first sprint
+5. Start your first sprint — the agent will ask before running Entry Gate
+6. For subsequent sessions: tell the agent **"Continue sprint N"** or **"Resume"**
 
 ### Bootstrap Steps (9 total)
 

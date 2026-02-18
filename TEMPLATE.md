@@ -262,7 +262,7 @@ VCS: [git | svn | none]
 ## Operational Rules
 
 - Update `TRACKING.md` after every significant fix/decision.
-- `fixed → verified` transition requires evidence (test run ID + results). Full flow: open → in_progress → fixed → verified.
+- `fixed → verified` transition requires evidence (test output or pass confirmation). Full flow: open → in_progress → fixed → verified.
 - Check `Docs/CODING_GUARDRAILS.md` before writing new code.
 - Sprint `Must` items must be complete before sprint is "done".
 - Roadmap checkbox `[x]` only when item is `verified` in TRACKING.md. `[~]` only when `deferred`. Intermediate states (in_progress, fixed-untested) are not shown in roadmap — TRACKING.md is the single source. `sprint-audit.sh` Section 11 catches mismatches automatically.
@@ -284,6 +284,7 @@ VCS: [git | svn | none]
 New session sequence:
 1. `TRACKING.md` → Current Focus + Sprint Board + Blockers
 2. `Docs/Planning/Roadmap.md` → active sprint section
+→ Then tell the AI: **"Continue sprint N"** or **"Resume"** — AI runs Session Start Protocol automatically.
 
 Sprint start (new sprint transition):
 - `Docs/SPRINT_WORKFLOW.md` §Entry Gate (phases 0-3, 12 steps) — read and execute. No code before plan is confirmed.
