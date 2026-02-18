@@ -23,6 +23,7 @@ export LC_ALL
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE="$SCRIPT_DIR/TEMPLATE.md"
+ROADMAP="$SCRIPT_DIR/ROADMAP-DESIGN-PROMPT.md"
 
 passes=0
 warnings=0
@@ -69,11 +70,30 @@ section_check() {
   fi
 }
 
+# Check: verify a pattern exists anywhere in a file.
+# Usage: file_check CHECK_NAME FILE PATTERN DESCRIPTION
+file_check() {
+  local name="$1" file="$2" pattern="$3" desc="$4"
+  if [[ ! -f "$file" ]]; then
+    fail "$name" "File not found: $file"
+    return
+  fi
+  if grep -qE "$pattern" "$file"; then
+    pass "$name"
+  else
+    fail "$name" "$desc"
+  fi
+}
+
 # ── Pre-flight ──────────────────────────────────────────────
-if [[ ! -f "$TEMPLATE" ]]; then
-  echo "ERROR  TEMPLATE.md not found: $TEMPLATE"
-  exit 2
-fi
+preflight_ok=true
+for f in "$TEMPLATE" "$ROADMAP"; do
+  if [[ ! -f "$f" ]]; then
+    echo "ERROR  Required file not found: $f"
+    preflight_ok=false
+  fi
+done
+$preflight_ok || exit 2
 
 # Check for --self-test mode
 SELF_TEST=false
@@ -297,7 +317,7 @@ run_checks() {
     "Contract Revision missing user-initiation rule"
 
   section_check "S10_BLAST_RADIUS" "$contract_section" \
-    "blast radius|[Aa]ffected.*items|impact" \
+    "blast radius" \
     "Contract Revision missing blast radius assessment"
 
   section_check "S10_REGRESSION" "$contract_section" \
@@ -343,6 +363,32 @@ run_checks() {
   section_check "STATE_DONE_NEXT" "$state_section" \
     "next sprint|done.*planned" \
     "Sprint Lifecycle missing done→planned transition"
+
+  # ═══════════════════════════════════════════════════════════
+  #  SCENARIO 11: Design-First Path (ROADMAP-DESIGN-PROMPT.md)
+  # ═══════════════════════════════════════════════════════════
+  echo ""
+  echo "── SCENARIO 11: Design-First Path ──"
+
+  # TEMPLATE step 4 has the design-first skip alternative
+  file_check "S11_STEP4_SKIP" "$tmpl" \
+    "design-first alternative|skip this step entirely" \
+    "TEMPLATE step 4 missing design-first alternative (skip when Roadmap.md exists)"
+
+  # TEMPLATE bootstrap detects existing Roadmap.md and skips Initial Planning
+  file_check "S11_ROADMAP_DETECT" "$tmpl" \
+    "Roadmap\.md already exists|skip Initial Planning" \
+    "TEMPLATE missing bootstrap detection of existing Roadmap.md → skip step 4"
+
+  # TEMPLATE step 5 feeds Non-Negotiable Contracts from Roadmap.md into CLAUDE.md
+  file_check "S11_CONTRACT_FEED" "$tmpl" \
+    "Non-Negotiable Contracts.*CLAUDE|read Roadmap.*§Non-Negotiable" \
+    "TEMPLATE step 5 missing design-first contract feed into CLAUDE.md"
+
+  # ROADMAP-DESIGN-PROMPT.md usage flow references TEMPLATE.md bootstrap step
+  file_check "S11_USAGE_FLOW" "$ROADMAP" \
+    "TEMPLATE\.md.*bootstrap|bootstrap.*TEMPLATE\.md" \
+    "ROADMAP-DESIGN-PROMPT.md usage flow missing link to TEMPLATE.md bootstrap"
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -368,6 +414,11 @@ else
     "GAP5_REMOVAL"
     "GAP6_REMOVAL"
     "STATE_REMOVAL"
+    "GAP_S6_TRIGGER"
+    "GAP_S8_MODES"
+    "GAP_S9_EXIT"
+    "GAP_S10_CONTRACT"
+    "GAP_S11_DESIGNFIRST"
   )
   declare -a gap_patterns=(
     "does not approve.*return to"
@@ -377,6 +428,11 @@ else
     "keep.*item unchanged|modify.*update.*Roadmap|defer.*deferred|remove.*delete"
     "Clear.*Predicted Failure|Clear.*Failure Encounters|replace previous sprint"
     "re-fix cycle"
+    "Same category 2"
+    "[Nn]ew sprint|[Mm]id-sprint|[Ii]nterrupted session"
+    "[Ee]xit code 0.*clean|[Ee]xit code 0.*proceed"
+    "blast radius"
+    "design-first alternative|skip this step entirely"
   )
   declare -a gap_expected=(
     "S2_STEP12E_REJECT"
@@ -386,6 +442,11 @@ else
     "GAP5_STEP8_MECHANICS"
     "GAP6_SECTION_CLEAR"
     "STATE_FIXED_REWORK"
+    "S6_TRIGGER"
+    "S8_THREE_MODES"
+    "S9_EXIT_0"
+    "S10_BLAST_RADIUS"
+    "S11_STEP4_SKIP"
   )
 
   self_test_pass=0

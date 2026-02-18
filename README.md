@@ -264,9 +264,9 @@ The workflow validates itself at three levels:
 
 | Level | Script | What it catches | When to run |
 |-------|--------|----------------|-------------|
-| **Structural** | `bash validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity (19 checks) | After any edit to TEMPLATE.md, README.md, or sprint-audit-template.sh |
-| **Path simulation** | `bash validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete (40 checks) | Same as above |
-| **Negative tests** | `bash validate-paths.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies script catches it (7 tests) | After changing validate-paths.sh or gap-related TEMPLATE.md text |
+| **Structural** | `bash validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to TEMPLATE.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
+| **Path simulation** | `bash validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (44 checks) | Same as above |
+| **Negative tests** | `bash validate-paths.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies script catches it (12 tests) | After changing validate-paths.sh or gap-related TEMPLATE.md text |
 | **Semantic** | Copy `verify-workflow-semantic.md` into an AI session | Logic gaps, dead ends, missing user approvals, information flow, state machine coverage (31 questions) | After major workflow changes or periodically |
 
 CI runs structural + path checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.

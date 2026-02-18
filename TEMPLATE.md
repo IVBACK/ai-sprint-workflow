@@ -8,14 +8,10 @@ The AI agent reads this document and bootstraps the project structure automatica
 
 ## Quick Start — AI Agent Bootstrap
 
-**When an AI agent encounters this file, first determine the project state:**
-
-**Step 0 — Detect project state (before doing anything else):**
-
-Check for: existing source code files, `CLAUDE.md`, `TRACKING.md`, `Docs/Planning/Roadmap.md`, CI/CD config, build files.
-
-- **No source code, no workflow files** → Greenfield mode: proceed to step 1.
-- **Source code exists or any workflow file exists** → Migration mode: read "Migration Rules" below, then proceed to step 1.
+0. Detect project state (before doing anything else):
+   Check for: existing source code files, `CLAUDE.md`, `TRACKING.md`, `Docs/Planning/Roadmap.md`, CI/CD config, build files.
+   - **No source code, no workflow files** → Greenfield mode: proceed to step 1.
+   - **Source code exists or any workflow file exists** → Migration mode: read "Migration Rules" below, then proceed to step 1.
 
 ---
 

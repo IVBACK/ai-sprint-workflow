@@ -23,6 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 README="$SCRIPT_DIR/README.md"
 TEMPLATE="$SCRIPT_DIR/TEMPLATE.md"
 AUDIT="$SCRIPT_DIR/sprint-audit-template.sh"
+ROADMAP="$SCRIPT_DIR/ROADMAP-DESIGN-PROMPT.md"
 
 passes=0
 warnings=0
@@ -57,7 +58,7 @@ extract_section() {
 # ── Pre-flight ──────────────────────────────────────────────
 echo "Validating workflow consistency..."
 preflight_ok=true
-for f in "$README" "$TEMPLATE" "$AUDIT"; do
+for f in "$README" "$TEMPLATE" "$AUDIT" "$ROADMAP"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR  Required file not found: $f"
     preflight_ok=false
@@ -69,6 +70,7 @@ fi
 echo "  README:   $README"
 echo "  TEMPLATE: $TEMPLATE"
 echo "  AUDIT:    $AUDIT"
+echo "  ROADMAP:  $ROADMAP"
 
 # ═══════════════════════════════════════════════════════════════
 #  CATEGORY 1: Numeric Claim Validation
@@ -306,7 +308,7 @@ else
   msg=""
   [[ -n "$readme_only" ]] && msg="README-only: ${readme_only}. "
   [[ -n "$template_only" ]] && msg="${msg}TEMPLATE-only: ${template_only}"
-  warn "FILE_TREE" "$msg"
+  fail "FILE_TREE" "$msg"
 fi
 
 # 2.6 Sprint Close log "steps 1-N" matches actual step count
@@ -537,6 +539,70 @@ if [[ -z "$cross_bad" ]]; then
 else
   fail "GATE_CROSS_REFS" "Broken cross-references:$cross_bad"
 fi
+
+# ═══════════════════════════════════════════════════════════════
+#  CATEGORY 6: ROADMAP-DESIGN-PROMPT.md & Audit Content
+# ═══════════════════════════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════════════════════"
+echo "  CATEGORY 6: ROADMAP-DESIGN-PROMPT.md & Audit Content"
+echo "══════════════════════════════════════════════════════"
+
+# 6.1 README references ROADMAP-DESIGN-PROMPT.md
+if grep -qF 'ROADMAP-DESIGN-PROMPT.md' "$README"; then
+  pass "ROADMAP_README_REF"
+else
+  fail "ROADMAP_README_REF" "README does not reference ROADMAP-DESIGN-PROMPT.md"
+fi
+
+# 6.2 TEMPLATE references ROADMAP-DESIGN-PROMPT.md (design-first path)
+if grep -qF 'ROADMAP-DESIGN-PROMPT.md' "$TEMPLATE"; then
+  pass "ROADMAP_TEMPLATE_REF"
+else
+  fail "ROADMAP_TEMPLATE_REF" "TEMPLATE does not reference ROADMAP-DESIGN-PROMPT.md"
+fi
+
+# 6.3 ROADMAP-DESIGN-PROMPT.md has a Format Rules section
+if grep -qE '^## Format Rules' "$ROADMAP"; then
+  pass "ROADMAP_FORMAT_RULES"
+else
+  fail "ROADMAP_FORMAT_RULES" "ROADMAP-DESIGN-PROMPT.md missing '## Format Rules' section"
+fi
+
+# 6.4 ROADMAP-DESIGN-PROMPT.md mentions CORE-### IDs (workflow compatibility)
+if grep -qE 'CORE-[0-9#]' "$ROADMAP"; then
+  pass "ROADMAP_CORE_IDS"
+else
+  fail "ROADMAP_CORE_IDS" "ROADMAP-DESIGN-PROMPT.md missing CORE-### ID convention"
+fi
+
+# 6.5 TEMPLATE bootstrap step 4 has design-first skip path referencing Roadmap.md.
+# Scope: extract only the bootstrap section (Quick Start…Bootstrap → first ``` block)
+# to avoid false positives from other "4. … 5." spans in the document.
+bootstrap_section=$(sed -n '/^## Quick Start.*Bootstrap/,/^```/p' "$TEMPLATE" | head -n -1)
+bootstrap_step4=$(echo "$bootstrap_section" | sed -n '/^4\. /,/^5\. /p' | head -n -1)
+if echo "$bootstrap_step4" | grep -qiE 'ROADMAP-DESIGN-PROMPT|skip this step|design-first'; then
+  pass "ROADMAP_BOOTSTRAP_SKIP"
+else
+  fail "ROADMAP_BOOTSTRAP_SKIP" "TEMPLATE step 4 missing design-first alternative (skip when Roadmap.md exists)"
+fi
+
+# 6.6 Audit script has a check() function
+if grep -qE '^check\(\)' "$AUDIT"; then
+  pass "AUDIT_CHECK_FN"
+else
+  fail "AUDIT_CHECK_FN" "Audit script missing check() function definition"
+fi
+
+# 6.7 Audit script EXT comment lists all 7 supported language extensions
+audit_ext_ok=true
+for ext in cs ts py java go rs cpp; do
+  if ! grep -qE "\"${ext}\"" "$AUDIT"; then
+    fail "AUDIT_LANG_EXT" "Audit script EXT comment missing extension: $ext"
+    audit_ext_ok=false
+  fi
+done
+$audit_ext_ok && pass "AUDIT_LANG_EXT (7 extensions)"
 
 # ═══════════════════════════════════════════════════════════════
 #  SUMMARY
