@@ -150,6 +150,15 @@ Context window is finite. Separation lets the agent load CLAUDE.md (always),
 TRACKING.md (session start), guardrails sections (per-task), and
 SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 
+Selective loading rules keep context lean as the project grows:
+- `CODING_GUARDRAILS.md`: §Index read first → only the relevant section loaded per task (~20-40 lines), not the full file
+- `S<N>_ENTRY_GATE.md`: loaded per-item during Close Gate audit, not the full report at once
+- `TRACKING.md §Failure Mode History`: archived after 5 sprints to prevent bloat
+- `S<N>_ENTRY_GATE.md`: deleted at Sprint Close — `TRACKING.md` gate log is the permanent record
+- Roadmap: only the active sprint section loaded, not the full multi-phase plan
+
+A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; context stays small.
+
 ## Key Design Decisions
 
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
