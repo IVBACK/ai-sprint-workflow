@@ -1790,6 +1790,13 @@ The right amount is the minimum that handles real, observed problems.
 If the user asks "can we improve X?":
   → First ask: what real failure would this prevent?
   → If no concrete answer exists → the answer is no.
+
+When running a gap analysis or workflow review:
+  → Apply the 3-question test to EACH finding before presenting it.
+  → Do not surface a finding that fails any of the 3 questions.
+  → Present only findings that represent real, observable failures
+    with clear overhead justification.
+  → Filtering is the AI's job — not the user's.
 ```
 
 ---
