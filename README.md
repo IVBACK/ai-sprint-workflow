@@ -115,11 +115,12 @@ Questions are asked in a single batch. Answers inferrable from project files
 |----------|-----------|
 | **Project Shape** | Q0: Language/framework, Q1: Solo or team, Q2: Sprint scope size, Q3: Existing roadmap, Q4: Performance-sensitive, Q5: Target platforms |
 | **Infrastructure** | Q6: CI/CD pipeline, Q7: Test framework, Q8: Existing linter/standards, Q9: Known tech debt |
-| **Workflow Preferences** | Q10: Docs language, Q11: Commit style (skipped if VCS=none), Q12: Immutable contracts, Q13: Anything else the AI should know |
+| **Workflow Preferences** | Q10: Docs language, Q11: Commit style (skipped if VCS=none), Q12: Immutable contracts, Q13: Anything else the AI should know, Q14: Critical Axis |
 
 Q0 auto-detects from project files; asks explicitly if the project is empty. If user is undecided, AI proposes options with trade-offs.
 VCS is auto-detected (`.git`, `.svn`, `.hg`). Result recorded in `CLAUDE.md`. If VCS=none: Q11 skipped, Close Gate Phase 1b uses Entry Gate implementation notes instead of `git diff`, TRACKING.md recovery falls back to user verification.
 Q13 is an open-ended catch-all for context that doesn't fit the predefined categories.
+Q14 (Critical Axis): the project's #1 non-negotiable quality concern — security, performance, reliability, correctness, or other. If unanswered, inferred from domain (payment/auth → security; game/realtime → performance; medical/finance → correctness). Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis; Close Gate Phase 2 prevents silent deferral of findings in this domain.
 
 ## What Gets Created
 
@@ -179,6 +180,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **Incremental testing.** Implementation loop step D.6: after each item, all tests written so far (current + previous items) are run before moving to the next item. Regressions are caught immediately — not accumulated until Close Gate. Tests that need unavailable infrastructure are marked "pending" and run at Close Gate Phase 3.
 - **Verification plan quality gate.** Entry Gate step 12c: user reviews each item's test scenario before coding begins. Trivial scenarios ("it runs", "no crash") are sent back for revision. Acceptable scenario must specify inputs, expected outputs or invariants, and at least one failure-inducing case. Prevents the chain from starting with weak verification.
 - **User handoff summary.** Sprint Close step 10: before marking the sprint done, the AI presents each completed item with before/after behavior, one-sentence implementation summary, where to find it, what to verify in the running application, and what should not have changed. Invisible sprints (no visual change) include explicit diagnostic instructions. Never skipped — serves as both explanation and session handoff record.
+- **Critical Axis enforcement.** Every project declares a #1 non-negotiable quality axis (security, performance, reliability, correctness) at Bootstrap. Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis. Close Gate Phase 2 cannot silently defer findings in this domain — the AI stops, presents options (fix now / defer with explicit rationale / Sprint Abort), and waits for user decision. Prevents an AI agent from treating a payment security gap the same as a missing log line.
 - **Workflow evolution guard.** AI Agent Operational Rules: before adding any new step or check to the workflow, three questions must pass — does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Does it verify a new class of failure rather than just confirming a previous check ran? The last question is the "who watches the watchers" test. Complexity is a cost paid on every sprint.
 - **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
