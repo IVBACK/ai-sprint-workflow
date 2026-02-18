@@ -224,7 +224,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 
 | Starting Point | What Happens |
 |---|---|
-| **Existing project** (has code) | Agent scans files, infers answers, creates structure around existing code |
+| **Existing project** (has code) | Agent scans files, infers answers, creates structure around existing code. Sprint 1 typically focuses on stabilization: tests for critical existing paths, guardrails from known bugs (Q9), then new features from Sprint 2 onward. |
 | **Empty project** (no code) | Agent asks Q0 explicitly, runs Initial Planning to create first sprint |
 | **Greenfield** ("make me X") | Agent decomposes goal into phases, details Sprint 1, discovers contracts |
 
