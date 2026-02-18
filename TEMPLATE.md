@@ -489,6 +489,10 @@ If items exceed scope limit → apply §Scope Negotiation.
          but require careful attention (e.g., specific interaction risks from Architecture Review)
        - **Recommendation:** "Gate passed — recommend proceeding" or "Gate blocked by [X]"
     c. User approves before coding begins
+       User specifically reviews verification plan quality (step 9b):
+         For each item's test scenario — "Would this test pass even if the item is broken?"
+         Trivial scenario (e.g., "it runs", "no crash", "no exception") → send back to step 9b for revision.
+         Acceptable scenario: specifies inputs, expected outputs or invariants, and at least one failure-inducing case.
        User does not approve → identify blocking concerns → return to the relevant phase
        (Phase 0 for scope issues, Phase 3 for strategic/metric issues) → rework → re-present.
        If user decides the sprint direction is fundamentally wrong → §Sprint Abort procedure.
@@ -499,6 +503,12 @@ If items exceed scope limit → apply §Scope Negotiation.
 ---
 
 ## Close Gate — Sprint-End Audit
+
+**Presentation rule:**
+Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpoints, not approval gates.
+- Clean / minimal findings → batch into one combined report, do not pause for confirmation.
+- Significant findings (blocker, regression, MISSED failure mode) → stop at that phase, present and ask.
+- Mandatory user approval: Close Gate verdict only (final step before Sprint Close).
 
 **Phase 0 — Metric gate check:**
 - Can each metric be measured? Evidence exists? (all sprint metrics — every item has a metric gate)
@@ -560,21 +570,30 @@ If items exceed scope limit → apply §Scope Negotiation.
   Present automated scan summary to user before proceeding to Phase 1b.
 - Exit code 0 (clean): proceed (note "clean" to user before Phase 1b).
 
-**Phase 1b — Manual audit:**
-Identify modified files via `git diff` against the sprint start commit (or Entry Gate commit).
-Read each modified file and check:
-1. Memory/resource leaks
-2. Unnecessary allocations in hot paths
-3. O(n) → O(1) opportunities
-4. Missing null/bounds guards
-5. Duplicate logic
-6. Missing observability (logging, profiling)
-7. Dead code and orphan scaffolding
-8. Debug path parity with production
+**Phase 1b — Spec-driven audit:**
+Load Entry Gate data before starting:
+- TRACKING.md §Predicted Failure Modes (written at Entry Gate 9a)
+- S<N>_ENTRY_GATE.md verification plan per item (Entry Gate 9b invariants)
 
-Output: per-file summary (file name + CLEAN or list of findings).
+For each completed item (Must + Should + Could):
+  a. Find implementing files via `git diff` (filtered by item context)
+  b. Predicted failure modes → is each mode handled in code?
+     - Direct: does the item break on its own? (null ref, off-by-one, wrong calc, missing guard)
+     - Interaction: does combining with other systems cause failure? (timing, shared state, dispatch order)
+     - Stress/edge: does extreme input/load/timing expose a break? (pool exhaustion, rapid oscillation, cascade)
+  c. Verification plan invariants (from Entry Gate 9b) → do they hold in the implementation?
+     ("Algorithmic items: what invariants must hold?" — if 9b specified them, check they are enforced in code)
+
+Supplemental per-file check (issues outside item scope):
+1. Resource/memory leaks
+2. Missing observability (logging, profiling)
+3. Dead code and orphan scaffolding
+4. Debug path parity with production
+
+Output: per-item summary (CORE-### → failure modes: HANDLED / MISSED / N/A)
+        + supplemental findings per file.
 Present summary to user before proceeding to Phase 2.
-Do not declare "manual audit complete" without per-file acknowledgment.
+Do not declare "audit complete" without per-item acknowledgment.
 
 **Phase 2 — Fix:**
 - Fix immediately or log with target sprint (user decides which findings to defer).
@@ -583,6 +602,7 @@ Do not declare "manual audit complete" without per-file acknowledgment.
 
 **Phase 3 — Regression test:**
 - All tests must PASS after fixes
+- Include any tests marked "pending" during D.6 that can now execute (infra available at Close Gate)
 
 **Phase 4 — Test coverage gap:**
 - 4a. File-level: new/modified code → matching test file exists?
@@ -660,8 +680,19 @@ Do not declare "manual audit complete" without per-file acknowledgment.
 9. Entry Gate report cleanup:
    - Delete `Docs/Planning/S<N>_ENTRY_GATE.md` — its purpose (sprint-scoped reference) is fulfilled.
    - The gate execution log in TRACKING.md (from Entry Gate step 12d) persists as the permanent record.
-10. Sprint "done"
-    Log to TRACKING.md: "Sprint Close: [date], steps 1-10 ✓"
+10. User handoff summary:
+    For each completed item, present to user:
+    - **Before/after:** what changed in behavior (1-2 sentences, non-technical)
+    - **How:** implementation approach in one sentence (user-level, not method names)
+    - **Where:** file name / Inspector path so user can find it
+    - **Verify:** specific runtime action + expected result
+    - **Should NOT change:** what to check for regressions
+    Invisible sprint (no visual change)? State explicitly:
+    "No visible change — verify via [specific diagnostic/counter/log]"
+    Present before marking sprint done. Do not skip if user "already knows" —
+    the summary serves as a session handoff record, not just explanation.
+11. Sprint "done"
+    Log to TRACKING.md: "Sprint Close: [date], steps 1-11 ✓"
 
 ---
 
@@ -930,7 +961,8 @@ This file starts empty on new projects. Add entries when:
 │  │ 10.Scope │ │ 11.Impl  │ │ 12. Gate assessment + report:     ││
 │  │ check    │ │ order    │ │  a. Write S<N>_ENTRY_GATE.md     │ │
 │  └──────────┘ └──────────┘ │  b. AI own assessment + recommend│ │
-│                             │  c. User approves before coding  ││
+│                             │  c. User approves — reviews 9b   ││
+│                             │     quality ("trivial?" → revise)││
 │                             │  d. Log + update (post-approval) ││
 │                             └──────────────────────────────────┘│
 │                                                                 │
@@ -992,6 +1024,11 @@ This file starts empty on new projects. Add entries when:
 │  │     │ Unit-testable logic ────► Unit test        │      │    │
 │  │     │ Integration/async ──────► Integration test │      │    │
 │  │     │ Visual/UI ────────────► Manual + screenshot│      │    │
+│  │     │                                            │      │    │
+│  │     │ Each test must encode Entry Gate 9b        │      │    │
+│  │     │ invariants. Trivial tests ("it runs",      │      │    │
+│  │     │ "no exception") are not acceptable —       │      │    │
+│  │     │ apply same criteria as Entry Gate 12c.     │      │    │
 │  │     └────────────────────────────────────────────┘      │    │
 │  │                        │                                │    │
 │  │                        ▼                                │    │
@@ -1008,6 +1045,22 @@ This file starts empty on new projects. Add entries when:
 │  │     │ 3. Automated proxy test exists?            │      │    │
 │  │     │    → still ask user for visual confirm     │      │    │
 │  │     └────────────────────────────────────────────┘      │    │
+│  │                        │                                │    │
+│  │                        ▼                                │    │
+│  │  D.6 Incremental test run                               │    │
+│  │     Run ALL tests written so far (this item +           │    │
+│  │     all previous items in this sprint).                 │    │
+│  │     ┌────────────────────────────────────────────┐      │    │
+│  │     │ PASS → proceed to E                    │      │    │
+│  │     │ FAIL (new test) → fix impl, rerun     │      │    │
+│  │     │ FAIL (prev item test) → regression:   │      │    │
+│  │     │   fix before adding more code         │      │    │
+│  │     │ max 3 fix attempts → escalate to user │      │    │
+│  │     │                                       │      │    │
+│  │     │ Test needs unavailable infra?         │      │    │
+│  │     │ → mark "pending" in TRACKING.md       │      │    │
+│  │     │ → run at Close Gate Phase 3           │      │    │
+│  │     └────────────────────────────────────────┘      │    │
 │  │                        │                                │    │
 │  │                        ▼                                │    │
 │  │  E. Update TRACKING.md                                  │    │
@@ -1038,6 +1091,15 @@ This file starts empty on new projects. Add entries when:
            ══════════════════╪═══════════════
                      CLOSE GATE
            ══════════════════╪═══════════════
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  PRESENTATION RULE                                              │
+│  Phases 0/1a/1b/2/4 = transparency checkpoints, not approvals  │
+│  Clean/minimal → batch into one report, no pause needed         │
+│  Blocker/regression/MISSED → stop, present, ask                 │
+│  Mandatory approval: verdict only                               │
+└────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1096,20 +1158,29 @@ This file starts empty on new projects. Add entries when:
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  PHASE 1b — Manual Audit (semantic, script can't catch)         │
+│  PHASE 1b — Spec-driven Audit (semantic, script can't catch)    │
 │                                                                 │
-│  Read each modified file:                                       │
+│  Load Entry Gate data first:                                    │
+│  → TRACKING §Predicted Failure Modes (Entry Gate 9a)            │
+│  → S<N>_ENTRY_GATE.md verification plan per item (9b)           │
+│                                                                 │
+│  Per completed item (Must + Should + Could):                    │
+│  a. Find implementing files (git diff, by item context)         │
+│  b. Predicted failure modes → handled in code?                  │
+│     • Direct (item-internal): null ref, off-by-one, wrong calc  │
+│     • Interaction (cross-system): timing, shared state, order   │
+│     • Stress/edge: exhaustion, cascade, rapid oscillation       │
+│  c. Entry Gate 9b invariants → enforced in implementation?      │
+│                                                                 │
+│  Supplemental per-file (issues outside item scope):             │
 │  1. Resource/memory leaks                                       │
-│  2. Unnecessary allocations in hot paths                        │
-│  3. O(n) → O(1) opportunities                                   │
-│  4. Missing guards (null, bounds, state validation)             │
-│  5. Duplicate logic (single source of truth violations)         │
-│  6. Missing observability (logging, metrics, profiling)         │
-│  7. Dead code (unused, orphan scaffolding, output-discarded)    │
-│  8. Debug/test path parity with production                      │
+│  2. Missing observability (logging, profiling)                  │
+│  3. Dead code / orphan scaffolding                              │
+│  4. Debug/prod path parity                                      │
 │                                                                 │
-│  OUTPUT: per-file summary (CLEAN or findings list)              │
-│  Present summary to user before proceeding to Phase 2           │
+│  OUTPUT: per-item (CORE-### → modes: HANDLED/MISSED/N/A)        │
+│          + supplemental findings per file                       │
+│  Present to user before proceeding to Phase 2                   │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -1121,7 +1192,9 @@ This file starts empty on new projects. Add entries when:
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 3 — Regression Test                                      │
-│  All tests PASS after Phase 2 fixes (no regressions)            │
+│  All tests PASS after Phase 2 fixes (no regressions).           │
+│  Include any tests marked "pending" during D.6 that can         │
+│  now execute (infra available at Close Gate).                   │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -1204,8 +1277,17 @@ This file starts empty on new projects. Add entries when:
 │     → Delete Docs/Planning/S<N>_ENTRY_GATE.md                   │
 │     → TRACKING.md gate log persists as permanent record         │
 │                                                                 │
-│ 10. Sprint "done"                                               │
-│     Log: "Sprint Close: [date], steps 1-10 ✓"                   │
+│ 10. User handoff summary (per completed item):                  │
+│     → Before/after: behavior change (1-2 sentences)            │
+│     → How: implementation in one sentence (user-level)          │
+│     → Where: file / Inspector path                              │
+│     → Verify: runtime action + expected result                  │
+│     → Should NOT change: regression check                       │
+│     Invisible sprint? → state explicitly + name diagnostic      │
+│     Present before marking done. Never skip.                    │
+│                                                                 │
+│ 11. Sprint "done"                                               │
+│     Log: "Sprint Close: [date], steps 1-11 ✓"                   │
 │     ──────────► next sprint Entry Gate                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -1506,8 +1588,9 @@ Do NOT read GUARDRAILS.md in full — only §Index → relevant sections per tas
 ```
 - Read guardrails BEFORE writing code (not after)
 - Self-verify EVERY code block (5-point checklist)
+- Run ALL tests written so far after each item (D.6) — do not accumulate failures across items
 - Update TRACKING.md after every significant change
-- Never skip self-verification to "save time"
+- Never skip self-verification or D.6 incremental test run to "save time"
 ```
 
 ### Context Window Management
@@ -1569,6 +1652,34 @@ Bug discovered
 
 Guardrails grow organically from real bugs.
 Never add hypothetical rules — only rules from production experience.
+```
+
+### Workflow Evolution — "Who Watches the Watchers?"
+
+```
+AI will always find something to improve in this workflow.
+That is not sufficient reason to change it.
+
+Before adding any new step, check, or verification layer:
+
+  1. Does it catch a real, observed failure that NO existing
+     mechanism currently catches?
+     NO → do not add it.
+
+  2. Is the failure it catches worth the overhead it adds
+     to every future sprint?
+     NO → do not add it.
+
+  3. Does it verify that a previous check RAN,
+     rather than catching a new class of failure?
+     YES → do not add it. This is "who watches the watchers."
+
+Complexity is a cost paid on every sprint.
+The right amount is the minimum that handles real, observed problems.
+
+If the user asks "can we improve X?":
+  → First ask: what real failure would this prevent?
+  → If no concrete answer exists → the answer is no.
 ```
 
 ---
