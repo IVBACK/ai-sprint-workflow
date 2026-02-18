@@ -89,7 +89,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | 0 | Language and framework? ¹ | Audit script, guardrails, test conventions | Auto-detect; empty project → ask explicitly ¹ |
 | 1 | Solo developer or team? | Commit policy, review gate | Solo |
 | 2 | Sprint scope size? (small: 3-5 / medium: 5-8 / large: 8-12) — an item = one deliverable behavior (a feature, a fix, a refactor), not a subtask ² | Entry gate scope threshold | Medium (5-8) |
-| 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md; Yes → validate format, convert to Must/Should/Could if needed ³ |
+| 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md; Yes → validate IDs only ³ |
 | 4 | Performance-sensitive? (game, real-time, HFT) | Profiling rules, hot path checks | No |
 | 5 | Target platforms? (web, mobile, desktop, embedded) | Platform-specific guardrails | Desktop |
 
@@ -100,7 +100,9 @@ existing project files (e.g., `package.json` reveals language + test framework).
 > ² **Q2 details:** An "item" = one deliverable behavior (a feature, a fix, a refactor).
 > Not a subtask or a line of code.
 >
-> ³ **Q3 details:** "Scattered" (across GitHub Issues, Notion, etc.) → AI extracts items
+> ³ **Q3 details:**
+> "Yes" = Roadmap.md already exists with Must/Should/Could format and CORE-### IDs → validate format and IDs only.
+> "Scattered" = any other source or format (GitHub Issues, Notion, plain bullets, etc.) → AI extracts items
 > from user-provided source, converts to Must/Should/Could format in Roadmap.md, user confirms.
 
 > **Note on sprint duration:** With AI-assisted development, calendar time is
@@ -232,8 +234,10 @@ Critical Axis: [security | performance | reliability | correctness | other: ...]
 - Check `Docs/CODING_GUARDRAILS.md` before writing new code.
 - Sprint `Must` items must be complete before sprint is "done".
 - Roadmap checkbox `[x]` only when item is `verified` in TRACKING.md. `[~]` only when `deferred`. Intermediate states (in_progress, fixed-untested) are not shown in roadmap — TRACKING.md is the single source. `sprint-audit.sh` Section 11 catches mismatches automatically.
+- Close Gate is user-initiated only. AI never asks "shall we close the sprint?" unprompted.
+  Reading all items as `verified` in TRACKING.md is not a trigger — it is just state.
 - Sprint close gate:
-  - Run `Tools/sprint-audit.sh` (automated scan, 12 sections).
+  - Run `Tools/sprint-audit.sh` (automated scan, 16 sections).
   - Manual review (see `CODING_GUARDRAILS.md` §Close Gate).
 - Session boundaries: at known heavy-context transition points (after Entry Gate, before Close Gate),
   AI MUST explicitly recommend starting a new session. AI cannot assess its own context usage —
@@ -325,6 +329,15 @@ Sprint Close step 7a reads this for retrospective comparison. Replace at each ne
 Category: direct / interaction / stress-edge.
 Detection: test / user-visual / profiler / code-review.
 
+## Performance Baseline Log
+
+Recorded at Sprint Close step 5. Read at Entry Gate Phase 1 step 3 (CP1).
+New row per sprint per tracked metric. Delta = current vs previous sprint value.
+
+| Sprint | Metric | Value | Method | vs Previous | Delta |
+|--------|--------|-------|--------|-------------|-------|
+| S1 | [metric name] | [value] | [how measured] | — (first entry) | — |
+
 ## Retroactive Audits
 
 Written at Retroactive Sprint Audit Phase 7. Read at Entry Gate step 3 (deferred items)
@@ -341,6 +354,8 @@ Category values: REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION / COLD_STATE 
 Written when user says NO to an audit proposal. Re-surfaced at next Entry Gate if condition
 persists (same system, same checkpoint). Suppressed after 2 dismissals — but CP3 and CP4
 signals are never suppressed by prior dismissals.
+Suppressed signal reactivates if the underlying condition worsens: metric delta increases,
+or a new failure is logged in the same system. Dismissal counter resets to 0.
 
 | Date | Checkpoint | System / Metric | Signal Summary | User Decision | Dismissal # | Suppressed? | Revisit Sprint |
 |------|-----------|----------------|---------------|---------------|-------------|-------------|----------------|
@@ -391,8 +406,15 @@ Engineering rules derived from real bugs. Review before writing code.
 Before writing code for a new sprint:
 
 **Abbreviated mode** (≤3 Must items AND no cross-sprint dependencies):
+AI must confirm with user before running abbreviated mode — do not choose unilaterally:
+"Sprint N qualifies for abbreviated Entry Gate (≤3 Must items, no cross-sprint deps).
+Run abbreviated (faster) or full gate (more thorough)?"
+User decides. If user does not respond or is unclear → run full gate.
 Run: Phase 0 (if needed) → steps 1-2 → step 8 (quick pass) → step 9b-lite → step 10 → step 12.
 Skip: steps 3-4, Phase 2 (steps 5-7), step 9a, step 9c, step 11.
+After step 2 (abbreviated only): Clear §Predicted Failure Modes and §Failure Encounters now.
+  Step 9a is skipped — these sections would otherwise contain previous sprint's stale data.
+  Clearing without writing new predictions is correct; Close Gate Phase 1b accounts for this.
 Step 9b-lite: for each item, answer only "what will be tested?" and "what input/output?"
 — skip failure mode categories, invariant depth, and metric sufficiency analysis.
 When in doubt → run full gate. Abbreviated saves time; full catches more.
@@ -420,24 +442,48 @@ If the sprint is still a one-line sketch from Initial Planning:
     These are verified dependencies, not lazy grouping.
 0e. Present detailed sprint plan to user for approval before proceeding to Phase 1
     User does not approve → identify concerns → rework 0b-0d → re-present.
+    After 2nd re-present without approval → AI asks explicitly:
+    "Continue reworking the sprint plan, or Sprint Abort?" User decides.
     If user decides the sprint direction is fundamentally wrong → §Sprint Abort procedure.
 This is the same process as Initial Planning step 4, applied to the next sprint.
 If items exceed scope limit → apply §Scope Negotiation.
 
-**Phase 1 — State Review (read-only):**
+**Phase 1 — State Review (analysis + tracking corrections):**
 1. Read TRACKING.md → open items, blockers, in_progress items from interrupted sessions
-   Clear §Predicted Failure Modes and §Failure Encounters sections
-   (replace previous sprint's content for the new sprint).
+   Do NOT clear §Predicted Failure Modes or §Failure Encounters yet — they are cleared
+   at step 9a when new predictions are written (clearing before 9a risks data loss if
+   interrupted). Until then, treat them as read-only reference from the previous sprint.
 2. Read Roadmap → Must/Should/Could for this sprint
 3. Check non-verified items from previous sprints (all non-terminal statuses):
    - `blocked`: is the blocker still active? Resolved → update status to `open`.
      Still blocked → carry forward as `blocked` or drop (user decides).
+     Drop = delete from Roadmap + TRACKING.md, log removal in Change Log (same as step 8 remove path).
+     Either way: verify there is a corresponding R-### entry in §Open Risks.
+     If not → create one now. Assign next available R-### ID (continue from highest existing
+     ID in §Open Risks, never reuse).
    - `deferred`: still relevant? Carry forward or drop (user decides).
+     Drop = delete from Roadmap + TRACKING.md, log removal in Change Log (same as step 8 remove path).
    - `open` / `in_progress`: still in scope? Carry forward (user decides).
-   - `fixed` (not yet verified): verify now or carry forward for verification (user decides).
+   - `fixed` (not yet verified): verify now (if test already exists and can be run) or carry
+     forward for verification in Implementation Loop (user decides).
    Check §Open Risks for Architecture Review Required flags from previous sprints.
-   If found → treat as Priority 1 in step 9a (before analyzing current sprint items):
-   run the Architecture Review procedure at step 9a before listing new failure modes.
+   If found → surface to user: "Architecture Review Required flag found from Sprint N.
+   Run review before continuing Entry Gate (recommended — result may affect scope),
+   or proceed and review at step 9a?" User decides.
+   If review now: run the Architecture Review procedure immediately, then continue Phase 1.
+   If deferred to 9a: treat as Priority 1 in step 9a (before analyzing current sprint items).
+   Check TRACKING.md §Change Log for metrics deferred to this sprint from a prior Close Gate
+   (format: `DEFERRED → S<N>` where N matches the current sprint number).
+   For each match: read deferral reason from TRACKING.md, then surface to user with context —
+   "Metric [X] was deferred from Sprint M. Reason at deferral: [reason]. Is the blocker now
+   resolved, or defer again to S<N+1>?" User decides. If resolvable: add to
+   step 9c metric sufficiency review. If still deferred: log updated target sprint.
+   Check TRACKING.md §Performance Baseline Log for metric regressions vs past sprint claims
+   — see CP1 (Auto-Detection). Signal fires if a verified past metric is now measurably worse
+   AND the current sprint did not modify the responsible system.
+   If signal fires → present options: "⚠ AUDIT SIGNAL: [metric] regressed since Sprint N.
+   (1) Open Retroactive Audit now (Entry Gate pauses), (2) Log and continue Entry Gate, audit
+   after sprint planning." User decides.
 4. Identify applicable GUARDRAILS sections (consumed by implementation loop step A)
 
 **Phase 2 — Dependency Verification (read-only):**
@@ -446,6 +492,9 @@ If items exceed scope limit → apply §Scope Negotiation.
    Partial completion rule: if a dependency sprint has `deferred` items, check whether
    the current sprint actually depends on those specific items. If not → dependency met.
    If yes → flag to user: "Sprint N depends on [deferred item] — resolve before proceeding?"
+   If cross-sprint dependency is not explicitly documented in Roadmap.md: flag to user —
+   "Sprint N appears to depend on Sprint M output. Confirm this dependency still holds
+   before proceeding."
 6. Read dependency API source files, confirm contracts match
 7. List open architectural decisions — include in step 12a report.
    If any decision directly affects this sprint's scope or approach, flag in step 8.
@@ -463,6 +512,8 @@ If items exceed scope limit → apply §Scope Negotiation.
    - defer → TRACKING.md status `deferred` + roadmap `[~]`, requires reason + target sprint.
    - remove → delete from Roadmap + TRACKING.md, log removal in Change Log.
    AI does not unilaterally change sprint scope — user decides.
+   After all items reviewed: if Must count now exceeds scope limit → apply §Scope Negotiation
+   before proceeding to step 9.
 9. Verification plan:
    a. Failure mode analysis (per item — Must, Should, and Could):
       First: read TRACKING.md §Failure Mode History — which categories failed before?
@@ -472,14 +523,19 @@ If items exceed scope limit → apply §Scope Negotiation.
           If triggered: propose adding a proxy test as a Must item in this sprint or the next.
           "A test that passes only when the visual check would also pass."
           Present options to user: add to current sprint scope, defer to next sprint as Must,
-          or accept manual check (document rationale in §Open Risks). User decides.
+          or accept manual check. User decides.
+          Accept manual → log in §Dismissed Signals (Checkpoint: CP2). After 2 dismissals:
+          suppressed for this specific item. If a new user-visual failure is added to
+          §Failure Mode History for this item: dismissal counter resets.
       If Architecture Review triggered:
         1. Identify the recurring category (direct/interaction/stress-edge)
         2. Trace root causes across sprints — are they symptoms of the same design flaw?
         3. Propose architectural fix (not per-sprint patch) with scope and effort estimate
         4. Present to user: "Category [X] has failed [N] times across sprints [list].
            Root causes: [list]. Proposed architectural fix: [description]. Proceed or defer?"
-        5. User decides: fix now (add to sprint scope) or defer (log with target sprint)
+        5. User decides: fix now (add to sprint scope) or defer.
+           Defer → log in §Open Risks: "Architecture Review deferred — category [X],
+           sprints [list], target sprint [N]." Entry Gate step 3 picks this up next sprint.
       Then: list known failure modes in 3 categories:
       - Direct: item breaks on its own (wrong calc, null ref, off-by-one)
       - Interaction: 2+ systems combine to fail (pool + dispatch + timing)
@@ -489,6 +545,8 @@ If items exceed scope limit → apply §Scope Negotiation.
       For items that touch the Critical Axis domain: require >=2 predicted failure modes
       in that axis's most relevant category. Example: security axis → >=2 Direct modes
       covering attack surfaces. Performance axis → >=2 Stress/edge modes covering load scenarios.
+      Clear §Predicted Failure Modes and §Failure Encounters now — replace previous sprint
+      content with new predictions (previous sprint data was archived at Sprint Close step 7).
       Write predictions to TRACKING.md §Predicted Failure Modes (step 7 reads this).
    b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
@@ -504,8 +562,11 @@ If items exceed scope limit → apply §Scope Negotiation.
       Any change (new metric, revised threshold, added test scenario) → propose in Entry Gate
       report (step 12a). Do NOT update roadmap yet — user approves metric changes at step 12c.
       If approved → update roadmap. If rejected → rework at step 9c, re-present.
-10. Is scope realistic? (1-8 Must items. 0 Must → sprint is empty: return to Phase 0 step 0b
-    to redesign scope, or run §Sprint Abort if the sprint goal is no longer viable.)
+10. Is scope realistic? (1 to scope limit from Q2: small=5, medium=8, large=12 Must items.)
+    0 Must → sprint is empty. Present options: "(1) Return to Phase 0 to redesign scope —
+    sprint goal is still valid but scope needs rework. (2) Sprint Abort — sprint goal is no
+    longer viable. Which applies?" User decides.
+    Return to Phase 0 twice and still 0 Must → Sprint Abort is the only option. User confirms.
 11. Produce dependency-ordered implementation list
 12. Gate assessment, report & user approval
     a. Write full Entry Gate report to `Docs/Planning/S<N>_ENTRY_GATE.md`
@@ -525,11 +586,22 @@ If items exceed scope limit → apply §Scope Negotiation.
        User specifically reviews verification plan quality (step 9b):
          For each item's test scenario — "Would this test pass even if the item is broken?"
          Trivial scenario (e.g., "it runs", "no crash", "no exception") → send back to step 9b for revision.
+         After 2 revisions of the same item's test scenario still trivial → AI flags:
+         "Options: (1) accept current scenario with documented rationale, (2) mark item as
+         untestable at gate — verify manually at Close Gate, (3) Sprint Abort if untestable
+         and critical." User decides.
          Acceptable scenario: specifies inputs, expected outputs or invariants, and at least one failure-inducing case.
-       User does not approve → identify blocking concerns → return to the relevant phase
-       (Phase 0 for scope issues, Phase 3 for strategic/metric issues) → rework → re-present.
+       User does not approve → identify blocking concerns → return to the relevant phase:
+       Phase 0 (scope issues) / Phase 1 (state review concerns) / Phase 2 (dependency issues)
+       / Phase 3 (strategic or metric issues) → rework → re-present.
+       After 2nd rejection → AI asks explicitly: "Entry Gate rejected twice.
+       (1) Return to specific phase for targeted rework, (2) Sprint Abort." User decides.
        If user decides the sprint direction is fundamentally wrong → §Sprint Abort procedure.
-    d. After approval: log to TRACKING.md: "Entry Gate: [date], phases 0-3 ✓ (steps executed: [list])"
+    d. Phase logging rule: after completing each Entry Gate phase, log to TRACKING.md Change Log:
+       "Entry Gate Phase [X]: complete — [date], steps executed: [list]."
+       This enables session recovery — if session is interrupted mid-gate, the next session
+       can read Change Log and resume from the last completed phase.
+       After approval: log to TRACKING.md: "Entry Gate: [date], phases 0-3 ✓ (steps executed: [list])"
        Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
        Update roadmap with any metric changes approved at step c.
        Update CLAUDE.md §Last Checkpoint: "Entry Gate complete — Sprint N approved, ready for implementation."
@@ -558,7 +630,10 @@ Run before writing any tests:
 - [ ] Follows project conventions?
 - [ ] Tech debt introduced? → fix now or document in TRACKING.md
 
-If any item fails: fix and recheck. Max 3 rounds. Still failing after 3 → escalate to user before continuing.
+If any item fails: fix and recheck. Max 3 rounds. Still failing after 3 → stop and present
+to user: "Self-verify item [X] still failing after 3 attempts. Options: (1) accept as known
+technical debt — log in TRACKING.md and continue, (2) block — do not proceed until resolved,
+(3) Sprint Abort if item is critical." User decides.
 
 **D. Write tests**
 Match test type to what was specified in Entry Gate 9b:
@@ -575,7 +650,9 @@ Trigger: item was marked "manual+screenshot" in Entry Gate 9b.
 2. User runs the application and responds:
    - "OK" → proceed to D.6
    - "Problem: [description]" → log CORE-### in TRACKING.md, AI fixes, ask user again
-   - Resolution = user confirms "OK". Max 3 attempts; if still failing, log as known gap with target sprint.
+   - Resolution = user confirms "OK". Max 3 attempts; if still failing: log visual gap in
+     TRACKING.md evidence column ("visual unconfirmed — target sprint [N]"). Mark item `fixed`
+     with caveat. Continue to D.6. At Close Gate Phase 1b: item flagged for manual re-verification.
 3. If an automated proxy test exists for this item: still ask user for visual confirmation — proxy tests do not replace it.
 
 **D.6 Incremental test run**
@@ -583,7 +660,10 @@ Run ALL tests written so far — current item + all previous items in this sprin
 - All PASS → proceed to E
 - FAIL on new test → fix implementation, rerun
 - FAIL on previous item's test → regression: fix before writing any more code
-- Max 3 fix attempts → escalate to user
+- Max 3 fix attempts → stop and present to user: "Test [X] still failing after 3 attempts.
+  Options: (1) accept as known gap — log in TRACKING.md, mark test pending for Close Gate,
+  (2) block — do not proceed to next item until resolved, (3) Sprint Abort if failure is
+  critical." User decides.
 
 Test needs infrastructure not available locally?
 → Mark "pending" in TRACKING.md → it will run at Close Gate Phase 3.
@@ -595,20 +675,48 @@ Test needs infrastructure not available locally?
 
   ⚠ **AUTO-DETECTION CP3:** During any implementation step — past sprint API missing or broken, test from a past sprint now FAIL, profiler result contradicts a past sprint metric by >20% (and current sprint did not modify that system)?
   → Surface ⚠ AUDIT SIGNAL to user immediately. Do not silently continue.
+  Present options: "(1) Pause implementation — open Retroactive Audit now,
+  (2) Log signal and continue implementation — audit after sprint close." User decides.
 
 **After all Must items:**
 Ask user: "Must items done. Continue with Should/Could items, or close sprint?"
 User decides. Should/Could items run the same A-E loop if continued.
+This prompt fires only when the AI completed the final Must item in the current session.
+Reading `verified` status from TRACKING.md at session start does NOT trigger this prompt.
+Close Gate is always user-initiated — AI does not ask "shall we close?" unprompted.
 
 ---
 
 ## Close Gate — Sprint-End Audit
 
+**Phase logging rule:** After completing each Close Gate phase, log to TRACKING.md Change Log:
+"Close Gate Phase [X]: complete — [date]." This enables session recovery and pre-verdict
+verification — AI can confirm all phases completed by reading Change Log, not relying on memory.
+
 **Presentation rule:**
-Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpoints, not approval gates.
+Interim "present to user" steps (Phase −1 state summary, Phase 0, 1a, 1b, 2, 4) are transparency checkpoints, not approval gates.
 - Clean / minimal findings → batch into one combined report, do not pause for confirmation.
 - Significant findings (blocker, regression, MISSED failure mode) → stop at that phase, present and ask.
 - Mandatory user approval: Close Gate verdict only (final step before Sprint Close).
+
+**Phase −1 — State recovery (mandatory, run before every Close Gate):**
+Regardless of session history, interruptions, or prior context — always run this first.
+1. Read `TRACKING.md` §Sprint Board → list every item for this sprint and its current status.
+2. Read `Docs/Planning/S<N>_ENTRY_GATE.md` → list every metric gate defined for this sprint.
+   If the file no longer exists: read `Docs/Planning/Roadmap.md` sprint section + TRACKING.md §Sprint Board
+   for metric gate evidence. Note which source was used.
+   Flag to user: "Entry Gate report missing — metric verification will rely on Roadmap
+   thresholds only. Test scenario details from Entry Gate 9c may be incomplete."
+3. State explicitly before proceeding:
+   ```
+   Sprint N — Close Gate starting.
+   Items: [X Must / Y Should / Z Could]
+   Metrics to verify in Phase 0: [list each metric, one per item]
+   Source: [ENTRY_GATE.md | Roadmap.md fallback]
+   ```
+   If steps 1-2 cannot be completed (missing files, ambiguous state) → ask the user before proceeding.
+   AI must not proceed to Phase 0 without completing this check.
+   A response of "sprint looks done" or "ready to close" without this check is a protocol violation.
 
 **Phase 0 — Metric gate check:**
 - Can each metric be measured? Evidence exists? (all sprint metrics — every item has a metric gate)
@@ -637,7 +745,9 @@ Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpo
   If a FAIL/MISSING metric cannot be resolved: escalate to user — present options
   (accept gap with target sprint, or §Sprint Abort if the metric is critical).
   Guard: if ALL metrics are DEFERRED → gate blocked. At least one metric must PASS.
-  A sprint with zero verified metrics accomplished no verified work → §Sprint Abort procedure.
+  Present to user: "All metrics are deferred — no verified work this sprint.
+  Options: (1) resolve at least one metric now to unblock gate, (2) §Sprint Abort."
+  User decides.
   ```
 - Unmet metric escalation — when a metric is DEFERRED or MISSING:
   Do NOT silently mark `[ ]` and move on. Required steps:
@@ -662,9 +772,10 @@ Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpo
 - Run `Tools/sprint-audit.sh`
 - Exit code 2 (setup error): fix script configuration (paths, patterns) before proceeding.
   Do not skip the automated scan — fix the script first.
-  If the script cannot be adapted (unsupported language, missing tooling): skip automated scan,
-  log `sprint-audit.sh: not applicable — [reason]` in TRACKING.md Change Log, and rely on
-  Phase 1b (manual audit) for full coverage.
+  If the script cannot be adapted (unsupported language, missing tooling): present to user —
+  "sprint-audit.sh cannot run ([reason]). Proceeding with manual audit only (Phase 1b). Confirm?"
+  User approves before skipping. Log `sprint-audit.sh: not applicable — [reason]` in
+  TRACKING.md Change Log.
 - Exit code 1 (findings): review each finding, fix immediately or log with target sprint
   (user decides which findings to defer — same principle as Phase 2).
   Present automated scan summary to user before proceeding to Phase 1b.
@@ -677,7 +788,8 @@ Load Entry Gate data before starting:
 
 Abbreviated gate check (do this first):
 - Is TRACKING.md Change Log entry for Entry Gate marked "Entry Gate (abbreviated)"?
-  YES → §Predicted Failure Modes is empty (9a was skipped). Skip step b for all items.
+  YES → §Predicted Failure Modes was cleared after abbreviated gate step 2 (no new
+        predictions written for this sprint — step 9a was skipped). Skip step b for all items.
         Verification plan (9b-lite) still applies to step c.
   NO  → proceed normally (steps a, b, c for each item).
 
@@ -728,6 +840,10 @@ Do not declare "audit complete" without per-item acknowledgment.
 **Phase 3 — Regression test:**
 - All tests must PASS after fixes
 - Include any tests marked "pending" during D.6 that can now execute (infra available at Close Gate)
+- If any test fails (including previously pending tests): return to Phase 2 — treat as new
+  finding (fix immediately or defer with user decision, same escalation as Phase 2).
+- Phase 2 → Phase 3 cycle: if same finding fails regression test 3 times after fix attempts →
+  escalate to user: "Options: (1) defer with target sprint, (2) Sprint Abort if critical." User decides.
 
 **Phase 4 — Test coverage gap:**
 - 4a. File-level: new/modified code → matching test file exists?
@@ -738,6 +854,18 @@ Do not declare "audit complete" without per-item acknowledgment.
 - Final test run PASS
 
 **Close Gate verdict & user approval:**
+- **Pre-verdict guard (mandatory):** Before issuing any recommendation, AI must confirm
+  that ALL of the following phases were explicitly completed in this session:
+  - Phase −1: items and metrics listed from source files? YES/NO
+  - Phase 0: metric verification table filled and presented? YES/NO
+  - Phase 1a: automated scan run (or documented as not applicable)? YES/NO
+  - Phase 1b: spec-driven audit run per item? YES/NO
+  - Phase 2: findings fixed or deferred with user decision? YES/NO
+  - Phase 3: regression tests PASS? YES/NO
+  - Phase 4: coverage gaps resolved? YES/NO
+  Any NO → run that phase before issuing the verdict.
+  TRACKING.md showing items as `verified` is NOT a substitute for running these phases.
+  "Sprint looks done" or "ready to close" without this checklist is a protocol violation.
 - AI provides close gate assessment:
   - **Metric summary:** X/Y PASS, Z DEFERRED (list deferred items + target sprints).
     Include action breakdown: N existing, M written, K fixed, J revised, L added, P escalated.
@@ -745,7 +873,9 @@ Do not declare "audit complete" without per-item acknowledgment.
   - **Risk assessment:** clean / attention points exist (list them)
   - **Recommendation:** "Gate passed — recommend closing sprint" or "Gate blocked by [X]"
 - User approves before Sprint Close begins.
-  User does not approve → identify concern → return to the relevant phase for rework.
+  User does not approve → identify concern → return to the relevant phase for rework:
+  Phase 0 (metric concerns) / Phase 1a (automated scan concerns) / Phase 1b (audit concerns)
+  / Phase 2 (fix/defer decisions) / Phase 3 (regression failures) / Phase 4 (coverage gaps).
 - After approval: Update CLAUDE.md §Last Checkpoint: "Close Gate complete — Sprint N approved, starting Sprint Close."
   Session boundary (mandatory): Implementation session is heavily consumed by the time Close Gate runs.
   AI MUST recommend starting a fresh session to run Close Gate ("Run Close Gate, sprint N").
@@ -765,16 +895,32 @@ Do not declare "audit complete" without per-item acknowledgment.
    Every [ ] item requires action — do NOT silently skip:
    → apply the unmet-metric escalation from Close Gate Phase 0
      (explain gap, trace blocker, propose target sprint, user decides).
-2. TRACKING.md update (all Must verified with evidence;
-   completed Should/Could also updated with final status and evidence)
+   If gap is unacceptable and cannot be deferred: reopen Close Gate Phase 0 for that item —
+   do not mark sprint done until resolved or explicitly accepted by user.
+2. TRACKING.md update — `fixed → verified` transition:
+   For each item being marked `verified`, confirm before writing:
+   - Evidence column is filled (test file:line or run reference from Close Gate Phase 4b).
+     Empty evidence column → item cannot be marked `verified`. Return to Close Gate Phase 4b,
+     then re-run Phase 3 (regression check), then return to Sprint Close step 2.
+     Return to Phase 4b twice for same item, still no evidence → escalate to user:
+     "Options: (1) mark as untestable — stays `fixed` not `verified`, document rationale,
+     (2) defer item with target sprint." User decides.
+   - Status was `fixed` (not `open` or `in_progress`) — intermediate states cannot skip to `verified`.
+   All Must items verified with evidence logged; completed Should/Could also updated.
 3. CLAUDE.md checkpoint update (date, status, next focus)
 4. Changelog archive (move entries to Docs/Archive/)
 5. Performance baseline capture:
    - Record measurable metrics, compare vs previous sprint, flag regressions.
+     If regression detected → surface to user: "⚠ Performance regression: [metric] was [X]
+     in Sprint N-1, now [Y]. Options: (1) fix now — reopen Close Gate Phase 2,
+     (2) accept and log in §Open Risks with target sprint." User decides.
    - No measurable metrics yet? Log: "Performance baseline: not yet established.
      Target: [which metrics to set up] by Sprint [N]." This is valid for early sprints.
      Do not invent fake baselines.
 6. Workflow integrity check:
+   - §Open Risks cleanup: review each R-### entry. Resolved → mark "RESOLVED — [date]."
+     Do not delete — preserve audit trail. Entries older than 3 sprints with status RESOLVED
+     may be archived to Docs/Archive/.
    - CLAUDE.md §Document Contract references → do target files and sections exist?
    - Guardrails §Entry Gate / §Close Gate → consistent with SPRINT_WORKFLOW.md procedures?
    - Do not manually count steps/phases. Instead: verify that each numbered step in
@@ -796,7 +942,9 @@ Do not declare "audit complete" without per-item acknowledgment.
       Empty rows = step incomplete.
       ```
    d. Transfer rows to TRACKING.md §Failure Mode History (include Detection column: test / user-visual / profiler).
-   e. Unpredicted failure → new guardrail rule. Follow CODING_GUARDRAILS.md §Update Rule
+   e. Unpredicted failure → new guardrail rule. Before adding: present proposed rule to user —
+      "Unpredicted failure [X] suggests guardrail: [rule]. Add to CODING_GUARDRAILS.md?"
+      User approves before proceeding. Then follow §Update Rule
       (7 steps: dedup check, root cause, rule, anti-pattern, code comment, sprint-audit.sh, LESSONS_INDEX.md).
    f. Check §Failure Mode History for escalation triggers:
       - Same category 2+ times in last 3 sprints → flag "Architecture Review Required" at next Entry Gate
@@ -854,14 +1002,20 @@ that has already passed Entry Gate:
 1. User requests scope change (AI never initiates scope changes unilaterally)
 2. AI assesses impact:
    a. Does the new item conflict with in-progress items?
-   b. Does it invalidate any verified items? (if yes → regression, see §State Transitions;
-      if no → no regression impact, continue to next check)
+   b. Does it invalidate any verified items? (if yes → regression, see §State Transitions.
+      Before implementing fix: AI briefly re-assesses — what failure mode caused the regression?
+      What test will verify the fix? Log in TRACKING.md. Full Entry Gate not required.
+      If no → no regression impact, continue to next check)
    c. Will it push the sprint over scope limit?
 3. AI presents options to user:
    - Add as new Must item (may push Should/Could to next sprint)
    - Add as new Must item + defer an existing Must item to make room (user picks which).
      Deferred item: TRACKING.md status → `deferred` + reason, Roadmap → `[~]`.
    - Add as hotfix outside sprint scope (no ID, no gate — emergency only).
+     Hotfix = critical bug or security fix that cannot wait for next sprint's Entry Gate.
+     Not eligible: new features, non-critical bugs, nice-to-haves.
+     If item does not meet criteria: AI flags — "This item does not qualify as hotfix
+     (not critical/security). Recommend adding as Must item instead." User overrides if needed.
      Hotfix still requires: TRACKING.md Change Log entry with description,
      test if testable, and inclusion in Sprint Close step 7 retrospective.
      Only the formal ID assignment and gate process are skipped.
@@ -884,9 +1038,15 @@ When features exceed the sprint scope limit (Q2 at Initial Planning, or Phase 0 
 2. First N features (where N = scope limit) become Must items for the sprint
 3. Remaining features:
    a. If the feature is critical but can't fit → ask user: "Increase scope size, or defer?"
-   b. If the feature is nice-to-have → assign to Should/Could or later sprint sketch
+      Increase scope applies to this sprint only. Q2 default scope size remains unchanged
+      for future sprints. To change the permanent default: user must explicitly request it —
+      AI logs in CLAUDE.md §Operational Rules: "Sprint scope updated from [old] to [new] per
+      user request, [date]."
+   b. If the feature is nice-to-have → AI proposes Should/Could or later sprint.
+      User confirms placement before AI moves the item.
 4. Present the allocation to user for approval
 5. User can override any placement (move items between Must/Should/Could/later sprint)
+6. After user approval: return to the step that triggered Scope Negotiation and continue.
 ```
 
 Rule: AI proposes, user disposes. Never silently drop features — always show where they went.
@@ -902,17 +1062,17 @@ AI never initiates contract revision unprompted.
 
 Revision procedure:
 1. AI identifies all code, tests, and items that depend on the contract
-2. AI assesses blast radius:
-   - Which verified items become invalid? (mark as `open` — regression)
+2. AI identifies blast radius (do not change any status yet):
+   - Which verified items would become invalid?
    - Which in-progress items are affected?
    - Which guardrail rules reference the contract?
 3. AI presents impact summary to user:
    "Changing [contract] affects [N] files, [M] verified items, [K] guardrail rules."
 4. User confirms revision
-5. Update CLAUDE.md §Immutable Contracts (old value → new value, date, reason)
-6. Log in TRACKING.md Change Log:
+5. After confirmation: mark affected verified items → status `open` (regression)
+6. Update CLAUDE.md §Immutable Contracts (old value → new value, date, reason)
+7. Log in TRACKING.md Change Log:
    "Contract revised: [date] — [old] → [new]. Reason: [why]. Affected items: [list]."
-7. Affected verified items → status `open` (regression)
 8. Affected guardrail rules → update or remove
 ```
 
@@ -925,9 +1085,9 @@ When the user decides to abandon a sprint mid-way (wrong direction, requirements
 2. Mark all non-verified items as `deferred` with reason: "sprint aborted — [reason]"
 3. Verified items keep their status (work is not lost)
 4. Skip Close Gate (no items to audit)
-5. Run abbreviated Sprint Close: steps 1-4 + step 9 (checkmarks, TRACKING update,
-   checkpoint, changelog archive, Entry Gate report cleanup).
-   Skip steps 5-8 and 10 (no baselines, no FM retrospective for an aborted sprint).
+5. Run abbreviated Sprint Close: steps 1-4 + step 6 + step 9 (checkmarks, TRACKING update,
+   checkpoint, changelog archive, workflow integrity check, Entry Gate report cleanup).
+   Skip steps 5, 7-8, and 10 (no baselines, no FM retrospective for an aborted sprint).
 6. Log in TRACKING.md Change Log:
    "Sprint aborted: [date] — Reason: [why]. Verified: [list]. Deferred: [list]."
 7. Next sprint Entry Gate runs normally — deferred items are reviewed at step 3
@@ -961,10 +1121,15 @@ and resolve it with minimal disruption to the current sprint.
 **Scope rule:** One audit open at a time. If symptoms span multiple sprints, open the oldest
 implicated sprint first. Resolve before opening the next.
 
-**Audit depth limit:** Maximum 3 months back. For older sprints, use §Rollback Plan instead.
+**Audit depth limit:** Maximum 3 months back. For older sprints: present findings to user,
+document in TRACKING.md §Open Risks, and treat as accepted technical debt unless user
+explicitly requests a manual code archaeology exercise outside this workflow.
 
-**Current sprint impact:** An audit does not pause the current sprint. Resolution items are added
-to the current sprint (via Mid-Sprint Scope Change) or the next sprint's backlog.
+**Current sprint impact:** An audit does not pause current sprint implementation. However,
+if the audit finds a blocker for a current sprint Must item: the blocker must be resolved
+before Close Gate (implementation continues, but gate is blocked until resolved).
+Resolution items are added to the current sprint (via Mid-Sprint Scope Change) or the next
+sprint's backlog.
 
 ---
 
@@ -996,9 +1161,10 @@ Before doing any file reading or measurement, establish:
 Read all available artifacts from the target sprint in this order:
 
 ```
-1. S<N>_CLOSE_GATE.md (Docs/Planning/) — if it still exists
+1. S<N>_CLOSE_GATE.md (Docs/Planning/) — if it exists (not created by default workflow;
+   may exist if manually saved during Close Gate session)
    → read Phase 1b audit table, Phase 2 verdict, all metrics
-   → if deleted (Sprint Close step 9 ran): proceed to TRACKING.md
+   → if absent (typical case): proceed directly to TRACKING.md
 
 2. TRACKING.md §Sprint N
    → all verified items (status = verified) with their evidence logs
@@ -1147,8 +1313,9 @@ For each gap identified in Phase 3, assign exactly one category:
 | **ENVIRONMENT_DELTA** | Works in original environment; fails due to engine version, platform, or dependency change since Sprint N | "Did anything in the build environment change between Sprint N and now?" |
 
 **Classification priority rule:**
-If multiple categories could apply, choose the earliest in this order:
+If multiple categories could apply, assign primary category per this priority order:
 `REGRESSION > INTEGRATION_GAP > FALSE_VERIFICATION > COLD_STATE > SCOPE_DRIFT > ENVIRONMENT_DELTA`
+Note secondary category in evidence column: "Primary: REGRESSION. Contributing factor: SCOPE_DRIFT."
 
 **Classification procedure for each gap:**
 ```
@@ -1172,6 +1339,8 @@ If multiple categories could apply, choose the earliest in this order:
    → Are those conditions present? (kill-switch, cold cache, first run, missing asset)
    → If yes → COLD_STATE. Document expected behavior explicitly.
    → Staleness rule: COLD_STATE is valid for a maximum of 2 consecutive sprints.
+     Consecutive = consecutive sprints in which this metric was actually measured.
+     Sprints where the metric was not measured do not count toward or reset the counter.
      If the same metric shows the same cold-state failure for 3+ consecutive sprints
      despite normal project operation (runtime sessions, test runs), COLD_STATE is no
      longer a valid explanation. At the 3rd occurrence: take a warm-start measurement.
@@ -1224,6 +1393,8 @@ For each gap classified as REGRESSION, INTEGRATION_GAP, FALSE_VERIFICATION, or S
    flag "Sprint Re-verification Cluster" in TRACKING.md §Open Risks.
    Present to user: "This gap affects [N] verified items across [M] sprints.
    Recommend scheduling a dedicated re-verification sprint."
+   User declines → log in §Open Risks: "Re-verification cluster ([N] items) — user chose
+   to address within current sprint. Items: [list]." Entry Gate next sprint re-checks at step 3.
 
 4. Guardrail coverage check:
    For each classified gap: which guardrail rule should have prevented this?
@@ -1263,7 +1434,7 @@ For each classified gap, define exactly one resolution path. Present all options
 | **Fix now (current sprint)** | Gap is a blocker for current or next sprint's Must items | Add via §Mid-Sprint Scope Change as Must item |
 | **Fix next sprint** | Gap is important but not immediately blocking | Add to next sprint Entry Gate backlog; log in TRACKING.md §Open Risks |
 | **Accept + document** | Gap is COLD_STATE or acceptable limitation; no code change needed | Document expected behavior in TRACKING.md; update Close Gate metric definition |
-| **Revert target sprint** | Gap is fundamental; fix would require redoing Sprint N from scratch | Follow §Rollback Plan for target sprint's phase |
+| **Revert target sprint** | Gap is fundamental; fix would require redoing Sprint N from scratch | Present to user: "Sprint N output must be redone. Scope as a new sprint with Must items covering the affected deliverables." |
 | **Quarantine** | Gap affects untested future scope only; no current sprint is broken | Add guard comment in code; flag at relevant future sprint's Entry Gate |
 
 **Resolution output (one row per gap):**
@@ -1350,7 +1521,7 @@ Proposed action: Open Retroactive Audit for Sprint N?
 → NO: log signal in TRACKING.md §Dismissed Signals and continue
 ```
 
-**Checkpoint 1 — Entry Gate step 6 (metrics review)**
+**Checkpoint 1 — Entry Gate Phase 1 step 3 (State Review)**
 
 While reviewing TRACKING.md §Performance Baseline Log for the sprint being opened:
 ```
@@ -1792,6 +1963,89 @@ fi
 total=$((total + metric_gaps))
 blockers=$((blockers + metric_gaps))
 
+# 13. Change Log completeness
+# At least one Change Log entry should exist if sprint items are tracked.
+echo ""
+echo "CHANGE LOG:"
+if [[ -f "$TRACKING_FILE" ]]; then
+  cl_entries=$(sed -n '/^## Change Log/,/^## [^C]/p' "$TRACKING_FILE" | grep -cE '^- ' 2>/dev/null || echo 0)
+  has_items=$(grep -cE "$ID_PATTERN.*(open|in_progress|fixed|verified)" "$TRACKING_FILE" 2>/dev/null || echo 0)
+  if [[ $has_items -gt 0 ]] && [[ $cl_entries -eq 0 ]]; then
+    echo "  WARN  Sprint Board has $has_items tracked items but Change Log is empty"
+    total=$((total + 1))
+  else
+    echo "  PASS  Change Log has $cl_entries entries"
+  fi
+else
+  echo "  SKIP  TRACKING.md not found"
+fi
+
+# 14. Entry Gate log presence
+# If Sprint Board has items, an Entry Gate should have been run.
+echo ""
+echo "ENTRY GATE LOG:"
+if [[ -f "$TRACKING_FILE" ]]; then
+  has_items=$(grep -cE "$ID_PATTERN.*(open|in_progress|fixed|verified)" "$TRACKING_FILE" 2>/dev/null || echo 0)
+  if [[ $has_items -gt 0 ]]; then
+    if grep -qiE "Entry Gate" "$TRACKING_FILE" 2>/dev/null; then
+      echo "  PASS  Entry Gate execution logged in TRACKING.md"
+    else
+      echo "  WARN  Sprint has $has_items items but no Entry Gate log found in TRACKING.md"
+      total=$((total + 1))
+    fi
+  else
+    echo "  SKIP  No tracked items — Entry Gate check not applicable"
+  fi
+else
+  echo "  SKIP  TRACKING.md not found"
+fi
+
+# 15. Failure transfer check
+# If Failure Encounters has entries, they should be transferred to Failure Mode History
+# at Sprint Close step 7. Untransferred entries suggest Sprint Close was incomplete.
+echo ""
+echo "FAILURE TRANSFER:"
+if [[ -f "$TRACKING_FILE" ]]; then
+  encounters=$(sed -n '/^## Failure Encounters/,/^## [^F]/p' "$TRACKING_FILE" | grep -cE '^\|[^-]' 2>/dev/null || echo 0)
+  encounters=$((encounters > 1 ? encounters - 1 : 0))  # subtract header row
+  history=$(sed -n '/^## Failure Mode History/,/^## [^F]/p' "$TRACKING_FILE" | grep -cE '^\|[^-]' 2>/dev/null || echo 0)
+  history=$((history > 1 ? history - 1 : 0))  # subtract header row
+  if [[ $encounters -gt 0 ]] && [[ $history -eq 0 ]]; then
+    echo "  WARN  Failure Encounters has $encounters entries but Failure Mode History is empty"
+    echo "        Transfer at Sprint Close step 7 (retrospective comparison)"
+    total=$((total + 1))
+  else
+    echo "  PASS  Failure transfer consistent (encounters=$encounters, history=$history)"
+  fi
+else
+  echo "  SKIP  TRACKING.md not found"
+fi
+
+# 16. CLAUDE.md Last Checkpoint staleness
+# Last Checkpoint should exist and not be empty template values.
+echo ""
+echo "LAST CHECKPOINT:"
+CLAUDE_FILE="$ROOT/CLAUDE.md"
+if [[ -f "$CLAUDE_FILE" ]]; then
+  if grep -qE '## Last Checkpoint' "$CLAUDE_FILE" 2>/dev/null; then
+    cp_content=$(sed -n '/^## Last Checkpoint/,/^## /p' "$CLAUDE_FILE" | grep -E '^- ' 2>/dev/null || true)
+    if [[ -z "$cp_content" ]]; then
+      echo "  WARN  §Last Checkpoint section exists but has no entries"
+      total=$((total + 1))
+    elif echo "$cp_content" | grep -qE '\[YYYY-MM-DD\]|\[Sprint N'; then
+      echo "  WARN  §Last Checkpoint still contains template placeholders — update at gate boundaries"
+      total=$((total + 1))
+    else
+      echo "  PASS  §Last Checkpoint populated"
+    fi
+  else
+    echo "  WARN  No §Last Checkpoint section found in CLAUDE.md"
+    total=$((total + 1))
+  fi
+else
+  echo "  SKIP  CLAUDE.md not found"
+fi
+
 # ── Summary ──
 echo ""
 if [[ $errors -gt 0 ]]; then
@@ -1842,10 +2096,15 @@ Document loading order (sequential — each step depends on the previous):
 3. Read Roadmap → understand current sprint scope
    → Tells you: Must/Should/Could for current sprint
 4. Decide session mode:
-   a. New sprint (no in_progress items, previous sprint done) → run Entry Gate
+   a. New sprint (no in_progress items, previous sprint done) → inform user that Entry Gate
+      is needed for the new sprint, then wait. Do NOT begin Entry Gate unprompted.
+      Entry Gate is user-initiated. Trigger phrase: "Open Sprint N for X."
    b. Mid-sprint (in_progress or open items exist) → resume from TRACKING.md
    c. Interrupted session (in_progress items exist) → verify code state matches
       TRACKING status. If code was written but TRACKING not updated, update status.
+   d. All Must items verified but sprint not yet closed (no Sprint Close log in
+      Change Log) → report state to user, then wait. Do NOT suggest Close Gate.
+      Close Gate is user-initiated only. AI does not ask "shall we close?"
 
 Do NOT read SPRINT_WORKFLOW.md every session — only at sprint boundaries (Entry/Close Gate).
 Do NOT read GUARDRAILS.md in full — only §Index → relevant sections per task.
@@ -1912,7 +2171,7 @@ Signal format (mandatory):
   Proposed action: Open Retroactive Audit for Sprint N? → YES / NO
 
 Checkpoint locations:
-  CP1: Entry Gate step 6 — metric regression vs baseline
+  CP1: Entry Gate Phase 1 step 3 — metric regression vs baseline
   CP2: Entry Gate step 9a — failure pattern converging on one past sprint
   CP3: Implementation session — broken past-sprint API/test/profiler reading
   CP4: Close Gate verdict — Must item unverifiable due to past-sprint dependency
@@ -1934,7 +2193,7 @@ Dismissed signal (user says NO):
 │   Read CLAUDE.md (always, it's the system prompt)       │
 │   Read TRACKING.md (once, at session start)             │
 │   Read Guardrails §Index → only relevant sections       │
-│   Run sprint-audit.sh → read 30-line report             │
+│   Run sprint-audit.sh → read ~40-line report             │
 │   Read only flagged files for deep review               │
 │                                                         │
 │ DON'T:                                                  │
@@ -2008,7 +2267,7 @@ When running a gap analysis or workflow review:
     │  discovered)                ▼                                     │  before verification)        │
     │                         blocked                                   ▼                              │
     │                             │ (blocker resolved)              in_progress                        │
-    └──► blocked                  └──► in_progress                  (re-fix cycle)                    │
+    └──► blocked                  └──► open                         (re-fix cycle)                    │
                                                                                                       │
                                                                         open ◄────────────────────────┘
                                                                         (log reason in Change Log)

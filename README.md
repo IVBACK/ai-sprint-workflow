@@ -2,7 +2,7 @@
 
 A sprint workflow template designed for human + AI coding agent collaboration.
 
-Drop `TEMPLATE.md` into any project and the AI agent bootstraps the full structure:
+Drop `WORKFLOW.md` into any project and the AI agent bootstraps the full structure:
 tracking, guardrails, audit scripts, and sprint gates — all adapted to your stack.
 
 Works with existing projects and greenfield (empty) projects alike.
@@ -98,15 +98,15 @@ Every session starts from zero. This workflow solves three problems:
 **Already in an AI session (recommended):**
 
 Tell the agent:
-> "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md and bootstrap this project."
+> "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
 
 The agent fetches the file and runs the bootstrap directly — no manual download needed.
 
 **Prefer to download first:**
 ```bash
-curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md
+curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md
 ```
-Then tell the agent: "Read TEMPLATE.md and bootstrap this project."
+Then tell the agent: "Read WORKFLOW.md and bootstrap this project."
 
 **Either way, the agent will:**
 - Detect whether this is a greenfield or existing project (Step 0)
@@ -117,7 +117,7 @@ Then tell the agent: "Read TEMPLATE.md and bootstrap this project."
 - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
 - Adapt audit script patterns to your detected language (multi-language projects supported)
-- Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
+- Create `Docs/SPRINT_WORKFLOW.md` from `WORKFLOW.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
 - Confirm the setup with you before writing any feature code
 
 Start your first sprint — the agent will ask before running Entry Gate.
@@ -133,7 +133,7 @@ lessons to capture), design the roadmap in a separate focused session before boo
    — Agent asks about goals, prior learnings, locked contracts, performance targets, phases
    — Produces a rich `Docs/Planning/Roadmap.md` through conversation
 2. Then bootstrap:
-   > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md and bootstrap this project."
+   > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
    — Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically
 
 ### Bootstrap Steps (10 total: Step 0 + steps 1–9)
@@ -151,7 +151,7 @@ lessons to capture), design the roadmap in a separate focused session before boo
 6. Populate GUARDRAILS.md with framework-specific rules
 7. Adapt audit script to detected language
                      Migration: call existing CI commands, don't duplicate checks
-8. TEMPLATE.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
+8. WORKFLOW.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
 9. Confirm with user
 ```
 
@@ -197,7 +197,7 @@ your-project/
 ├── Docs/
 │   ├── CODING_GUARDRAILS.md      # Engineering rules from real bugs
 │   ├── LESSONS_INDEX.md          # Bug → rule traceability (starts empty)
-│   ├── SPRINT_WORKFLOW.md        # Workflow reference (moved from TEMPLATE.md)
+│   ├── SPRINT_WORKFLOW.md        # Workflow reference (moved from WORKFLOW.md)
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
 │       └── S<N>_ENTRY_GATE.md    # Entry Gate report (lives during sprint, deleted at close)
@@ -234,27 +234,29 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 - **Any starting point.** Works with existing codebases and empty projects alike. Existing project: agent wraps workflow structure around existing code without overwriting. Empty project: Initial Planning decomposes the goal into phases and details Sprint 1.
 - **Workflow evolution guard.** Before adding any new step or check: does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Complexity is a cost paid on every sprint.
 
-→ Full design rationale (35 decisions): [DESIGN.md](DESIGN.md)
+→ Full design rationale (39 decisions): [DESIGN.md](DESIGN.md)
 
 ## Self-Validation
 
-The workflow validates itself at three levels:
+The workflow validates itself at five levels. All scripts live in `validation/`.
 
 | Level | Script | What it catches | When to run |
 |-------|--------|----------------|-------------|
-| **Structural** | `bash validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to TEMPLATE.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
-| **Path simulation** | `bash validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (44 checks) | Same as above |
-| **Negative tests** | `bash validate-paths.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies script catches it (12 tests) | After changing validate-paths.sh or gap-related TEMPLATE.md text |
-| **Semantic** | Copy `verify-workflow-semantic.md` into an AI session | Logic gaps, dead ends, missing user approvals, information flow, state machine coverage (31 questions) | After major workflow changes or periodically |
+| **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
+| **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (49 checks) | Same as above |
+| **Formal model** | `bash validation/validate-model.sh` | FSM reachability/traps, decision point locations, loop termination, guard blocking (58 checks) | After adding/changing a decision point, loop, or guard in WORKFLOW.md — also update `validation/workflow-model.yaml` |
+| **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (26 mutation tests) | After changing scenario-related WORKFLOW.md text |
+| **Negative tests** | `bash validation/validate-paths.sh --self-test` and `bash validation/validate-model.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies scripts catch it (17+8 tests) | After changing validation scripts or gap-related WORKFLOW.md text |
+| **Semantic** | Copy `validation/verify-workflow-semantic.md` into an AI session | Intent correctness, dead ends, user gate enforcement, data provenance (~21 questions; F/C/A already automated) | After major workflow changes or periodically |
 
-CI runs structural + path checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
+CI runs structural + path + model + scenario checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
 
 ```bash
 # Quick local check (< 5 seconds)
-bash validate-workflow.sh && bash validate-paths.sh
+bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-model.sh && bash validation/scenarios/validate-scenarios.sh
 
 # Full local check including negative tests
-bash validate-workflow.sh && bash validate-paths.sh && bash validate-paths.sh --self-test
+bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-paths.sh --self-test && bash validation/validate-model.sh && bash validation/validate-model.sh --self-test && bash validation/scenarios/validate-scenarios.sh
 ```
 
 ## Supported Languages

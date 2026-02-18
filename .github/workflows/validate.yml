@@ -5,56 +5,93 @@ on:
     branches: [master]
     paths:
       - README.md
-      - TEMPLATE.md
+      - WORKFLOW.md
       - sprint-audit-template.sh
-      - validate-workflow.sh
-      - validate-paths.sh
       - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
+      - validation/validate-workflow.sh
+      - validation/validate-paths.sh
+      - validation/validate-model.sh
+      - validation/workflow-model.yaml
+      - validation/scenarios/check-prompt.md
+      - validation/scenarios/validate-scenarios.sh
   pull_request:
     branches: [master]
     paths:
       - README.md
-      - TEMPLATE.md
+      - WORKFLOW.md
       - sprint-audit-template.sh
-      - validate-workflow.sh
-      - validate-paths.sh
       - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
+      - validation/validate-workflow.sh
+      - validation/validate-paths.sh
+      - validation/validate-model.sh
+      - validation/workflow-model.yaml
+      - validation/scenarios/check-prompt.md
+      - validation/scenarios/validate-scenarios.sh
+
+# Helper: run a script, block on exit 2, pass on 0 or 1 (WARN is non-blocking)
+# Each step uses the same pattern below.
 
 jobs:
+  # ── Main validation job (blocking) ──────────────────────────────────────────
   validate:
+    name: Structural + Path + Model checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Structural consistency
-        run: |
-          chmod +x validate-workflow.sh
-          set +e
-          ./validate-workflow.sh
-          exit_code=$?
-          set -e
-          if [ "$exit_code" -eq 2 ]; then exit 1; fi
-          # Exit 1 (WARN) is non-blocking → treat as success
-          exit 0
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
 
-      - name: Path simulation
+      - name: Structural consistency (validate-workflow.sh)
         run: |
-          chmod +x validate-paths.sh
           set +e
-          ./validate-paths.sh
-          exit_code=$?
+          bash validation/validate-workflow.sh
+          code=$?
           set -e
-          if [ "$exit_code" -eq 2 ]; then exit 1; fi
-          exit 0
+          [ "$code" -eq 2 ] && exit 1 || exit 0
+
+      - name: Path simulation (validate-paths.sh)
+        run: |
+          set +e
+          bash validation/validate-paths.sh
+          code=$?
+          set -e
+          [ "$code" -eq 2 ] && exit 1 || exit 0
+
+      - name: Formal model (validate-model.sh)
+        run: |
+          set +e
+          bash validation/validate-model.sh
+          code=$?
+          set -e
+          [ "$code" -eq 2 ] && exit 1 || exit 0
+
+      - name: Scenario mutation tests (validate-scenarios.sh)
+        run: |
+          set +e
+          bash validation/scenarios/validate-scenarios.sh
+          code=$?
+          set -e
+          [ "$code" -eq 2 ] && exit 1 || exit 0
+
+  # ── Self-test job (optional, informational) ──────────────────────────────────
+  # Runs negative tests that intentionally produce failures to verify detectors work.
+  # Non-blocking: continue-on-error keeps the PR green even if this job fails.
+  # Remove continue-on-error to make it blocking.
+  self-tests:
+    name: Negative self-tests (optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
 
       - name: Path simulation self-test
-        run: |
-          chmod +x validate-paths.sh
-          set +e
-          ./validate-paths.sh --self-test
-          exit_code=$?
-          set -e
-          if [ "$exit_code" -eq 2 ]; then exit 1; fi
-          exit 0
+        run: bash validation/validate-paths.sh --self-test
+
+      - name: Model self-test
+        run: bash validation/validate-model.sh --self-test

@@ -8,7 +8,7 @@ Goal: produce `Docs/Planning/Roadmap.md` rich enough to guide the full project �
    *"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/ROADMAP-DESIGN-PROMPT.md and design the roadmap."*
 2. Have the conversation. Agent writes `Docs/Planning/Roadmap.md` and asks for approval.
 3. Then bootstrap — in the same or a new session:
-   *"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md and bootstrap this project."*
+   *"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."*
    Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically.
 
 ---

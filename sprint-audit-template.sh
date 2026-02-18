@@ -370,6 +370,109 @@ total=$((total + metric_gaps))
 blockers=$((blockers + metric_gaps))
 
 # ═══════════════════════════════════════════════════════
+# SECTION 13: Change Log completeness
+# At least one Change Log entry should exist if sprint
+# items are tracked. Empty Change Log suggests AI skipped
+# decision/state logging during the sprint.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── CHANGE LOG ──"
+if [[ -f "$TRACKING_FILE" ]]; then
+  cl_entries=$(sed -n '/^## Change Log/,/^## [^C]/p' "$TRACKING_FILE" | grep -cE '^- ' 2>/dev/null || echo 0)
+  has_items=$(grep -cE "$ID_PATTERN.*(open|in_progress|fixed|verified)" "$TRACKING_FILE" 2>/dev/null || echo 0)
+  if [[ $has_items -gt 0 ]] && [[ $cl_entries -eq 0 ]]; then
+    echo "  WARN  Sprint Board has $has_items tracked items but Change Log is empty"
+    total=$((total + 1))
+  else
+    echo "  PASS  Change Log has $cl_entries entries"
+  fi
+else
+  echo "  SKIP  (TRACKING.md not found)"
+fi
+
+# ═══════════════════════════════════════════════════════
+# SECTION 14: Entry Gate log presence
+# If Sprint Board has items, an Entry Gate should have
+# been run and logged. Missing log suggests Entry Gate
+# was skipped or not recorded.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── ENTRY GATE LOG ──"
+if [[ -f "$TRACKING_FILE" ]]; then
+  has_items=$(grep -cE "$ID_PATTERN.*(open|in_progress|fixed|verified)" "$TRACKING_FILE" 2>/dev/null || echo 0)
+  if [[ $has_items -gt 0 ]]; then
+    if grep -qiE "Entry Gate" "$TRACKING_FILE" 2>/dev/null; then
+      echo "  PASS  Entry Gate execution logged in TRACKING.md"
+    else
+      echo "  WARN  Sprint has $has_items items but no Entry Gate log found in TRACKING.md"
+      total=$((total + 1))
+    fi
+  else
+    echo "  SKIP  No tracked items — Entry Gate check not applicable"
+  fi
+else
+  echo "  SKIP  (TRACKING.md not found)"
+fi
+
+# ═══════════════════════════════════════════════════════
+# SECTION 15: Failure transfer check
+# If Failure Encounters has entries, they should be
+# transferred to Failure Mode History at Sprint Close
+# step 7. Untransferred entries suggest Sprint Close
+# was incomplete.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── FAILURE TRANSFER ──"
+if [[ -f "$TRACKING_FILE" ]]; then
+  encounters=$(sed -n '/^## Failure Encounters/,/^## [^F]/p' "$TRACKING_FILE" | grep -cE '^\|[^-]' 2>/dev/null || echo 0)
+  encounters=$((encounters > 1 ? encounters - 1 : 0))  # subtract header row
+  history=$(sed -n '/^## Failure Mode History/,/^## [^F]/p' "$TRACKING_FILE" | grep -cE '^\|[^-]' 2>/dev/null || echo 0)
+  history=$((history > 1 ? history - 1 : 0))  # subtract header row
+  if [[ $encounters -gt 0 ]] && [[ $history -eq 0 ]]; then
+    echo "  WARN  Failure Encounters has $encounters entries but Failure Mode History is empty"
+    echo "        Transfer at Sprint Close step 7 (retrospective comparison)"
+    total=$((total + 1))
+  else
+    echo "  PASS  Failure transfer consistent (encounters=$encounters, history=$history)"
+  fi
+else
+  echo "  SKIP  (TRACKING.md not found)"
+fi
+
+# ═══════════════════════════════════════════════════════
+# SECTION 16: CLAUDE.md Last Checkpoint staleness
+# Last Checkpoint should exist and not be empty template
+# values. Stale checkpoint means session recovery will
+# not know where the sprint left off.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── LAST CHECKPOINT ──"
+CLAUDE_FILE="$ROOT/CLAUDE.md"
+if [[ -f "$CLAUDE_FILE" ]]; then
+  if grep -qE '## Last Checkpoint' "$CLAUDE_FILE" 2>/dev/null; then
+    cp_content=$(sed -n '/^## Last Checkpoint/,/^## /p' "$CLAUDE_FILE" | grep -E '^- ' 2>/dev/null || true)
+    if [[ -z "$cp_content" ]]; then
+      echo "  WARN  §Last Checkpoint section exists but has no entries"
+      total=$((total + 1))
+    elif echo "$cp_content" | grep -qE '\[YYYY-MM-DD\]|\[Sprint N'; then
+      echo "  WARN  §Last Checkpoint still contains template placeholders — update at gate boundaries"
+      total=$((total + 1))
+    else
+      echo "  PASS  §Last Checkpoint populated"
+    fi
+  else
+    echo "  WARN  No §Last Checkpoint section found in CLAUDE.md"
+    total=$((total + 1))
+  fi
+else
+  echo "  SKIP  (CLAUDE.md not found)"
+fi
+
+# ═══════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════
 

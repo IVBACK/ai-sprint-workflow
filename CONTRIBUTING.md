@@ -7,10 +7,10 @@ in their real projects.
 
 ### Language/Framework Patterns
 
-The `sprint-audit-template.sh` and `TEMPLATE.md` include patterns for 7 languages.
+The `sprint-audit-template.sh` and `WORKFLOW.md` include patterns for 7 languages.
 If your stack isn't covered, add it:
 
-- Add grep patterns to the Language-Specific Pattern Examples table in `TEMPLATE.md`
+- Add grep patterns to the Language-Specific Pattern Examples table in `WORKFLOW.md`
 - Add commented examples to `sprint-audit-template.sh`
 - Languages we'd love to see: Swift/iOS, Flutter/Dart, Kotlin, PHP/Laravel, Ruby/Rails, Elixir
 

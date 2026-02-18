@@ -1,6 +1,6 @@
 # AI Sprint Workflow — Design Decisions
 
-Rationale behind key design choices. For the workflow itself, see [TEMPLATE.md](TEMPLATE.md).
+Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](WORKFLOW.md).
 
 ## Key Design Decisions
 
@@ -8,13 +8,14 @@ Rationale behind key design choices. For the workflow itself, see [TEMPLATE.md](
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
 - **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
 - **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
-- **Automated + spec-driven audit.** `sprint-audit.sh` catches grep-detectable patterns (~30 lines of output) including metric-vs-test coverage (Section 12). Close Gate Phase 1b is spec-driven: it loads Entry Gate failure mode predictions (9a) and verification plan invariants (9b), then checks per item whether predicted failure modes are handled in code. Generic checks (resource leaks, dead code, observability) run as supplemental. Output is per-item (HANDLED/MISSED/N/A), not per-file. Significant findings pause the gate; clean phases are batched into one report — no approval fatigue on clean sprints.
+- **Automated + spec-driven audit.** `sprint-audit.sh` catches grep-detectable patterns (~40 lines of output) including metric-vs-test coverage (Section 12), change log completeness, entry gate log presence, failure transfer, and checkpoint staleness (Sections 13-16). Close Gate Phase 1b is spec-driven: it loads Entry Gate failure mode predictions (9a) and verification plan invariants (9b), then checks per item whether predicted failure modes are handled in code. Generic checks (resource leaks, dead code, observability) run as supplemental. Output is per-item (HANDLED/MISSED/N/A), not per-file. Significant findings pause the gate; clean phases are batched into one report — no approval fatigue on clean sprints.
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
 - **Rich item status model.** Items track `open → in_progress → fixed → verified`, plus `blocked` and `deferred` statuses. `in_progress` prevents wasted rework after session interruptions. Reverse transition `verified → open` is allowed for regressions.
 - **Sprint detail on demand.** Entry Gate Phase 0: if a sprint is still a one-line sketch from Initial Planning, decompose it into Must/Should/Could before proceeding. Later sprints are detailed only when reached — not up front.
 - **Mid-sprint scope changes.** Urgent items (critical bugs, security fixes) can be added mid-sprint with a documented procedure. AI never initiates scope changes — user decides. Hotfixes skip formal gates but still require Change Log entry, test, and retrospective inclusion.
 - **Immutable contract revision.** Contracts are not truly permanent — they have an explicit revision procedure when project direction changes, including blast radius assessment and regression tracking.
 - **Metric sufficiency check.** Entry Gate step 9c: if a roadmap item has no metric gate, the AI proposes one before the sprint starts. For each metric, four checks: measurable by sprint end? Test scenario defined? Threshold non-trivial (can it pass while the system is broken)? Every failure mode from 9a covered? No item ships without sufficient success criteria.
+- **Close Gate context recovery.** When other work interrupts a sprint session, the AI can lose track of which metrics and tests were defined at Entry Gate and prematurely declare the sprint ready to close. Phase −1 (state recovery) is mandatory before every Close Gate — regardless of session history: read `TRACKING.md` and the Entry Gate report, then explicitly state the sprint's items and metric list before Phase 0 begins. If source files are missing or ambiguous, ask the user first. A pre-verdict guard at the verdict step reinforces this: before issuing any recommendation, the AI must confirm each phase (−1 through 4) was completed in this session. `verified` status in TRACKING.md is not a substitute for running the phases.
 - **Structured metric verification.** Close Gate Phase 0 requires a filled Metric Verification table — every sprint metric must be explicitly marked PASS, DEFERRED, FAIL, or MISSING with evidence or escalation reason. Each metric also records the action taken (existing, written, fixed, revised, added, escalated) so the user sees the journey, not just the final state. Empty cells block the gate. All-DEFERRED also blocks the gate — at least one metric must PASS for the sprint to close. A compact summary line is logged to TRACKING.md (not the full table — tests in the codebase are the persistent evidence). `sprint-audit.sh` Section 12 cross-checks roadmap metrics against test files — unmatched metrics cannot be marked as false positives.
 - **Unmet-metric escalation.** Close Gate Phase 0 + Sprint Close step 1: when a metric is partially met or blocked by an unfinished prerequisite, the AI must not silently mark `[ ]` and move on. Required: explain the gap, check if the blocker is tracked in the roadmap, propose a target sprint with reasoning, and get user approval before deferring.
 - **Item-level test coverage.** Close Gate Phase 4b: every completed item (Must + Should + Could) must have a behavioral test — not just file-level test existence. Missing test → write one or document why untestable.
@@ -47,7 +48,7 @@ Rationale behind key design choices. For the workflow itself, see [TEMPLATE.md](
 
 ## Bootstrap Flow — Visual Reference
 
-Visual overview of the bootstrap procedure. Authoritative text: `## Quick Start — AI Agent Bootstrap` in TEMPLATE.md.
+Visual overview of the bootstrap procedure. Authoritative text: `## Quick Start — AI Agent Bootstrap` in WORKFLOW.md.
 
 ```
 AI reads this file
@@ -104,7 +105,7 @@ AI reads this file
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ 8. TEMPLATE.md → │
+                         │ 8. WORKFLOW.md → │
                          │ SPRINT_WORKFLOW  │
                          │ (strip bootstrap)│
                          └────────┬─────────┘
@@ -119,7 +120,7 @@ AI reads this file
 
 ## Retroactive Audit Flow — Visual Reference
 
-Visual overview of the 7-phase audit. Authoritative text: `#### Phase 0 — Audit Setup` through `#### Phase 7 — Audit Close` in TEMPLATE.md.
+Visual overview of the 7-phase audit. Authoritative text: `#### Phase 0 — Audit Setup` through `#### Phase 7 — Audit Close` in WORKFLOW.md.
 
 ```
 Trigger observed
@@ -163,7 +164,7 @@ Phase 7: Audit Close
 
 ## Sprint Workflow — Complete Flow
 
-Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate`, `## Implementation Loop`, `## Close Gate`, `## Sprint Close` in TEMPLATE.md.
+Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate`, `## Implementation Loop`, `## Close Gate`, `## Sprint Close` in WORKFLOW.md.
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -403,10 +404,30 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  PRESENTATION RULE                                              │
-│  Phases 0/1a/1b/2/4 = transparency checkpoints, not approvals  │
+│  Phases -1/0/1a/1b/2/4 = transparency checkpoints, not approvals│
 │  Clean/minimal → batch into one report, no pause needed         │
 │  Blocker/regression/MISSED → stop, present, ask                 │
 │  Mandatory approval: verdict only                               │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  PHASE −1 — State Recovery (MANDATORY, every Close Gate)        │
+│  Regardless of session history or interruptions — always first. │
+│                                                                 │
+│  1. Read TRACKING.md §Sprint Board                              │
+│     → list every item for this sprint + current status         │
+│  2. Read S<N>_ENTRY_GATE.md → list every metric gate            │
+│     Fallback if missing: Roadmap.md sprint section              │
+│  3. State explicitly before proceeding:                         │
+│     "Sprint N — Close Gate starting.                            │
+│      Items: [X Must / Y Should / Z Could]                       │
+│      Metrics to verify: [list]                                  │
+│      Source: [ENTRY_GATE.md | Roadmap.md fallback]"             │
+│                                                                 │
+│  Steps 1-2 fail → ask user before proceeding                   │
+│  Skipping this step = protocol violation                        │
+│  "sprint looks done" without this check = protocol violation    │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -457,6 +478,10 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  │ 11b.Orphan detection (items in one file but not other)     │ │
 │  │ 11c.Checkbox format (CORE-### without - [ ] syntax)        │ │
 │  │ 12. Metric coverage (roadmap metric ↔ test evidence)      │ │
+│  │ 13. Change Log completeness (entries exist?)              │ │
+│  │ 14. Entry Gate log presence (gate was logged?)            │ │
+│  │ 15. Failure transfer (encounters → history?)              │ │
+│  │ 16. Last Checkpoint staleness (CLAUDE.md current?)        │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  Exit codes: 0=clean, 1=findings, 2=setup error (fix script)    │
@@ -524,6 +549,22 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
               │  YES ↓                      │
               └──────────────┬──────────────┘
                              │
+                             ▼
+              ┌──────────────────────────────┐
+              │ Pre-verdict guard (MANDATORY)│
+              │  Confirm all phases done:    │
+              │  Phase −1 completed? YES/NO  │
+              │  Phase  0 completed? YES/NO  │
+              │  Phase 1a completed? YES/NO  │
+              │  Phase 1b completed? YES/NO  │
+              │  Phase  2 completed? YES/NO  │
+              │  Phase  3 completed? YES/NO  │
+              │  Phase  4 completed? YES/NO  │
+              │  Any NO → run that phase     │
+              │  "verified" in TRACKING ≠    │
+              │  substitute for phases       │
+              └──────────────┬──────────────┘
+                             │ all YES
                              ▼
               ┌──────────────────────────────┐
               │ Close Gate verdict:          │
@@ -674,7 +715,7 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 
 ## Guardrail Evolution — Visual Reference
 
-Visual overview of the guardrail update process. Authoritative text: `## Update Rule` in TEMPLATE.md.
+Visual overview of the guardrail update process. Authoritative text: `## Update Rule` in WORKFLOW.md.
 
 ```
 Bug discovered
