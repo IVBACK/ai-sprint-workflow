@@ -1594,6 +1594,32 @@ Do NOT read SPRINT_WORKFLOW.md every session — only at sprint boundaries (Entr
 Do NOT read GUARDRAILS.md in full — only §Index → relevant sections per task.
 ```
 
+### Interruption Handling
+
+```
+Three interruption types and how to handle each:
+
+1. User asks a question mid-task (same session, context intact)
+   → Answer the question fully.
+   → Then state explicitly: "I was at [step / item / phase]. Continue?"
+   → Wait for user confirmation before resuming.
+   → Do NOT silently resume — the user may have changed direction.
+
+2. AI stopped and restarted (same session, context intact)
+   → Read TRACKING.md to confirm last recorded status.
+   → State what was in_progress and what sub-step you were on (best estimate).
+   → Verify code state matches TRACKING status before continuing.
+   → If ambiguous: ask user rather than guess.
+
+3. Session closed (context lost — new session)
+   → Follow Session Start Protocol above.
+   → CLAUDE.md Last Checkpoint + TRACKING.md item statuses are the
+     authoritative record. Code on disk is the ground truth.
+   → If TRACKING shows in_progress but you have no context about
+     which sub-step: start that item's implementation loop from step A
+     (read guardrails) — safer than guessing mid-item state.
+```
+
 ### During Implementation
 
 ```
