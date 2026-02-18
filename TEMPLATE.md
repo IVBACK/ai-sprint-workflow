@@ -900,8 +900,11 @@ and resolve it with minimal disruption to the current sprint.
 - §Failure Mode History shows the same category 2+ times in recent sprints, tracing back to a specific earlier sprint
 - Entry Gate §Open Risks contains a flag pointing at a specific past sprint's output
 
-**Who initiates:** User or AI. AI may propose opening an audit if a trigger is observed during implementation;
-the user decides whether to proceed. AI never opens an audit without user confirmation.
+**Who initiates:** User or AI.
+- User: any time a trigger is observed.
+- AI: proactively, when a detection signal fires at a workflow checkpoint (see §Auto-Detection below).
+  AI never opens an audit unilaterally — it proposes; the user confirms.
+  AI never silently dismisses a detection signal — if signal fires, it must surface it.
 
 **Scope rule:** One audit open at a time. If symptoms span multiple sprints, open the oldest
 implicated sprint first. Resolve before opening the next.
@@ -1304,6 +1307,112 @@ Required before marking audit complete and returning to current work:
 
 7. Resume current sprint work.
 ```
+
+---
+
+#### Auto-Detection — AI-Initiated Signals
+
+The AI actively watches for suspicious signals at four checkpoints in the normal workflow.
+When a signal fires, the AI **must** surface it to the user — it cannot silently continue.
+
+**Detection format (mandatory when a signal fires):**
+```
+⚠ AUDIT SIGNAL — [Checkpoint]: [what was observed]
+Past claim: Sprint N, CORE-###: "[exact close gate claim]"
+Current observation: [measured value / behavior]
+Delta: [quantified difference]
+Proposed action: Open Retroactive Audit for Sprint N?
+→ YES: proceed to Phase 0
+→ NO: log signal in TRACKING.md §Dismissed Signals and continue
+```
+
+**Checkpoint 1 — Entry Gate step 6 (metrics review)**
+
+While reviewing TRACKING.md §Performance Baseline Log for the sprint being opened:
+```
+Signal fires if:
+  - A metric that was logged as "verified" in a past sprint is now measurably worse
+    AND the current sprint has not touched the responsible system
+    Example: S6 claimed cache hit rate > 60%; sprint-audit baseline now shows 0%
+             and the current sprint (S8) has not modified the cache system
+  - A system is listed as "verified" in TRACKING.md but has no corresponding
+    sprint-audit.sh check (verification cannot be reproduced)
+  - A past sprint's metric gate value is missing from the baseline log
+    (claimed verified but no number recorded)
+
+Signal does NOT fire if:
+  - Current sprint explicitly modified the responsible system (regression, not audit)
+  - The metric is marked "not yet measurable" in the baseline log (COLD_STATE expected)
+  - Delta is < 5% (within measurement variance)
+```
+
+**Checkpoint 2 — Entry Gate step 9a (failure mode history scan)**
+
+While reading §Failure Mode History for pattern detection:
+```
+Signal fires if:
+  - Same failure category appears in 2+ sprints AND traces to a specific past sprint's output
+    (not just repeated bugs — must converge on one sprint as the source)
+    Example: INTEGRATION_GAP in S7, S8, S9 → all because S6 cache was never wired into runtime path
+  - An "unpredicted" failure in a recent sprint maps to a system verified in an older sprint
+    (the older sprint's verification did not predict this failure — FALSE_VERIFICATION candidate)
+  - An open risk in §Open Risks is tagged with a sprint number older than current sprint - 2
+
+Signal does NOT fire if:
+  - Failures are in different systems with no shared dependency
+  - Pattern is already tracked by an open audit (do not stack signals)
+```
+
+**Checkpoint 3 — Implementation session (live observation)**
+
+During any implementation session, while reading code, running tests, or measuring:
+```
+Signal fires if:
+  - AI is trying to use an output from a past sprint (API, buffer, file) and it is
+    missing, differently shaped, or returning unexpected values
+    Example: calling SDFCacheManager.GetCachedChunk() → always returns null
+             despite S6 claiming "cache read path verified"
+  - A test from a past sprint is now failing (sprint-audit.sh section regressed)
+  - A profiler measurement contradicts a past sprint's metric gate by > 20%
+    AND the current sprint has not modified the responsible system
+  - A kill-switch that should be ON is OFF in the current scene/profile
+    AND no sprint deliberately disabled it
+
+Signal does NOT fire if:
+  - The behavior is explained by a known Mid-Sprint Scope Change or Contract Revision
+  - The system is in cold-start state (documented expected behavior)
+  - The current sprint intentionally modified or removed the system
+```
+
+**Checkpoint 4 — Close Gate Phase 2 (verdict review)**
+
+While computing the Close Gate verdict for the current sprint:
+```
+Signal fires if:
+  - A Must item in the current sprint could not be verified because a dependency
+    from a past sprint is not working as claimed
+    Example: CORE-089 "cache improves streaming performance" cannot be measured
+             because S6 cache hit rate is 0%
+  - A deferred item (status: deferred) was first deferred 2+ sprints ago
+    AND the reason for deferral references a past sprint's output
+  - sprint-audit.sh produces a FAIL in a section that was PASS at the last sprint's close
+    AND the failing code is from a sprint older than the current one
+
+Signal does NOT fire if:
+  - The dependency failure is already tracked by an open audit
+  - The item was deliberately deferred due to scope (not dependency failure)
+```
+
+**Dismissed signal rule:**
+If user says NO to a proposed audit, the signal is logged in TRACKING.md §Dismissed Signals:
+```
+## Dismissed Signals
+| Date | Checkpoint | Signal Summary | User Decision | Revisit? |
+|------|-----------|---------------|---------------|---------|
+| [date] | Entry Gate step 6 | S6 cache hit 0% vs claimed >60% | NO — expected cold state | Next sprint Entry Gate |
+```
+A dismissed signal is re-surfaced at the next Entry Gate if the condition persists.
+A signal dismissed twice for the same system is not re-surfaced unless a new trigger fires.
 
 ---
 
