@@ -113,10 +113,14 @@ F3. Are there any non-terminal states with NO exit path
 
 ═══ G. DATA PROVENANCE (2 checks) ═══
 
-G1. Close Gate Phase 1b reads "each modified file."
-    Is there any document or step that records WHICH files
-    were modified during the sprint? Or does it rely solely
-    on git diff / AI memory? PASS/FAIL + line.
+G1. Close Gate Phase 1b is now item-based (spec-driven), not file-based.
+    It loads Entry Gate 9a predictions and 9b invariants, then uses
+    git diff filtered by item context. Verify:
+    (a) Is there a step that explicitly loads/references the Entry Gate
+        9a+9b data before Phase 1b begins? PASS/FAIL + line.
+    (b) For items with no Entry Gate 9a prediction recorded (e.g.,
+        first sprint, missing plan), does Phase 1b define a fallback?
+        PASS/FAIL + line.
 
 G2. CODING_GUARDRAILS.md content (§Entry Gate, §Close Gate):
     is there an explicit step that says when/where this content
