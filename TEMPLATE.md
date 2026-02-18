@@ -48,7 +48,9 @@ The AI agent reads this document and bootstraps the project structure automatica
      • "Generic sprint-audit.sh Template" (already copied to Tools/)
      • "Checklist — Is Your Project Set Up?"
    - Keep everything else (Setup, Complete Flow, Entry/Close Gate, Sprint Close, Operational Rules, etc.)
-   - Result: ~550 lines (lean workflow reference) instead of ~1400 lines (full template)
+   - Result: ~1200-1500 lines (workflow reference) instead of ~2700 lines (full template)
+     Note: AI reads this section-by-section at sprint boundaries, never all at once.
+     Context Window Management rules ensure only the relevant gate section is loaded.
    - Need to re-bootstrap later? Re-download the original TEMPLATE.md.
 9. Confirm the setup with the user before writing any feature code
    Present a brief summary: files created, Sprint 1 scope (Must items), and next step.
