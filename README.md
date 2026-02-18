@@ -99,9 +99,10 @@ Questions are asked in a single batch. Answers inferrable from project files
 |----------|-----------|
 | **Project Shape** | Q0: Language/framework, Q1: Solo or team, Q2: Sprint scope size, Q3: Existing roadmap, Q4: Performance-sensitive, Q5: Target platforms |
 | **Infrastructure** | Q6: CI/CD pipeline, Q7: Test framework, Q8: Existing linter/standards, Q9: Known tech debt |
-| **Workflow Preferences** | Q10: Docs language, Q11: Commit style, Q12: Immutable contracts, Q13: Anything else the AI should know |
+| **Workflow Preferences** | Q10: Docs language, Q11: Commit style (skipped if VCS=none), Q12: Immutable contracts, Q13: Anything else the AI should know |
 
 Q0 auto-detects from project files; asks explicitly if the project is empty. If user is undecided, AI proposes options with trade-offs.
+VCS is auto-detected (`.git`, `.svn`, `.hg`). Result recorded in `CLAUDE.md`. If VCS=none: Q11 skipped, Close Gate Phase 1b uses Entry Gate implementation notes instead of `git diff`, TRACKING.md recovery falls back to user verification.
 Q13 is an open-ended catch-all for context that doesn't fit the predefined categories.
 
 ## What Gets Created
@@ -167,7 +168,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
 - **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
-- **Session recovery.** Session Start Protocol distinguishes new sprint, mid-sprint, and interrupted session states. `in_progress` items signal partial work that needs verification, not rework.
+- **Interruption handling.** Three cases defined: (1) user asks a question mid-task — AI answers, then states where it left off and waits for confirmation before resuming; (2) AI stopped and restarted in the same session — AI reads TRACKING.md, states the in_progress item and best sub-step estimate, verifies code matches status; (3) session fully closed — Session Start Protocol reconstructs from CLAUDE.md Last Checkpoint + TRACKING.md statuses; if sub-step is ambiguous, item restarts from step A rather than guessing mid-item state.
 
 ## Self-Validation
 
