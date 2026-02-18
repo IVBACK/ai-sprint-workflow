@@ -443,6 +443,9 @@ If items exceed scope limit → apply §Scope Negotiation.
    - `deferred`: still relevant? Carry forward or drop (user decides).
    - `open` / `in_progress`: still in scope? Carry forward (user decides).
    - `fixed` (not yet verified): verify now or carry forward for verification (user decides).
+   Check §Open Risks for Architecture Review Required flags from previous sprints.
+   If found → treat as Priority 1 in step 9a (before analyzing current sprint items):
+   run the Architecture Review procedure at step 9a before listing new failure modes.
 4. Identify applicable GUARDRAILS sections (consumed by implementation loop step A)
 
 **Phase 2 — Dependency Verification (read-only):**
@@ -474,6 +477,10 @@ If items exceed scope limit → apply §Scope Negotiation.
       Check for escalation triggers in §Failure Mode History and §Open Risks:
       - Same category 2+ times in last 3 sprints → Architecture Review Required (see below).
       - Same detection=user-visual 2+ times → propose automated proxy test before proceeding.
+          If triggered: propose adding a proxy test as a Must item in this sprint or the next.
+          "A test that passes only when the visual check would also pass."
+          Present options to user: add to current sprint scope, defer to next sprint as Must,
+          or accept manual check (document rationale in §Open Risks). User decides.
       If Architecture Review triggered:
         1. Identify the recurring category (direct/interaction/stress-edge)
         2. Trace root causes across sprints — are they symptoms of the same design flaw?
@@ -608,13 +615,20 @@ Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpo
 Load Entry Gate data before starting:
 - TRACKING.md §Predicted Failure Modes (written at Entry Gate 9a)
 - S<N>_ENTRY_GATE.md verification plan per item (Entry Gate 9b invariants)
-- Abbreviated Entry Gate? §Predicted Failure Modes will be empty (9a was skipped).
-  Skip failure mode check (step b below). Verification plan (9b-lite) still applies to step c.
+
+Abbreviated gate check (do this first):
+- Is TRACKING.md Change Log entry for Entry Gate marked "Entry Gate (abbreviated)"?
+  YES → §Predicted Failure Modes is empty (9a was skipped). Skip step b for all items.
+        Verification plan (9b-lite) still applies to step c.
+  NO  → proceed normally (steps a, b, c for each item).
 
 For each completed item (Must + Should + Could):
   a. Find implementing files:
      - VCS=git: `git diff` filtered by item context
-     - VCS=none: use Entry Gate implementation plan notes; ask user to confirm if ambiguous
+     - VCS=none: read Entry Gate implementation plan notes for the item.
+       If notes are insufficient or ambiguous: ask user explicitly —
+       "For [CORE-###], which files did you modify?" — review those files.
+       Log the user-provided file list in TRACKING.md Change Log for audit trail.
   b. Predicted failure modes → is each mode handled in code?
      - Direct: does the item break on its own? (null ref, off-by-one, wrong calc, missing guard)
      - Interaction: does combining with other systems cause failure? (timing, shared state, dispatch order)
@@ -630,6 +644,11 @@ Supplemental per-file check (issues outside item scope):
 
 Output: per-item summary (CORE-### → failure modes: HANDLED / MISSED / N/A)
         + supplemental findings per file.
+  HANDLED = mode is applicable and addressed in code.
+  MISSED  = mode is applicable but not addressed — must fix or defer.
+  N/A     = mode is not applicable to this item's domain
+            (e.g., stress/edge for a pure UI label item).
+            Use sparingly: justify why it cannot apply.
 Present summary to user before proceeding to Phase 2.
 Do not declare "audit complete" without per-item acknowledgment.
 
