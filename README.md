@@ -168,6 +168,7 @@ SPRINT_WORKFLOW.md (sprint boundaries only) — not the entire project history.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
 - **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
+- **Abbreviated Entry Gate.** Small sprints (≤3 Must items, no cross-sprint dependencies) run a lighter gate: Phase 0 → state review → strategic alignment → test plan (9b-lite) → scope check → approval. Skips failure mode analysis, metric sufficiency deep check, dependency verification, and implementation ordering. Close Gate Phase 1b adapts automatically — failure mode check is skipped when 9a data is absent. Logged as "Entry Gate (abbreviated)" so the audit trail is clear.
 - **Interruption handling.** Three cases defined: (1) user asks a question mid-task — AI answers, then states where it left off and waits for confirmation before resuming; (2) AI stopped and restarted in the same session — AI reads TRACKING.md, states the in_progress item and best sub-step estimate, verifies code matches status; (3) session fully closed — Session Start Protocol reconstructs from CLAUDE.md Last Checkpoint + TRACKING.md statuses; if sub-step is ambiguous, item restarts from step A rather than guessing mid-item state.
 
 ## Self-Validation
@@ -210,7 +211,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 
 | Project Size | Recommendation |
 |---|---|
-| **Small** (1-5 files) | Abbreviated Entry Gate (Phase 0 + steps 1-2, 8, 10, 12 only), skip Phase 2, skip sprint-audit.sh |
+| **Small** (1-5 files) | Abbreviated Entry Gate (≤3 Must items, no cross-sprint deps): Phase 0 → steps 1-2 → 8 → 9b-lite → 10 → 12. Skips failure mode analysis (9a), metric sufficiency (9c), Phase 2. sprint-audit.sh optional. |
 | **Medium** (5-50 files) | Full workflow. Audit script valuable at ~10+ files |
 | **Large** (50+ files) | Add CI integration, per-subsystem guardrails |
 
@@ -218,7 +219,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 |---|---|---|
 | Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
 | Review | Self-verify + AI agent | Peer review + AI agent |
-| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (phases 0-3) |
+| Entry Gate | Abbreviated if ≤3 Must + no deps; full otherwise | Full (phases 0-3) |
 | Close Gate | Full | Full + peer sign-off |
 
 | Starting Point | What Happens |

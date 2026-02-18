@@ -384,6 +384,14 @@ Engineering rules derived from real bugs. Review before writing code.
 
 Before writing code for a new sprint:
 
+**Abbreviated mode** (≤3 Must items AND no cross-sprint dependencies):
+Run: Phase 0 (if needed) → steps 1-2 → step 8 (quick pass) → step 9b-lite → step 10 → step 12.
+Skip: steps 3-4, Phase 2 (steps 5-7), step 9a, step 9c, step 11.
+Step 9b-lite: for each item, answer only "what will be tested?" and "what input/output?"
+— skip failure mode categories, invariant depth, and metric sufficiency analysis.
+When in doubt → run full gate. Abbreviated saves time; full catches more.
+Log difference: step 12d logs "Entry Gate (abbreviated)" so Close Gate knows.
+
 **Phase 0 — Sprint Detail (conditional):**
 *(Skip if this sprint already has Must/Should/Could items in the Roadmap.)*
 If the sprint is still a one-line sketch from Initial Planning:
@@ -582,6 +590,8 @@ Interim "present to user" steps (Phase 0, 1a, 1b, 2, 4) are transparency checkpo
 Load Entry Gate data before starting:
 - TRACKING.md §Predicted Failure Modes (written at Entry Gate 9a)
 - S<N>_ENTRY_GATE.md verification plan per item (Entry Gate 9b invariants)
+- Abbreviated Entry Gate? §Predicted Failure Modes will be empty (9a was skipped).
+  Skip failure mode check (step b below). Verification plan (9b-lite) still applies to step c.
 
 For each completed item (Must + Should + Could):
   a. Find implementing files:
@@ -903,6 +913,12 @@ This file starts empty on new projects. Add entries when:
                     ENTRY GATE
            ════════════════╪════════════════
                            │
+                           ▼
+              ┌────────────────────────┐
+              │ ≤3 Must + no cross-    │──YES──► Abbreviated mode:
+              │ sprint dependencies?   │         Ph0 → 1-2 → 8 → 9b-lite
+              └────────────┬───────────┘         → 10 → 12
+                           │ NO
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHASE 0 — Sprint Detail (conditional)                          │
