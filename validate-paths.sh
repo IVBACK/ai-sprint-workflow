@@ -150,7 +150,7 @@ run_checks() {
     "Sprint Close section missing numbered steps"
 
   section_check "S1_IMPL_LOOP" \
-    "$(extract_section "$tmpl" "^## Sprint Workflow" "^## Generic")" \
+    "$(extract_section "$tmpl" "^## Implementation Loop" "^---")" \
     "Pre-code check|Write code|Self-verify|Write tests|Update TRACKING" \
     "Implementation loop missing A-E steps"
 

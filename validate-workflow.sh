@@ -24,6 +24,7 @@ README="$SCRIPT_DIR/README.md"
 TEMPLATE="$SCRIPT_DIR/TEMPLATE.md"
 AUDIT="$SCRIPT_DIR/sprint-audit-template.sh"
 ROADMAP="$SCRIPT_DIR/ROADMAP-DESIGN-PROMPT.md"
+DESIGN="$SCRIPT_DIR/DESIGN.md"
 
 passes=0
 warnings=0
@@ -58,7 +59,7 @@ extract_section() {
 # ── Pre-flight ──────────────────────────────────────────────
 echo "Validating workflow consistency..."
 preflight_ok=true
-for f in "$README" "$TEMPLATE" "$AUDIT" "$ROADMAP"; do
+for f in "$README" "$TEMPLATE" "$AUDIT" "$ROADMAP" "$DESIGN"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR  Required file not found: $f"
     preflight_ok=false
@@ -71,6 +72,7 @@ echo "  README:   $README"
 echo "  TEMPLATE: $TEMPLATE"
 echo "  AUDIT:    $AUDIT"
 echo "  ROADMAP:  $ROADMAP"
+echo "  DESIGN:   $DESIGN"
 
 # ═══════════════════════════════════════════════════════════════
 #  CATEGORY 1: Numeric Claim Validation
@@ -210,7 +212,7 @@ echo "  CATEGORY 2: Cross-File Reference Integrity"
 echo "══════════════════════════════════════════════════════"
 
 # 2.1 Entry Gate step references in README exist in TEMPLATE
-readme_kdd=$(extract_section "$README" "^## Key Design Decisions" "^## ")
+readme_kdd=$(extract_section "$DESIGN" "^## Key Design Decisions" "^## ")
 eg_section=$(extract_section "$TEMPLATE" "^## Entry Gate" "^---")
 missing_eg_refs=""
 if [[ -n "$readme_kdd" ]] && [[ -n "$eg_section" ]]; then
@@ -338,12 +340,12 @@ echo "════════════════════════�
 canonical_statuses="open in_progress fixed verified deferred blocked"
 status_ok=true
 for s in $canonical_statuses; do
-  for file_label in "TEMPLATE:$TEMPLATE" "AUDIT:$AUDIT" "README:$README"; do
+  for file_label in "TEMPLATE:$TEMPLATE" "AUDIT:$AUDIT" "DESIGN:$DESIGN"; do
     label="${file_label%%:*}"
     fpath="${file_label#*:}"
     if ! grep -qw "$s" "$fpath" 2>/dev/null; then
-      if [[ "$label" == "README" ]]; then
-        warn "STATUS_$label" "README missing status value: $s"
+      if [[ "$label" == "DESIGN" ]]; then
+        warn "STATUS_$label" "DESIGN.md missing status value: $s"
       else
         fail "STATUS_$label" "$label missing status value: $s"
       fi
