@@ -358,6 +358,29 @@ Sprint Close step 7a reads this for retrospective comparison. Replace at each ne
 Category: direct / interaction / stress-edge.
 Detection: test / user-visual / profiler / code-review.
 
+## Retroactive Audits
+
+Written at Retroactive Sprint Audit Phase 7. Read at Entry Gate step 3 (deferred items)
+and Entry Gate step 9a (pattern analysis). Audits without `status: CLOSED` block Sprint Close step 6.
+
+| Audit # | Target Sprint | Status | Trigger | Classification | Resolution | Closed |
+|---------|--------------|--------|---------|----------------|------------|--------|
+| A-001 | S[N] | OPEN / IN_PROGRESS / CLOSED | [symptom] | [category] | [fix now / next sprint / accepted] | [date] |
+
+Category values: REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION / COLD_STATE / SCOPE_DRIFT / ENVIRONMENT_DELTA
+
+## Dismissed Signals
+
+Written when user says NO to an audit proposal. Re-surfaced at next Entry Gate if condition
+persists (same system, same checkpoint). Suppressed after 2 dismissals — but CP3 and CP4
+signals are never suppressed by prior dismissals.
+
+| Date | Checkpoint | System / Metric | Signal Summary | User Decision | Dismissal # | Suppressed? | Revisit Sprint |
+|------|-----------|----------------|---------------|---------------|-------------|-------------|----------------|
+| [date] | CP1 / CP2 / CP3 / CP4 | [system name] | [what signal fired] | NO — [reason] | 1 / 2 | NO / YES | S[N+1] |
+
+Checkpoint: CP1=Entry Gate metric; CP2=Entry Gate failure pattern; CP3=Implementation; CP4=Close Gate.
+
 ## Change Log
 
 [Sprint-scoped entries. Archived to Docs/Archive/ at sprint close.]
@@ -1595,6 +1618,11 @@ This file starts empty on new projects. Add entries when:
 │       └────────────┴──────────────┴─────────────────┘           │
 │                            │                                    │
 │                     "What exists now?"                          │
+│                                                                 │
+│  ⚠ AUTO-DETECTION CP1: while reading §Performance Baseline Log  │
+│    Past sprint claimed metric X → baseline now shows gap ≥20%   │
+│    AND current sprint did not modify the responsible system?     │
+│    → surface ⚠ AUDIT SIGNAL to user; user decides YES/NO        │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -1630,6 +1658,10 @@ This file starts empty on new projects. Add entries when:
 │  │       • Direct  • Interaction  • Stress/edge              │  │
 │  │       >=1 per category, each with metric or test          │  │
 │  │       Write to TRACKING §Predicted Failure Modes          │  │
+│  │                                                           │  │
+│  │       ⚠ AUTO-DETECTION CP2: same failure category in 2+   │  │
+│  │         sprints AND pattern converges on one past sprint?  │  │
+│  │         → surface ⚠ AUDIT SIGNAL to user                  │  │
 │  │    b. How verified? (unit/integration/manual, invariants) │  │
 │  │    c. Metric sufficiency (measurable? non-trivial? 9a     │  │
 │  │       coverage? gap → add metric, update roadmap)         │  │
@@ -1745,6 +1777,13 @@ This file starts empty on new projects. Add entries when:
 │  │     If bugs/failures encountered during this item:      │    │
 │  │     → log to §Failure Encounters (item, category,       │    │
 │  │       description, detection method)                    │    │
+│  │                                                         │    │
+│  │     ⚠ AUTO-DETECTION CP3: during any implementation     │    │
+│  │       step — past sprint API missing/broken, test       │    │
+│  │       from past sprint now FAIL, profiler contradicts   │    │
+│  │       past metric by >20% (and current sprint did not   │    │
+│  │       modify that system)?                              │    │
+│  │       → surface ⚠ AUDIT SIGNAL to user                  │    │
 │  │                                                         │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                             │                                   │
@@ -1900,6 +1939,13 @@ This file starts empty on new projects. Add entries when:
               │  findings, risk, recommend)  │
               │  User approves → close       │
               │  User rejects → rework phase │
+              │                              │
+              │  ⚠ AUTO-DETECTION CP4:       │
+              │  Any Must item unverifiable  │
+              │  because a past sprint's     │
+              │  output is not working as    │
+              │  claimed?                    │
+              │  → surface ⚠ AUDIT SIGNAL    │
               └──────────────┬──────────────┘
                              │
            ══════════════════╪═══════════════
@@ -1967,6 +2013,68 @@ This file starts empty on new projects. Add entries when:
 │ 11. Sprint "done"                                               │
 │     Log: "Sprint Close: [date], steps 1-11 ✓"                   │
 │     ──────────► next sprint Entry Gate                          │
+└─────────────────────────────────────────────────────────────────┘
+
+           When any ⚠ AUDIT SIGNAL fires (user says YES):
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  RETROACTIVE SPRINT AUDIT  (optional — triggered by signal)     │
+│                                                                 │
+│  Ph 0: Setup                                                    │
+│     → target sprint + symptom + Close Gate claim questioned     │
+│     → blast radius estimate (which sprints depend on target?)   │
+│     → user confirms → audit opens                               │
+│                                                                 │
+│  Ph 1: Evidence Collection                                      │
+│     → S<N>_CLOSE_GATE.md / TRACKING §Sprint N / git log         │
+│     → sprint-audit.sh output at close / failure retrospective   │
+│                                                                 │
+│  Ph 2: Current State Assessment                                 │
+│     → same measurements as Close Gate, taken today             │
+│     → kill-switch ON? warm-start vs cold-start distinguished?   │
+│                                                                 │
+│  Ph 3: Gap Analysis                                             │
+│     → per-item: Close Gate claim vs today's measurement         │
+│     → per-metric: delta (< 5% = variance; ≥ 5% = gap;          │
+│       0 vs non-zero = always a gap)                             │
+│                                                                 │
+│  Ph 4: Root Cause Classification                                │
+│     ┌─────────────────┬──────────────────────────────────────┐  │
+│     │ REGRESSION      │ Post-N commit broke verified behavior │  │
+│     │ INTEGRATION_GAP │ Never wired into runtime path        │  │
+│     │ FALSE_VERIF.    │ Close Gate test missed failure mode   │  │
+│     │ COLD_STATE      │ Correct for current conditions       │  │
+│     │ SCOPE_DRIFT     │ Later sprint changed the contract    │  │
+│     │ ENVIRON_DELTA   │ Engine/platform change since Sprint N │  │
+│     └─────────────────┴──────────────────────────────────────┘  │
+│     Priority: REGRESSION > INTEGRATION_GAP > FALSE_VERIF. >     │
+│               COLD_STATE > SCOPE_DRIFT > ENVIRON_DELTA          │
+│     COLD_STATE staleness: valid max 2 sprints; 3rd → warm-start │
+│                                                                 │
+│  Ph 5: Dependency Impact Assessment                             │
+│     → which subsequent sprints are affected? → mark open        │
+│     → ≥3 items across sprints → "Re-verification Cluster"       │
+│     → guardrails that should have caught this → add if missing  │
+│                                                                 │
+│  Ph 6: Resolution Plan                                          │
+│     Fix now / Fix next sprint / Accept+document / Rollback /    │
+│     Quarantine — user decides                                   │
+│     Blocker rule: REGRESSION or INTEGRATION_GAP affecting a     │
+│     current Must item → automatic blocker                       │
+│                                                                 │
+│  Ph 7: Audit Close                                              │
+│     → write to TRACKING §Retroactive Audits                     │
+│     → update Close Gate metric gate if FALSE_VERIF. found       │
+│     → run §Update Rule if new guardrail needed                  │
+│     → present summary to user → resume current sprint           │
+│                                                                 │
+│  Dismissed signal rule:                                         │
+│     User says NO → log to TRACKING §Dismissed Signals           │
+│     Dismissed twice (same checkpoint + same system) → suppress  │
+│     Suppression scope: Entry Gate only (CP1/CP2)                │
+│     CP3 (Implementation) and CP4 (Close Gate) are NEVER         │
+│     suppressed by prior dismissals                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2295,6 +2403,41 @@ Three interruption types and how to handle each:
 - Run ALL tests written so far after each item (D.6) — do not accumulate failures across items
 - Update TRACKING.md after every significant change
 - Never skip self-verification or D.6 incremental test run to "save time"
+```
+
+### Auto-Detection Obligation
+
+```
+At 4 checkpoints in the workflow, the AI actively watches for suspicious signals
+that a completed sprint's output may be broken or inconsistent with its Close Gate claims.
+
+When a signal fires, the AI MUST:
+  1. Surface it to the user immediately using the ⚠ AUDIT SIGNAL format
+  2. NOT silently continue past the signal
+  3. Wait for user YES/NO before proceeding
+
+The AI MUST NOT:
+  - Suppress a signal without surfacing it (even if it seems like cold-state)
+  - Open a Retroactive Sprint Audit without user confirmation
+  - Dismiss a signal internally — every signal goes to the user
+
+Signal format (mandatory):
+  ⚠ AUDIT SIGNAL — [Checkpoint]: [what was observed]
+  Past claim: Sprint N, CORE-###: "[exact claim]"
+  Current observation: [measurement]
+  Proposed action: Open Retroactive Audit for Sprint N? → YES / NO
+
+Checkpoint locations:
+  CP1: Entry Gate step 6 — metric regression vs baseline
+  CP2: Entry Gate step 9a — failure pattern converging on one past sprint
+  CP3: Implementation session — broken past-sprint API/test/profiler reading
+  CP4: Close Gate verdict — Must item unverifiable due to past-sprint dependency
+
+Dismissed signal (user says NO):
+  → Log to TRACKING.md §Dismissed Signals
+  → Re-surface at next Entry Gate if condition persists
+  → Suppress after 2 dismissals (same checkpoint + same system)
+  → CP3 and CP4 are NEVER suppressed by prior Entry Gate dismissals
 ```
 
 ### Context Window Management
