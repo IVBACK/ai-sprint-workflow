@@ -659,6 +659,11 @@ Do not declare "audit complete" without per-item acknowledgment.
   - **Recommendation:** "Gate passed — recommend closing sprint" or "Gate blocked by [X]"
 - User approves before Sprint Close begins.
   User does not approve → identify concern → return to the relevant phase for rework.
+- After approval: Update CLAUDE.md §Last Checkpoint: "Close Gate complete — Sprint N approved, starting Sprint Close."
+  Session recommendation: Implementation session is heavily consumed by the time Close Gate runs.
+  If context is limited, recommend starting a fresh session to run Close Gate ("Run Close Gate, sprint N").
+  Close Gate + Sprint Close can run in the same session — Sprint Close is lightweight.
+  If context is ample (long context window), continuing from the implementation session is fine.
 
 ---
 
@@ -1687,11 +1692,17 @@ Three interruption types and how to handle each:
 └─────────────────────────────────────────────────────────┘
 
 Session boundaries:
-  Entry Gate → heavy context use (analysis + source reads)
+  Entry Gate    → heavy context use (analysis + source reads)
   Implementation → light start (CLAUDE.md + TRACKING.md only)
-  Recommended: start a new session after Entry Gate approval
-  if context is limited. Long context window? Same session is fine.
-  S<N>_ENTRY_GATE.md persists on disk — no context loss.
+  Close Gate    → heavy context use (audit reads source + entry gate data)
+  Sprint Close  → lightweight (file updates, archive, retrospective)
+
+  Recommended transitions (if context is limited):
+    After Entry Gate approval  → new session for implementation ("Continue sprint N")
+    Before Close Gate          → new session ("Run Close Gate, sprint N")
+    Close Gate + Sprint Close  → same session is fine (Sprint Close is lightweight)
+  Long context window? Same session throughout is fine.
+  S<N>_ENTRY_GATE.md persists on disk — no context loss across sessions.
 ```
 
 ### Guardrail Evolution
