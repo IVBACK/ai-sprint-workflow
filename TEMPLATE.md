@@ -51,6 +51,10 @@ The AI agent reads this document and bootstraps the project structure automatica
    - Result: ~550 lines (lean workflow reference) instead of ~1400 lines (full template)
    - Need to re-bootstrap later? Re-download the original TEMPLATE.md.
 9. Confirm the setup with the user before writing any feature code
+   Present a brief summary: files created, Sprint 1 scope (Must items), and next step.
+   Format: "Bootstrap complete. Here's what was set up: [file list]. Sprint 1 has [N] Must items: [titles].
+   Ready to run Entry Gate for Sprint 1 — shall I proceed?"
+   Do NOT silently start Entry Gate. Wait for explicit user confirmation.
 
 ```
 AI reads this file

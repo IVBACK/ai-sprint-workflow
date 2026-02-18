@@ -21,6 +21,21 @@ Works with existing projects and greenfield (empty) projects alike.
 > Any AI coding agent that can read files and follow instructions should work.
 > PRs with confirmed test results for other agents are welcome.
 
+## Is This For You?
+
+**Good fit:**
+- You're building something that will run for multiple sprints (not a one-off script)
+- You work with an AI coding agent across multiple sessions and lose context between them
+- Mistakes compound — a wrong decision in Sprint 1 causes pain in Sprint 4
+- You want the AI to plan and verify, not just generate code
+
+**Not a good fit:**
+- Quick prototype or throwaway experiment (overhead exceeds value)
+- Single session, clear scope, no follow-up sprints
+- You just want code generated fast without process
+
+When in doubt: try it on one sprint. If the Entry Gate feels like bureaucracy for your project size, you're probably in the "not a good fit" category.
+
 ## Why This Exists
 
 AI coding agents (Claude Code, Cursor, Copilot, etc.) are powerful but stateless.
