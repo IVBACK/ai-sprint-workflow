@@ -92,33 +92,65 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
-1. Download `TEMPLATE.md` into your project root:
-   ```bash
-   curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md
-   ```
-2. Start an AI coding session
-3. Tell the agent: "Read TEMPLATE.md and bootstrap this project"
-4. The agent will:
-   - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
-   - Ask 15 discovery questions (skipping ones it can infer from project files)
-   - Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
-   - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
-   - Adapt audit script patterns to your detected language (multi-language projects supported)
-   - Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
-   - Confirm the setup with you before writing any feature code
-5. Start your first sprint — the agent will ask before running Entry Gate
-6. For subsequent sessions: tell the agent **"Continue sprint N"** or **"Resume"**
+**Rewrite or complex project with prior experience?** Start with `ROADMAP-DESIGN-PROMPT.md` → then bootstrap. See [Want a richer roadmap?](#want-a-richer-roadmap-design-it-first) below.
+**Everything else:** Go straight to bootstrap.
 
-### Bootstrap Steps (9 total)
+**Already in an AI session (recommended):**
+
+Tell the agent:
+> "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md and bootstrap this project."
+
+The agent fetches the file and runs the bootstrap directly — no manual download needed.
+
+**Prefer to download first:**
+```bash
+curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md
+```
+Then tell the agent: "Read TEMPLATE.md and bootstrap this project."
+
+**Either way, the agent will:**
+- Detect whether this is a greenfield or existing project (Step 0)
+- Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
+- Ask 15 discovery questions (skipping ones it can infer from project files)
+- Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
+  - Existing project: skips files that already exist; asks before touching `TRACKING.md`, `Roadmap.md`, `GUARDRAILS.md`
+- If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
+  - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
+- Adapt audit script patterns to your detected language (multi-language projects supported)
+- Create `Docs/SPRINT_WORKFLOW.md` from `TEMPLATE.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
+- Confirm the setup with you before writing any feature code
+
+Start your first sprint — the agent will ask before running Entry Gate.
+For subsequent sessions: tell the agent **"Continue sprint N"** or **"Resume"**.
+
+### Want a richer roadmap? Design it first.
+
+The bootstrap produces a lean roadmap skeleton. For complex projects (rewrites, large scope, prior
+lessons to capture), design the roadmap in a separate focused session before bootstrapping:
+
+1. Tell the agent:
+   > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/ROADMAP-DESIGN-PROMPT.md and design the roadmap."
+   — Agent asks about goals, prior learnings, locked contracts, performance targets, phases
+   — Produces a rich `Docs/Planning/Roadmap.md` through conversation
+2. Then bootstrap:
+   > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/TEMPLATE.md and bootstrap this project."
+   — Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically
+
+### Bootstrap Steps (10 total: Step 0 + steps 1–9)
 
 ```
-1. Scan project     → detect language, framework, build system, test framework
-2. Discovery Q's    → 15 questions (batch, skip inferrable ones)
-3. Create structure → CLAUDE.md, TRACKING.md, GUARDRAILS.md, Roadmap.md, Tools/
-4. Initial Planning → if no sprint plan exists: goal → phases → detail S1 → contracts
+0. Detect state    → source code or workflow files? → Greenfield or Migration mode
+                     Migration: read conflict rules before touching any file
+1. Scan project    → detect language, framework, build system, test framework
+2. Discovery Q's   → 15 questions (batch, skip inferrable ones)
+3. Create structure→ CLAUDE.md, TRACKING.md, GUARDRAILS.md, Roadmap.md, Tools/
+                     Migration: skip files that already exist; ask before touching
+4. Initial Planning→ if no sprint plan exists: goal → phases → detail S1 → contracts
+                     Migration: current work = Sprint 1 (no retrospective)
 5. Populate CLAUDE.md with project context
 6. Populate GUARDRAILS.md with framework-specific rules
 7. Adapt audit script to detected language
+                     Migration: call existing CI commands, don't duplicate checks
 8. TEMPLATE.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
 9. Confirm with user
 ```
@@ -140,6 +172,14 @@ Q0 auto-detects from project files; asks explicitly if the project is empty. If 
 VCS is auto-detected (`.git`, `.svn`, `.hg`). Result recorded in `CLAUDE.md`. If VCS=none: Q11 skipped, Close Gate Phase 1b uses Entry Gate implementation notes instead of `git diff`, TRACKING.md recovery falls back to user verification.
 Q13 is an open-ended catch-all for context that doesn't fit the predefined categories.
 Q14 (Critical Axis): the project's #1 non-negotiable quality concern — security, performance, reliability, correctness, or other. If unanswered, inferred from domain (payment/auth → security; game/realtime → performance; medical/finance → correctness). Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis; Close Gate Phase 2 prevents silent deferral of findings in this domain.
+
+## Effective Prompts
+
+These phrases reliably trigger specific AI behaviors — observed in practice, not theoretical:
+
+- `"Resume Sprint N. [symptom] for several sessions."` — enters workflow properly; auto-detection checkpoints fire
+- `"Learn from this bug."` — documents lessons to `CODING_GUARDRAILS.md`
+- `"Why didn't tests catch this?"` — triggers test gap analysis; regression test added
 
 ## What Gets Created
 
@@ -271,7 +311,7 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 
 | Starting Point | What Happens |
 |---|---|
-| **Existing project** (has code) | Agent scans files, infers answers, creates structure around existing code. Sprint 1 typically focuses on stabilization: tests for critical existing paths, guardrails from known bugs (Q9), then new features from Sprint 2 onward. |
+| **Existing project** (has code) | Migration mode: agent reads existing files, appends workflow structure without overwriting source code or CLAUDE.md. Whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction of past work. |
 | **Empty project** (no code) | Agent asks Q0 explicitly, runs Initial Planning to create first sprint |
 | **Greenfield** ("make me X") | Agent decomposes goal into phases, details Sprint 1, discovers contracts |
 

@@ -8,7 +8,42 @@ The AI agent reads this document and bootstraps the project structure automatica
 
 ## Quick Start — AI Agent Bootstrap
 
-**When an AI agent encounters this file in a new project, execute these steps:**
+**When an AI agent encounters this file, first determine the project state:**
+
+**Step 0 — Detect project state (before doing anything else):**
+
+Check for: existing source code files, `CLAUDE.md`, `TRACKING.md`, `Docs/Planning/Roadmap.md`, CI/CD config, build files.
+
+- **No source code, no workflow files** → Greenfield mode: proceed to step 1.
+- **Source code exists or any workflow file exists** → Migration mode: read "Migration Rules" below, then proceed to step 1.
+
+---
+
+### Migration Rules (read before step 1 if existing project detected)
+
+**File conflict rules — apply only when the file already exists:**
+If a file does not exist, create it per step 3 — no confirmation needed.
+
+| File | If it already exists |
+|------|---------------------|
+| `CLAUDE.md` | **Never overwrite.** Read it first. Warn if apparent secrets found (API keys, IPs) and confirm it is gitignored. Append only sprint sections not already present. Preserve all existing content. |
+| `TRACKING.md` | Skip creation. Ask user before touching. |
+| `Docs/Planning/Roadmap.md` | Skip creation. Ask user before touching. |
+| `Docs/CODING_GUARDRAILS.md` | Skip creation. Ask user before touching. |
+| `Tools/sprint-audit.sh` | Skip creation. Ask user before replacing. |
+| `Docs/SPRINT_WORKFLOW.md` | Skip if it exists. |
+
+**Existing CI/CD:** Do NOT duplicate existing quality checks in `sprint-audit.sh`.
+Call the existing build commands instead. Do not modify CI pipeline files without explicit user confirmation.
+
+**Before creating any files:** If VCS exists, ask whether the new workflow files should be git-tracked or gitignored.
+
+**Never:**
+- Overwrite existing source code
+- Overwrite `CLAUDE.md` without reading and preserving existing content
+- Modify CI pipeline files without explicit user confirmation
+
+---
 
 1. Scan the project to determine: language, framework, build system, test framework
    *(Empty project? Skip to step 2 — Discovery Questions will cover language/framework.)*
@@ -16,54 +51,51 @@ The AI agent reads this document and bootstraps the project structure automatica
 2. Ask the Discovery Questions below (skip any already answered by project files)
 3. Create the file structure listed in §Setup below (skip files that already exist)
 4. If Roadmap.md is empty or has no sprint items, run Initial Planning:
-   a. Ask user to describe project goal (1-3 sentences).
-      If goal is too vague to decompose (e.g., "make something cool"), ask follow-up:
-      "What problem does this solve?" / "Who is the user?" / "What is the core interaction?"
-      Minimum viable goal: a subject ("who"), an action ("does what"), and a constraint ("using/for").
-   b. Propose high-level phases (titles only, 3-6 phases)
-      Each phase should be: independently deliverable (something works at the end),
-      user-visible or measurably different from the previous phase, and roughly similar in scope.
-      If a phase only "prepares" for the next with nothing to show → merge or split differently.
+   *(Design-first alternative: if the user ran a `ROADMAP-DESIGN-PROMPT.md` session beforehand,
+   Roadmap.md already exists — skip this step entirely and proceed to step 5.)*
+   **Exception — existing project (migration):** If the project has existing source code but no
+   Roadmap.md, it was not using this workflow before. The workflow starts now — do not reconstruct
+   past work. Whatever the user is currently working on becomes **Sprint 1**.
+   - Ask: "What are you working on right now?" → Sprint 1 Must/Should/Could items
+   - Ask: "What's next after that?" → one-line sketches for Sprint 2+
+   - Assign CORE-### IDs. If TRACKING.md already exists with CORE-### IDs, continue from the
+     highest existing ID. Never reuse an existing ID.
+   - Roadmap.md covers Sprint 1 forward only — never backward.
+   a. Ask user to describe project goal
+   b. Propose high-level phases (titles only)
    c. Detail Sprint 1 only: Must/Should/Could items with CORE-### IDs
       (later sprints stay as one-line sketches — they will be detailed when reached)
-      Must/Should/Could criteria:
-      - Must: without this item, the sprint goal is not met. Sprint does not close without it.
-      - Should: improves quality or completeness, but sprint ships without it if time runs out.
-      - Could: nice to have, first to drop. No Must item depends on it.
-      Item granularity rule: if an item needs more than one focused session to implement,
-      consider splitting. If two items are meaningless without each other, consider merging.
-   d. Identify immutable contracts discovered during planning
-      → feed into CLAUDE.md §Immutable Contracts
-      *(Greenfield/early project with no clear contracts yet? Write "None identified yet — to be discovered during Sprint 1." This is valid. Do not invent artificial contracts.)*
+   d. Identify immutable contracts → feed into CLAUDE.md §Immutable Contracts
    e. Present plan to user for approval before proceeding
 5. Populate CLAUDE.md with project-specific context discovered during scan + answers
+   *(Design-first path: if step 4 was skipped, read Roadmap.md §Non-Negotiable Contracts → populate CLAUDE.md §Immutable Contracts.)*
 6. Populate CODING_GUARDRAILS.md with framework-specific rules
 7. Adapt `Tools/sprint-audit.sh`: uncomment checks for the detected language, set `SRC_DIR`, `TEST_DIR`, `EXT`
    *(Multi-language project? Set `EXT` to the primary language. Add secondary language checks as additional `check` calls with explicit `--include` patterns. Use separate `SRC_DIR_*` variables if source trees differ.)*
 8. Create `Docs/SPRINT_WORKFLOW.md` from this file:
    - Copy this file to `Docs/SPRINT_WORKFLOW.md`
-   - Strip these bootstrap-only sections (no longer needed after setup):
+   - Strip these bootstrap-only sections:
      • "Quick Start — AI Agent Bootstrap" (including Discovery Questions)
-     • "File Templates" (all sub-templates — real files already exist)
-     • "Generic sprint-audit.sh Template" (already copied to Tools/)
+     • "File Templates"
+     • "Generic sprint-audit.sh Template"
      • "Checklist — Is Your Project Set Up?"
-   - Keep everything else (Setup, Complete Flow, Entry/Close Gate, Sprint Close, Operational Rules, etc.)
-   - Result: ~1200-1500 lines (workflow reference) instead of ~2700 lines (full template)
-     Note: AI reads this section-by-section at sprint boundaries, never all at once.
-     Context Window Management rules ensure only the relevant gate section is loaded.
-   - Need to re-bootstrap later? Re-download the original TEMPLATE.md.
-9. Confirm the setup with the user before writing any feature code
-   Present a brief summary: files created, Sprint 1 scope (Must items), and next step.
-   Format: "Bootstrap complete. Here's what was set up: [file list]. Sprint 1 has [N] Must items: [titles].
-   Ready to run Entry Gate for Sprint 1 — shall I proceed?"
-   Do NOT silently start Entry Gate. Wait for explicit user confirmation.
+9. Confirm the setup with the user. Do NOT silently start Entry Gate — wait for explicit confirmation.
 
 ```
 AI reads this file
        │
        ▼
+┌──────────────────────────────────┐
+│ Step 0: Detect project state     │
+│  Source code or workflow files?  │
+│  NO  → Greenfield: go to step 1  │
+│  YES → Migration: read rules     │
+│         above, then go to step 1 │
+└────────────────┬─────────────────┘
+                 │
+                 ▼
 ┌──────────────────┐     ┌──────────────────┐
-│ Scan project     │────►│ Detect:          │
+│ 1. Scan project  │────►│ Detect:          │
 │ (files, configs, │     │  - Language       │
 │  build system)   │     │  - Framework      │
 └──────────────────┘     │  - Test framework │
@@ -73,45 +105,45 @@ AI reads this file
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ Discovery Q's    │
-                         │ (ask user)       │
+                         │ 2. Discovery Q's  │
+                         │ (ask user)        │
                          └────────┬─────────┘
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ Create structure: │
+                         │ 3. Create files:  │
                          │  CLAUDE.md        │
                          │  TRACKING.md      │
                          │  GUARDRAILS.md    │
                          │  Roadmap.md       │
                          │  Tools/           │
+                         │ (skip if exists)  │
                          └────────┬─────────┘
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ Greenfield?      │
-                         │ YES → plan S1    │
-                         │  (detail S1 only,│
-                         │   sketch rest)   │
-                         │ NO → skip        │
+                         │ 4. Initial Plan   │
+                         │ if no sprint plan │
+                         │ Migration:        │
+                         │  now = Sprint 1   │
                          └────────┬─────────┘
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ Adapt audit script│
+                         │ 7. Adapt audit   │
                          │ to detected lang  │
                          └────────┬─────────┘
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ TEMPLATE.md →    │
+                         │ 8. TEMPLATE.md → │
                          │ SPRINT_WORKFLOW  │
                          │ (strip bootstrap)│
                          └────────┬─────────┘
                                   │
                                   ▼
                          ┌──────────────────┐
-                         │ Confirm with user │
+                         │ 9. Confirm        │
                          └──────────────────┘
 ```
 
@@ -273,6 +305,9 @@ Critical Axis: [security | performance | reliability | correctness | other: ...]
 - Sprint close gate:
   - Run `Tools/sprint-audit.sh` (automated scan, 12 sections).
   - Manual review (see `CODING_GUARDRAILS.md` §Close Gate).
+- Session boundaries: at known heavy-context transition points (after Entry Gate, before Close Gate),
+  AI MUST explicitly recommend starting a new session. AI cannot assess its own context usage —
+  this recommendation is mandatory, not optional. User decides whether to follow it.
 - All code, comments in [English/language].
 - Commit policy (if VCS in use): atomic commits preferred (one logical change per commit); commit messages in [English/language]. If VCS=none: skip.
 
@@ -568,9 +603,9 @@ If items exceed scope limit → apply §Scope Negotiation.
        Add reference to TRACKING.md: "Entry Gate report: Docs/Planning/S<N>_ENTRY_GATE.md"
        Update roadmap with any metric changes approved at step c.
        Update CLAUDE.md §Last Checkpoint: "Entry Gate complete — Sprint N approved, ready for implementation."
-       Session recommendation: Entry Gate consumes significant context. If context is limited,
-       recommend starting a new session for implementation ("Continue sprint N").
-       If context is ample (long context window), continuing in the same session is fine.
+       Session boundary (mandatory): Entry Gate consumes significant context.
+       AI MUST recommend starting a new session for implementation ("Continue sprint N").
+       User may choose to continue in the same session — that decision rests with the user.
 
 ---
 
@@ -719,10 +754,10 @@ Do not declare "audit complete" without per-item acknowledgment.
 - User approves before Sprint Close begins.
   User does not approve → identify concern → return to the relevant phase for rework.
 - After approval: Update CLAUDE.md §Last Checkpoint: "Close Gate complete — Sprint N approved, starting Sprint Close."
-  Session recommendation: Implementation session is heavily consumed by the time Close Gate runs.
-  If context is limited, recommend starting a fresh session to run Close Gate ("Run Close Gate, sprint N").
+  Session boundary (mandatory): Implementation session is heavily consumed by the time Close Gate runs.
+  AI MUST recommend starting a fresh session to run Close Gate ("Run Close Gate, sprint N").
+  User may choose to continue in the same session — that decision rests with the user.
   Close Gate + Sprint Close can run in the same session — Sprint Close is lightweight.
-  If context is ample (long context window), continuing from the implementation session is fine.
 
 ---
 
@@ -2472,11 +2507,11 @@ Session boundaries:
   Close Gate    → heavy context use (audit reads source + entry gate data)
   Sprint Close  → lightweight (file updates, archive, retrospective)
 
-  Recommended transitions (if context is limited):
-    After Entry Gate approval  → new session for implementation ("Continue sprint N")
-    Before Close Gate          → new session ("Run Close Gate, sprint N")
+  Mandatory transitions — AI MUST surface these recommendations; user decides:
+    After Entry Gate approval  → recommend new session for implementation ("Continue sprint N")
+    Before Close Gate          → recommend new session ("Run Close Gate, sprint N")
     Close Gate + Sprint Close  → same session is fine (Sprint Close is lightweight)
-  Long context window? Same session throughout is fine.
+  AI cannot reliably assess its own context usage — recommendations are mandatory at known heavy-context points.
   S<N>_ENTRY_GATE.md persists on disk — no context loss across sessions.
 ```
 
