@@ -1157,6 +1157,16 @@ If multiple categories could apply, choose the earliest in this order:
    → What conditions would make the current behavior correct?
    → Are those conditions present? (kill-switch, cold cache, first run, missing asset)
    → If yes → COLD_STATE. Document expected behavior explicitly.
+   → Staleness rule: COLD_STATE is valid for a maximum of 2 consecutive sprints.
+     If the same metric shows the same cold-state failure for 3+ consecutive sprints
+     despite normal project operation (runtime sessions, test runs), COLD_STATE is no
+     longer a valid explanation. At the 3rd occurrence: take a warm-start measurement.
+       - Warm-start passes → the system works but was always measured cold.
+         Fix: update Close Gate procedure to mandate warm-start measurement for this metric.
+         Classification stays COLD_STATE; add measurement protocol fix as Must item.
+       - Warm-start also fails → the system is broken regardless of start conditions.
+         Re-classify as INTEGRATION_GAP (system never actually warms up / is never called).
+         Escalate: open Phase 0 regardless of prior dismissal history.
 
 5. SCOPE_DRIFT check:
    → Did a subsequent sprint change an interface, format, or contract that this system depends on?
@@ -1344,6 +1354,9 @@ Signal does NOT fire if:
   - Current sprint explicitly modified the responsible system (regression, not audit)
   - The metric is marked "not yet measurable" in the baseline log (COLD_STATE expected)
   - Delta is < 5% (within measurement variance)
+  - The metric was previously dismissed as COLD_STATE AND fewer than 3 sprints have
+    passed since the first dismissal (staleness not yet reached — see Phase 4 §COLD_STATE)
+    ⚠ Once 3 sprints have passed under cold-state excuse, suppress is lifted automatically.
 ```
 
 **Checkpoint 2 — Entry Gate step 9a (failure mode history scan)**
@@ -1381,7 +1394,13 @@ Signal fires if:
 Signal does NOT fire if:
   - The behavior is explained by a known Mid-Sprint Scope Change or Contract Revision
   - The system is in cold-start state (documented expected behavior)
-  - The current sprint intentionally modified or removed the system
+  - The current sprint intentionally modified the system AND the modification intentionally
+    changed the tested behavior (full redesign, replacement, or deliberate contract change).
+    ⚠ Exception: if the modification broke a past sprint's verified guarantee as a side effect
+    (breakage was unintended), the signal DOES fire — do not suppress it.
+    Suppress example: "S8 replaced the entire cache system; S6 metrics no longer apply by design."
+    Do NOT suppress: "S8 added PlanetProfile.radius to ComputeCacheKey() for CORE-106 but
+    inadvertently broke S6's D-A bit-exact guarantee — that breakage was not the intent."
 ```
 
 **Checkpoint 4 — Close Gate Phase 2 (verdict review)**
@@ -1413,6 +1432,26 @@ If user says NO to a proposed audit, the signal is logged in TRACKING.md §Dismi
 ```
 A dismissed signal is re-surfaced at the next Entry Gate if the condition persists.
 A signal dismissed twice for the same system is not re-surfaced unless a new trigger fires.
+
+**Suppression scope (critical):** The two-dismissal suppression applies ONLY to
+Checkpoint 1 and Checkpoint 2 re-surface logic at Entry Gate.
+It does NOT apply to Checkpoint 3 (Implementation session) or Checkpoint 4 (Close Gate).
+Those checkpoints evaluate independent observable consequences and are never suppressed
+by prior dismissals — even if the same system was dismissed twice at Entry Gate.
+Rationale: a dismissed signal means "user chose not to audit now." It does not mean
+"the system is confirmed correct." When a new concrete failure manifests (blocked Must
+item, implementation session failure), it overrides the user's prior "not now" decision.
+
+**"Same system" definition:** A signal counts as the same system if it originates from
+the same Checkpoint number AND references the same named subsystem (e.g., "SDFCacheManager")
+or the same CORE-### item. Signals from different Checkpoints, or referencing different
+subsystems, are always independent — prior dismissal does not suppress them.
+
+**"New trigger" definition:** A new trigger is any signal that either (a) originates from
+a different Checkpoint than the previously dismissed signal, or (b) reports a different
+observable consequence (e.g., a blocked Must item, a failing test, a new crash) rather
+than re-observing the same metric. Re-observing the same metric at the same Checkpoint
+is a re-surface, not a new trigger.
 
 ---
 
