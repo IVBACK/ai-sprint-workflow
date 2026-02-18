@@ -145,16 +145,23 @@ existing project files (e.g., `package.json` reveals language + test framework).
 > framework for detected language] now, or defer testing to Sprint 2?" If deferred: Close
 > Gate Phase 4 logs "no test framework" as known gap with target sprint.
 
+> **VCS auto-detect:** Scan for `.git`, `.svn`, `.hg` at project root.
+> Record result as `VCS: git | svn | none` in CLAUDE.md §Project Summary.
+> If VCS=none: skip Q11 (commit style); Phase 1b uses Entry Gate notes
+> instead of `git diff`; TRACKING.md recovery falls back to user verification.
+
 **Workflow Preferences:**
 
 | # | Question | Why it matters | Default if unanswered |
 |---|----------|---------------|----------------------|
 | 10 | Language for docs and commit messages? | Consistency across project | English |
-| 11 | Preferred commit style? (conventional, free-form) | Commit message format in rules | Free-form |
-| 12 | Anything that must NEVER change? (API contracts, data formats) | Seed "Immutable Contracts" in CLAUDE.md | None → discover during implementation ⁵ |
+| 11 | Preferred commit style? (conventional, free-form) ⁵ | Commit message format in rules | Free-form — **skip if VCS=none** |
+| 12 | Anything that must NEVER change? (API contracts, data formats) | Seed "Immutable Contracts" in CLAUDE.md | None → discover during implementation ⁶ |
 | 13 | Anything else the AI should know? | Catch requirements not covered above | None |
 
-> ⁵ **Q12 details:** "None identified yet — to be discovered during implementation" is valid
+> ⁵ **Q11 details:** Only ask if VCS≠none. If VCS=none, skip entirely — no commits exist.
+>
+> ⁶ **Q12 details:** "None identified yet — to be discovered during implementation" is valid
 > for greenfield projects. Do not invent artificial contracts.
 
 **Rule: Ask all questions in a single batch. Do not drip-feed one at a time.**
@@ -229,6 +236,7 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 ## Project Summary
 
 [One paragraph: language, framework, architecture, target platform, key goals]
+VCS: [git | svn | none]
 
 ## Immutable Contracts
 
@@ -248,8 +256,8 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 - Sprint close gate:
   - Run `Tools/sprint-audit.sh` (automated scan, 12 sections).
   - Manual review (see `CODING_GUARDRAILS.md` §Close Gate).
-- All code, comments, commit messages in [English/language].
-- Commit policy: atomic commits preferred (one logical change per commit).
+- All code, comments in [English/language].
+- Commit policy (if VCS in use): atomic commits preferred (one logical change per commit); commit messages in [English/language]. If VCS=none: skip.
 
 ## Last Checkpoint
 
@@ -576,7 +584,9 @@ Load Entry Gate data before starting:
 - S<N>_ENTRY_GATE.md verification plan per item (Entry Gate 9b invariants)
 
 For each completed item (Must + Should + Could):
-  a. Find implementing files via `git diff` (filtered by item context)
+  a. Find implementing files:
+     - VCS=git: `git diff` filtered by item context
+     - VCS=none: use Entry Gate implementation plan notes; ask user to confirm if ambiguous
   b. Predicted failure modes → is each mode handled in code?
      - Direct: does the item break on its own? (null ref, off-by-one, wrong calc, missing guard)
      - Interaction: does combining with other systems cause failure? (timing, shared state, dispatch order)
@@ -1165,7 +1175,8 @@ This file starts empty on new projects. Add entries when:
 │  → S<N>_ENTRY_GATE.md verification plan per item (9b)           │
 │                                                                 │
 │  Per completed item (Must + Should + Could):                    │
-│  a. Find implementing files (git diff, by item context)         │
+│  a. Find implementing files (git diff if VCS=git, else Entry    │
+│     Gate notes / user confirmation if VCS=none)                 │
 │  b. Predicted failure modes → handled in code?                  │
 │     • Direct (item-internal): null ref, off-by-one, wrong calc  │
 │     • Interaction (cross-system): timing, shared state, order   │
@@ -1570,7 +1581,7 @@ Document loading order (sequential — each step depends on the previous):
 2. Read TRACKING.md → understand current state
    → Tells you: which items are open/in_progress/blocked, current sprint, blockers
    → If TRACKING.md is malformed (broken table, parse errors):
-     reconstruct from last known good state (git history) or ask user to verify.
+     reconstruct from last known good state (git history if VCS=git) or ask user to verify.
 3. Read Roadmap → understand current sprint scope
    → Tells you: Must/Should/Could for current sprint
 4. Decide session mode:
