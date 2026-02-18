@@ -10,6 +10,7 @@ on:
       - validate-workflow.sh
       - validate-paths.sh
       - ROADMAP-DESIGN-PROMPT.md
+      - DESIGN.md
   pull_request:
     branches: [master]
     paths:
@@ -19,6 +20,7 @@ on:
       - validate-workflow.sh
       - validate-paths.sh
       - ROADMAP-DESIGN-PROMPT.md
+      - DESIGN.md
 
 jobs:
   validate:
