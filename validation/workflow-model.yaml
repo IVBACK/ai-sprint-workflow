@@ -1,0 +1,189 @@
+# workflow-model.yaml — Formal structural model of WORKFLOW.md
+#
+# Encodes the three formally-verifiable aspects of the workflow:
+#   1. Item lifecycle state machine (FSM)
+#   2. Decision points (branch coverage requirements)
+#   3. Loops (termination conditions)
+#   4. Gate guards (blocking conditions)
+#
+# MUST be updated atomically with WORKFLOW.md.
+# Validated by: validation/validate-model.sh
+#
+# location_hint supports two formats:
+#   String:  ERE pattern searched across all of WORKFLOW.md
+#   Dict:    Two-stage search — find anchor heading first, then search within window lines
+#            { anchor: 'section heading pattern', pattern: 'content pattern', window: 30 }
+#            Use dict for content that may be reworded; anchor (heading) changes less often.
+
+meta:
+  workflow_file: WORKFLOW.md
+  model_version: "2.0"
+  # SHA-256 of WORKFLOW.md at the time this model was last validated.
+  # validate-model.sh recomputes and fails if mismatch — forces conscious review on WORKFLOW.md changes.
+  # To update after WORKFLOW.md changes:
+  #   python3 -c "import hashlib; print(hashlib.sha256(open('WORKFLOW.md','rb').read()).hexdigest())"
+  workflow_hash: 82a8a60b33629e141376bf87c1b9e5bc0eb153895d0d27dbe58b8c9ab00885a1
+
+# ─── STATE MACHINE ────────────────────────────────────────────────────────────
+# required: true  → BFS reachability is checked (normal-flow states)
+# required: false → state is valid but not required to be reachable via normal BFS
+#                   (used for exceptional / edge-case terminal states)
+# regression_exits: list of exits that only happen on regression
+#                   — reported as INFO, not failed
+
+item_states:
+  - id: open
+    terminal: false
+    required: true
+    exits: [in_progress, blocked, deferred, sprint_abort]
+
+  - id: in_progress
+    terminal: false
+    required: true
+    exits: [fixed, blocked, deferred, sprint_abort]
+
+  - id: fixed
+    terminal: false
+    required: true
+    exits: [verified, in_progress]   # in_progress = rework after failed self-verify
+
+  - id: verified
+    terminal: true
+    required: true
+    exits: [open]
+    regression_exits: [open]         # verified → open only via regression; reported as INFO
+
+  - id: blocked
+    terminal: false
+    required: true
+    exits: [open, in_progress, deferred]
+
+  - id: deferred
+    terminal: true
+    required: false                  # reachable but not on normal happy path
+    exits: []
+
+  - id: sprint_abort
+    terminal: true
+    required: false                  # exceptional path
+    exits: []
+
+# ─── DECISION POINTS ──────────────────────────────────────────────────────────
+# id convention: <gate>_<step>  where gate = EG/CG/MS/IL
+#   EG = Entry Gate, CG = Close Gate, MS = Mid-Sprint, IL = Implementation Loop
+# all_branches_required: true → every option must have a defined next-action in WORKFLOW.md
+# requires_user_approval: true → decision cannot be unilateral AI action
+
+decision_points:
+  - id: EG_08
+    description: "Entry Gate step 8 — 4-option response to strategic alignment failure"
+    location_hint:
+      anchor: '^8\. Strategic alignment'
+      pattern: 'keep.*unchanged|modify.*update.*Roadmap|defer.*deferred|remove.*delete'
+      window: 20
+    options: [keep, modify, defer, remove]
+    all_branches_required: true
+    requires_user_approval: true
+
+  - id: EG_12E
+    description: "Entry Gate step 12e — user does not approve final sprint plan"
+    location_hint: 'return to the relevant phase'
+    options: [rework_phase0, rework_phase3, sprint_abort]
+    all_branches_required: true
+    requires_user_approval: true
+
+  - id: EG_0E
+    description: "Entry Gate phase 0e — user does not approve scope"
+    location_hint: 'does not approve.*identify concerns.*rework'
+    options: [rework_scope, rework_metrics]
+    all_branches_required: true
+    requires_user_approval: true
+
+  - id: CG_MET
+    description: "Close Gate phase 0 — DEFERRED metric: reason + target sprint + user approval required"
+    location_hint: 'DEFERRED.*escalation|[Uu]nmet metric escalation'
+    required_fields: [reason, target_sprint, user_approval]
+
+  - id: MS_SC3
+    description: "Mid-Sprint scope change step 3 — 4 options presented to user"
+    location_hint:
+      anchor: '^### Mid-Sprint Scope Change'
+      pattern: 'hotfix outside sprint scope|Defer to next sprint'
+      window: 30
+    options: [add_must, add_must_defer_existing, hotfix, defer_to_next]
+    all_branches_required: true
+    requires_user_approval: true
+    requires_tracking_update: true
+    requires_roadmap_update: true
+
+  - id: EG_SOS
+    description: "Entry Gate phase 0 — AI flags Must item as potentially Should"
+    location_hint: 'should it be Should[?]'
+    options: [demote_to_should, keep_as_must]
+    all_branches_required: true
+    requires_user_approval: true
+
+  - id: EG_10
+    description: "Entry Gate step 10 — 0 Must items: sprint is empty"
+    location_hint: '0 Must.*sprint is empty.*Present options|sprint is empty.*Sprint Abort'
+    options: [redesign_scope, sprint_abort]
+    all_branches_required: true
+
+  - id: CG_1B
+    description: "Close Gate phase 1b — abbreviated gate skips failure mode step"
+    location_hint: '[Ee]ntry Gate.*abbreviated.*skip|abbreviated.*[Pp]redicted [Ff]ailure'
+    options: [run_full, skip_failure_modes]
+    all_branches_required: true
+
+# ─── LOOPS ───────────────────────────────────────────────────────────────────
+# id convention: <gate>_<abbrev>
+# escalation_required: true → text near anchor must include escalation path
+# resolved_defined: true → "resolved" must be formally defined near anchor
+# fallback_required: true → fallback path for unresolvable cases must exist
+
+loops:
+  - id: IL_SVR
+    description: "Implementation Loop step C — self-verify checklist recheck"
+    location_hint: 'Max 3 rounds|escalate.*user before continuing'
+    max_iterations: 3
+    escalation_required: true
+
+  - id: IL_VIS
+    description: "Implementation Loop step D.5 — user visual confirmation loop"
+    location_hint: 'Max 3 attempts.*if still failing.*log visual gap|still failing.*log visual gap'
+    max_iterations: 3
+    resolved_defined: true
+    fallback_required: true
+
+  - id: IL_ITR
+    description: "Implementation Loop step D.6 — incremental test run loop"
+    location_hint: 'Max 3 fix attempts'
+    max_iterations: 3
+    escalation_required: true
+
+  - id: CG_RRN
+    description: "Close Gate — fix-and-rerun loop after findings"
+    location_hint: 'fix.*before.*closing|[Ss]print looks done.*protocol violation'
+    escalation_required: true
+
+# ─── GUARDS ──────────────────────────────────────────────────────────────────
+# must_block_gate: true → text near hint must include blocking language
+# skip_is_protocol_violation: true → text must explicitly call skipping a protocol violation
+
+guards:
+  - id: CG_AMD
+    description: "Close Gate phase 0 — gate blocked if ALL metrics are DEFERRED"
+    location_hint: 'Guard.*ALL metrics.*DEFERRED|ALL metrics.*DEFERRED.*gate blocked'
+    must_block_gate: true
+
+  - id: CG_PM1
+    description: "Close Gate phase -1 — state recovery is mandatory before every Close Gate"
+    location_hint: 'mandatory.*run before every Close Gate|AI must not proceed to Phase 0 without'
+    must_block_gate: true
+    skip_is_protocol_violation: true
+
+  - id: CG_VRD
+    description: "Close Gate verdict — pre-verdict 7-point checklist must pass"
+    location_hint: 'sprint looks done.*protocol violation|ready to close.*protocol violation'
+    must_block_gate: true
+    skip_is_protocol_violation: true

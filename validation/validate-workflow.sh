@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate-workflow.sh — Structural consistency check for workflow definition files.
 #
-# Validates that README.md, TEMPLATE.md, and sprint-audit-template.sh agree on
+# Validates that README.md, WORKFLOW.md, and sprint-audit-template.sh agree on
 # numeric claims, cross-references, status values, and structural features.
 #
 # Usage:
@@ -20,11 +20,12 @@ LC_ALL=C
 export LC_ALL
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-README="$SCRIPT_DIR/README.md"
-TEMPLATE="$SCRIPT_DIR/TEMPLATE.md"
-AUDIT="$SCRIPT_DIR/sprint-audit-template.sh"
-ROADMAP="$SCRIPT_DIR/ROADMAP-DESIGN-PROMPT.md"
-DESIGN="$SCRIPT_DIR/DESIGN.md"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+README="$REPO_ROOT/README.md"
+WORKFLOW="$REPO_ROOT/WORKFLOW.md"
+AUDIT="$REPO_ROOT/sprint-audit-template.sh"
+ROADMAP="$REPO_ROOT/ROADMAP-DESIGN-PROMPT.md"
+DESIGN="$REPO_ROOT/DESIGN.md"
 
 passes=0
 warnings=0
@@ -59,7 +60,7 @@ extract_section() {
 # ── Pre-flight ──────────────────────────────────────────────
 echo "Validating workflow consistency..."
 preflight_ok=true
-for f in "$README" "$TEMPLATE" "$AUDIT" "$ROADMAP" "$DESIGN"; do
+for f in "$README" "$WORKFLOW" "$AUDIT" "$ROADMAP" "$DESIGN"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR  Required file not found: $f"
     preflight_ok=false
@@ -69,7 +70,7 @@ if ! $preflight_ok; then
   exit 2
 fi
 echo "  README:   $README"
-echo "  TEMPLATE: $TEMPLATE"
+echo "  WORKFLOW: $WORKFLOW"
 echo "  AUDIT:    $AUDIT"
 echo "  ROADMAP:  $ROADMAP"
 echo "  DESIGN:   $DESIGN"
@@ -83,9 +84,9 @@ echo "  CATEGORY 1: Numeric Claim Validation"
 echo "══════════════════════════════════════════════════════"
 
 # 1.1 Discovery question count
-# README claims "14 discovery questions"; TEMPLATE has Q0-Q13 in tables.
+# README claims "14 discovery questions"; WORKFLOW.md has Q0-Q13 in tables.
 readme_dq_claim=$(grep -oE '[0-9]+ discovery questions' "$README" | grep -oE '[0-9]+' | head -1)
-template_dq_section=$(extract_section "$TEMPLATE" "^### Discovery Questions" "^---")
+template_dq_section=$(extract_section "$WORKFLOW" "^### Discovery Questions" "^---")
 template_dq_count=0
 if [[ -n "$template_dq_section" ]]; then
   template_dq_count=$(echo "$template_dq_section" | grep -cE '^\| [0-9]+ \|' || true)
@@ -94,22 +95,22 @@ fi
 if [[ -z "$readme_dq_claim" ]]; then
   warn "DISCOVERY_Q_COUNT" "Could not find discovery question count claim in README"
 elif [[ "$template_dq_count" -eq 0 ]]; then
-  warn "DISCOVERY_Q_COUNT" "Could not extract discovery questions from TEMPLATE (format changed?)"
+  warn "DISCOVERY_Q_COUNT" "Could not extract discovery questions from WORKFLOW.md (format changed?)"
 elif [[ "$readme_dq_claim" -eq "$template_dq_count" ]]; then
   pass "DISCOVERY_Q_COUNT ($readme_dq_claim)"
 else
-  fail "DISCOVERY_Q_COUNT" "README claims $readme_dq_claim, TEMPLATE defines $template_dq_count"
+  fail "DISCOVERY_Q_COUNT" "README claims $readme_dq_claim, WORKFLOW.md defines $template_dq_count"
 fi
 
 # 1.2 Language count
-# README claims "7 languages"; both README and TEMPLATE have language tables.
+# README claims "7 languages"; both README and WORKFLOW.md have language tables.
 readme_lang_claim=$(grep -oE '[0-9]+ languages' "$README" | grep -oE '[0-9]+' | head -1)
 readme_lang_section=$(extract_section "$README" "^## Supported Languages" "^##")
 readme_lang_rows=0
 if [[ -n "$readme_lang_section" ]]; then
   readme_lang_rows=$(echo "$readme_lang_section" | grep -cE '^\| \*\*' || true)
 fi
-template_lang_section=$(extract_section "$TEMPLATE" "^### Language-Specific Pattern Examples" "^---")
+template_lang_section=$(extract_section "$WORKFLOW" "^### Language-Specific Pattern Examples" "^---")
 template_lang_rows=0
 if [[ -n "$template_lang_section" ]]; then
   template_lang_rows=$(echo "$template_lang_section" | grep -cE '^\| \*\*' || true)
@@ -125,7 +126,7 @@ else
     lang_ok=false
   fi
   if [[ "$readme_lang_rows" -ne "$template_lang_rows" ]]; then
-    fail "LANG_COUNT_CROSS" "README table: $readme_lang_rows rows, TEMPLATE table: $template_lang_rows rows"
+    fail "LANG_COUNT_CROSS" "README table: $readme_lang_rows rows, WORKFLOW.md table: $template_lang_rows rows"
     lang_ok=false
   fi
 fi
@@ -134,9 +135,9 @@ $lang_ok && [[ -n "$readme_lang_claim" ]] && pass "LANG_COUNT ($readme_lang_clai
 # 1.3 Bootstrap step count
 # README header: "Bootstrap Steps (9 total)"
 readme_bootstrap_claim=$(grep -oE 'Bootstrap Steps \([0-9]+' "$README" | grep -oE '[0-9]+' | head -1)
-# TEMPLATE bootstrap steps are numbered "1. ... " through "9. ..." before the first ``` block.
+# WORKFLOW.md bootstrap steps are numbered "1. ... " through "9. ..." before the first ``` block.
 # Use the specific heading "Quick Start — AI Agent Bootstrap" to avoid matching CLAUDE.md template's "Quick Start".
-template_bootstrap_section=$(sed -n '/^## Quick Start.*Bootstrap/,/^```/p' "$TEMPLATE" | head -n -1)
+template_bootstrap_section=$(sed -n '/^## Quick Start.*Bootstrap/,/^```/p' "$WORKFLOW" | head -n -1)
 template_bootstrap_count=0
 if [[ -n "$template_bootstrap_section" ]]; then
   template_bootstrap_count=$(echo "$template_bootstrap_section" | grep -cE '^[0-9]+\. ' || true)
@@ -145,17 +146,17 @@ fi
 if [[ -z "$readme_bootstrap_claim" ]]; then
   warn "BOOTSTRAP_STEPS" "Could not find bootstrap step count in README"
 elif [[ "$template_bootstrap_count" -eq 0 ]]; then
-  warn "BOOTSTRAP_STEPS" "Could not extract bootstrap steps from TEMPLATE (format changed?)"
+  warn "BOOTSTRAP_STEPS" "Could not extract bootstrap steps from WORKFLOW.md (format changed?)"
 elif [[ "$readme_bootstrap_claim" -eq "$template_bootstrap_count" ]]; then
   pass "BOOTSTRAP_STEPS ($readme_bootstrap_claim)"
 else
-  fail "BOOTSTRAP_STEPS" "README claims $readme_bootstrap_claim, TEMPLATE has $template_bootstrap_count"
+  fail "BOOTSTRAP_STEPS" "README claims $readme_bootstrap_claim, WORKFLOW.md has $template_bootstrap_count"
 fi
 
 # 1.4 Close Gate phase count
-# README diagram says "(5 phases)". TEMPLATE has Phase 0, 1a, 1b, 2, 3, 4 = 5 unique numbers.
+# README diagram says "(5 phases)". WORKFLOW.md has Phase 0, 1a, 1b, 2, 3, 4 = 5 unique numbers.
 readme_cg_claim=$(grep -oE '[0-9]+ phases' "$README" | grep -oE '[0-9]+' | head -1)
-template_cg_section=$(extract_section "$TEMPLATE" "^## Close Gate" "^## Sprint Close")
+template_cg_section=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 template_cg_phases=0
 if [[ -n "$template_cg_section" ]]; then
   template_cg_phases=$(echo "$template_cg_section" | grep -oE '\*\*Phase [0-9]+' | grep -oE '[0-9]+' | sort -un | wc -l)
@@ -164,17 +165,17 @@ fi
 if [[ -z "$readme_cg_claim" ]]; then
   warn "CLOSE_GATE_PHASES" "Could not find close gate phase count in README"
 elif [[ "$template_cg_phases" -eq 0 ]]; then
-  warn "CLOSE_GATE_PHASES" "Could not extract phase headers from TEMPLATE (format changed?)"
+  warn "CLOSE_GATE_PHASES" "Could not extract phase headers from WORKFLOW.md (format changed?)"
 elif [[ "$readme_cg_claim" -eq "$template_cg_phases" ]]; then
   pass "CLOSE_GATE_PHASES ($readme_cg_claim)"
 else
-  fail "CLOSE_GATE_PHASES" "README claims $readme_cg_claim, TEMPLATE has $template_cg_phases unique phase numbers"
+  fail "CLOSE_GATE_PHASES" "README claims $readme_cg_claim, WORKFLOW.md has $template_cg_phases unique phase numbers"
 fi
 
 # 1.5 Entry Gate step count
 # README diagram: "12 st" or CLAUDE.md template: "12 steps".
 readme_eg_claim=$(grep -oE '[0-9]+ st[ep)s]' "$README" | grep -oE '[0-9]+' | head -1)
-template_eg_section=$(extract_section "$TEMPLATE" "^## Entry Gate" "^---")
+template_eg_section=$(extract_section "$WORKFLOW" "^## Entry Gate" "^---")
 template_eg_steps=0
 if [[ -n "$template_eg_section" ]]; then
   template_eg_steps=$(echo "$template_eg_section" | grep -cE '^[0-9]+\. ' || true)
@@ -183,24 +184,24 @@ fi
 if [[ -z "$readme_eg_claim" ]]; then
   warn "ENTRY_GATE_STEPS" "Could not find entry gate step count in README"
 elif [[ "$template_eg_steps" -eq 0 ]]; then
-  warn "ENTRY_GATE_STEPS" "Could not extract entry gate steps from TEMPLATE (format changed?)"
+  warn "ENTRY_GATE_STEPS" "Could not extract entry gate steps from WORKFLOW.md (format changed?)"
 elif [[ "$readme_eg_claim" -eq "$template_eg_steps" ]]; then
   pass "ENTRY_GATE_STEPS ($readme_eg_claim)"
 else
-  fail "ENTRY_GATE_STEPS" "README claims $readme_eg_claim, TEMPLATE has $template_eg_steps"
+  fail "ENTRY_GATE_STEPS" "README claims $readme_eg_claim, WORKFLOW.md has $template_eg_steps"
 fi
 
 # 1.6 Audit script section count
-# TEMPLATE CLAUDE.md template mentions "12 sections". Script has "# SECTION N:" headers.
-template_section_claim=$(grep -oE '[0-9]+ sections' "$TEMPLATE" | grep -oE '[0-9]+' | head -1)
+# WORKFLOW.md CLAUDE.md template mentions "12 sections". Script has "# SECTION N:" headers.
+template_section_claim=$(grep -oE '[0-9]+ sections' "$WORKFLOW" | grep -oE '[0-9]+' | head -1)
 audit_section_count=$(grep -cE '^# SECTION [0-9]+' "$AUDIT" || true)
 
 if [[ -z "$template_section_claim" ]]; then
-  warn "AUDIT_SECTIONS" "Could not find section count claim in TEMPLATE"
+  warn "AUDIT_SECTIONS" "Could not find section count claim in WORKFLOW.md"
 elif [[ "$template_section_claim" -eq "$audit_section_count" ]]; then
   pass "AUDIT_SECTIONS ($audit_section_count)"
 else
-  fail "AUDIT_SECTIONS" "TEMPLATE claims $template_section_claim, audit script has $audit_section_count"
+  fail "AUDIT_SECTIONS" "WORKFLOW.md claims $template_section_claim, audit script has $audit_section_count"
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -211,9 +212,9 @@ echo "════════════════════════�
 echo "  CATEGORY 2: Cross-File Reference Integrity"
 echo "══════════════════════════════════════════════════════"
 
-# 2.1 Entry Gate step references in README exist in TEMPLATE
+# 2.1 Entry Gate step references in README exist in WORKFLOW.md
 readme_kdd=$(extract_section "$DESIGN" "^## Key Design Decisions" "^## ")
-eg_section=$(extract_section "$TEMPLATE" "^## Entry Gate" "^---")
+eg_section=$(extract_section "$WORKFLOW" "^## Entry Gate" "^---")
 missing_eg_refs=""
 if [[ -n "$readme_kdd" ]] && [[ -n "$eg_section" ]]; then
   while IFS= read -r ref; do
@@ -228,11 +229,11 @@ fi
 if [[ -z "$missing_eg_refs" ]]; then
   pass "EG_STEP_REFS"
 else
-  fail "EG_STEP_REFS" "README references Entry Gate steps not in TEMPLATE:$missing_eg_refs"
+  fail "EG_STEP_REFS" "README references Entry Gate steps not in WORKFLOW.md:$missing_eg_refs"
 fi
 
-# 2.2 Close Gate Phase references in README exist in TEMPLATE
-cg_section=$(extract_section "$TEMPLATE" "^## Close Gate" "^## Sprint Close")
+# 2.2 Close Gate Phase references in README exist in WORKFLOW.md
+cg_section=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 missing_cg_refs=""
 if [[ -n "$readme_kdd" ]] && [[ -n "$cg_section" ]]; then
   while IFS= read -r ref; do
@@ -257,11 +258,11 @@ fi
 if [[ -z "$missing_cg_refs" ]]; then
   pass "CG_PHASE_REFS"
 else
-  fail "CG_PHASE_REFS" "README references Close Gate phases not in TEMPLATE:$missing_cg_refs"
+  fail "CG_PHASE_REFS" "README references Close Gate phases not in WORKFLOW.md:$missing_cg_refs"
 fi
 
-# 2.3 Sprint Close step references in README exist in TEMPLATE
-sc_section=$(extract_section "$TEMPLATE" "^## Sprint Close" "^---")
+# 2.3 Sprint Close step references in README exist in WORKFLOW.md
+sc_section=$(extract_section "$WORKFLOW" "^## Sprint Close" "^---")
 missing_sc_refs=""
 if [[ -n "$readme_kdd" ]] && [[ -n "$sc_section" ]]; then
   while IFS= read -r ref; do
@@ -276,10 +277,10 @@ fi
 if [[ -z "$missing_sc_refs" ]]; then
   pass "SC_STEP_REFS"
 else
-  fail "SC_STEP_REFS" "README references Sprint Close steps not in TEMPLATE:$missing_sc_refs"
+  fail "SC_STEP_REFS" "README references Sprint Close steps not in WORKFLOW.md:$missing_sc_refs"
 fi
 
-# 2.4 Audit section numbers referenced in TEMPLATE exist in script
+# 2.4 Audit section numbers referenced in WORKFLOW.md exist in script
 missing_audit_refs=""
 while IFS= read -r ref; do
   [[ -z "$ref" ]] && continue
@@ -287,18 +288,18 @@ while IFS= read -r ref; do
   if ! grep -qE "^# SECTION ${sec_num}:" "$AUDIT"; then
     missing_audit_refs="$missing_audit_refs Section-$ref"
   fi
-done < <(grep -oE 'Section [0-9]+[a-c]?' "$TEMPLATE" | grep -oE '[0-9]+[a-c]?' | sort -u)
+done < <(grep -oE 'Section [0-9]+[a-c]?' "$WORKFLOW" | grep -oE '[0-9]+[a-c]?' | sort -u)
 
 if [[ -z "$missing_audit_refs" ]]; then
   pass "AUDIT_SECTION_REFS"
 else
-  fail "AUDIT_SECTION_REFS" "TEMPLATE references audit sections not in script:$missing_audit_refs"
+  fail "AUDIT_SECTION_REFS" "WORKFLOW.md references audit sections not in script:$missing_audit_refs"
 fi
 
-# 2.5 File structure tree parity (README vs TEMPLATE)
+# 2.5 File structure tree parity (README vs WORKFLOW.md)
 # Extract only filenames from tree lines (├── or └── prefixed lines, before # comments)
 readme_tree_files=$(extract_section "$README" "^your-project" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>]+\.(md|sh)' | sort -u)
-template_tree_files=$(extract_section "$TEMPLATE" "^project-root" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>]+\.(md|sh)' | sort -u)
+template_tree_files=$(extract_section "$WORKFLOW" "^project-root" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>]+\.(md|sh)' | sort -u)
 
 if [[ -z "$readme_tree_files" ]] || [[ -z "$template_tree_files" ]]; then
   warn "FILE_TREE" "Could not extract file trees (format changed?)"
@@ -309,7 +310,7 @@ else
   template_only=$(comm -13 <(echo "$readme_tree_files") <(echo "$template_tree_files") | tr '\n' ' ')
   msg=""
   [[ -n "$readme_only" ]] && msg="README-only: ${readme_only}. "
-  [[ -n "$template_only" ]] && msg="${msg}TEMPLATE-only: ${template_only}"
+  [[ -n "$template_only" ]] && msg="${msg}WORKFLOW.md-only: ${template_only}"
   fail "FILE_TREE" "$msg"
 fi
 
@@ -340,7 +341,7 @@ echo "════════════════════════�
 canonical_statuses="open in_progress fixed verified deferred blocked"
 status_ok=true
 for s in $canonical_statuses; do
-  for file_label in "TEMPLATE:$TEMPLATE" "AUDIT:$AUDIT" "DESIGN:$DESIGN"; do
+  for file_label in "WORKFLOW:$WORKFLOW" "AUDIT:$AUDIT" "DESIGN:$DESIGN"; do
     label="${file_label%%:*}"
     fpath="${file_label#*:}"
     if ! grep -qw "$s" "$fpath" 2>/dev/null; then
@@ -358,7 +359,7 @@ $status_ok && pass "ITEM_STATUS_VALUES"
 # 3.2 Metric status values (PASS, DEFERRED, FAIL, MISSING)
 metric_statuses="PASS DEFERRED FAIL MISSING"
 metric_ok=true
-cg_full=$(extract_section "$TEMPLATE" "^## Close Gate" "^## Sprint Close")
+cg_full=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 if [[ -z "$cg_full" ]]; then
   warn "METRIC_STATUS" "Could not extract Close Gate section"
   metric_ok=false
@@ -380,7 +381,7 @@ echo "════════════════════════�
 echo "  CATEGORY 4: Content Parity"
 echo "══════════════════════════════════════════════════════"
 
-# 4.1 Language names match between README and TEMPLATE tables
+# 4.1 Language names match between README and WORKFLOW.md tables
 readme_langs=""
 if [[ -n "$readme_lang_section" ]]; then
   readme_langs=$(echo "$readme_lang_section" | grep -oE '\*\*[^*]+\*\*' | sed 's/\*//g' | sort)
@@ -401,11 +402,11 @@ else
   if [[ "$readme_base" == "$template_base" ]]; then
     warn "LANG_NAMES" "Base names match but full names differ (e.g., TypeScript vs TypeScript/React)"
   else
-    fail "LANG_NAMES" "Language names do not match between README and TEMPLATE"
+    fail "LANG_NAMES" "Language names do not match between README and WORKFLOW.md"
   fi
 fi
 
-# 4.2 Key Design Decisions step/phase references exist in TEMPLATE
+# 4.2 Key Design Decisions step/phase references exist in WORKFLOW.md
 kdd_bad_refs=""
 if [[ -n "$readme_kdd" ]]; then
   # Check all Entry Gate step refs
@@ -452,11 +453,11 @@ else
 fi
 
 # 4.3 Checkbox notation ([x], [~], [ ]) defined consistently
-roadmap_section=$(extract_section "$TEMPLATE" "^### Roadmap.md Template" "^###")
+roadmap_section=$(extract_section "$WORKFLOW" "^### Roadmap.md Template" "^###")
 cb_ok=true
 for cb in '\[x\]' '\[~\]' '\[ \]'; do
   if [[ -n "$roadmap_section" ]] && ! echo "$roadmap_section" | grep -qE "$cb"; then
-    fail "CHECKBOX" "TEMPLATE Roadmap section missing checkbox notation: $cb"
+    fail "CHECKBOX" "WORKFLOW.md Roadmap section missing checkbox notation: $cb"
     cb_ok=false
   fi
   if [[ -n "$sc_section" ]] && ! echo "$sc_section" | grep -qE "$cb"; then
@@ -467,15 +468,15 @@ done
 $cb_ok && pass "CHECKBOX_NOTATION"
 
 # ═══════════════════════════════════════════════════════════════
-#  CATEGORY 5: Internal TEMPLATE Consistency
+#  CATEGORY 5: Internal WORKFLOW.md Consistency
 # ═══════════════════════════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════════════════════"
-echo "  CATEGORY 5: Internal TEMPLATE Consistency"
+echo "  CATEGORY 5: Internal WORKFLOW.md Consistency"
 echo "══════════════════════════════════════════════════════"
 
 # 5.1 §SectionName references resolve to existing headings
-all_headings=$(grep -E '^#{2,3} ' "$TEMPLATE" | sed 's/^#* //' | sed 's/ *$//')
+all_headings=$(grep -E '^#{2,3} ' "$WORKFLOW" | sed 's/^#* //' | sed 's/ *$//')
 
 # Known §-reference → heading substring mappings
 declare -A section_map=(
@@ -514,7 +515,7 @@ fi
 # 5.2 Entry Gate / Close Gate / Sprint Close cross-references valid
 cross_bad=""
 
-# Entry Gate step refs used elsewhere in TEMPLATE
+# Entry Gate step refs used elsewhere in WORKFLOW.md
 if [[ -n "$eg_section" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
@@ -522,10 +523,10 @@ if [[ -n "$eg_section" ]]; then
     if ! echo "$eg_section" | grep -qE "^${step_num}\. "; then
       cross_bad="$cross_bad EG-step-$ref"
     fi
-  done < <(grep -oE 'Entry Gate step [0-9]+[a-e]?' "$TEMPLATE" | grep -oE '[0-9]+[a-e]?' | sort -u)
+  done < <(grep -oE 'Entry Gate step [0-9]+[a-e]?' "$WORKFLOW" | grep -oE '[0-9]+[a-e]?' | sort -u)
 fi
 
-# Sprint Close step refs used elsewhere in TEMPLATE
+# Sprint Close step refs used elsewhere in WORKFLOW.md
 if [[ -n "$sc_section" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
@@ -533,7 +534,7 @@ if [[ -n "$sc_section" ]]; then
     if ! echo "$sc_section" | grep -qE "^${step_num}\. "; then
       cross_bad="$cross_bad SC-step-$ref"
     fi
-  done < <(grep -oE 'Sprint Close step [0-9]+[a-g]?' "$TEMPLATE" | grep -oE '[0-9]+[a-g]?' | sort -u)
+  done < <(grep -oE 'Sprint Close step [0-9]+[a-g]?' "$WORKFLOW" | grep -oE '[0-9]+[a-g]?' | sort -u)
 fi
 
 if [[ -z "$cross_bad" ]]; then
@@ -557,11 +558,11 @@ else
   fail "ROADMAP_README_REF" "README does not reference ROADMAP-DESIGN-PROMPT.md"
 fi
 
-# 6.2 TEMPLATE references ROADMAP-DESIGN-PROMPT.md (design-first path)
-if grep -qF 'ROADMAP-DESIGN-PROMPT.md' "$TEMPLATE"; then
-  pass "ROADMAP_TEMPLATE_REF"
+# 6.2 WORKFLOW.md references ROADMAP-DESIGN-PROMPT.md (design-first path)
+if grep -qF 'ROADMAP-DESIGN-PROMPT.md' "$WORKFLOW"; then
+  pass "ROADMAP_WORKFLOW_REF"
 else
-  fail "ROADMAP_TEMPLATE_REF" "TEMPLATE does not reference ROADMAP-DESIGN-PROMPT.md"
+  fail "ROADMAP_WORKFLOW_REF" "WORKFLOW.md does not reference ROADMAP-DESIGN-PROMPT.md"
 fi
 
 # 6.3 ROADMAP-DESIGN-PROMPT.md has a Format Rules section
@@ -578,15 +579,15 @@ else
   fail "ROADMAP_CORE_IDS" "ROADMAP-DESIGN-PROMPT.md missing CORE-### ID convention"
 fi
 
-# 6.5 TEMPLATE bootstrap step 4 has design-first skip path referencing Roadmap.md.
+# 6.5 WORKFLOW.md bootstrap step 4 has design-first skip path referencing Roadmap.md.
 # Scope: extract only the bootstrap section (Quick Start…Bootstrap → first ``` block)
 # to avoid false positives from other "4. … 5." spans in the document.
-bootstrap_section=$(sed -n '/^## Quick Start.*Bootstrap/,/^```/p' "$TEMPLATE" | head -n -1)
+bootstrap_section=$(sed -n '/^## Quick Start.*Bootstrap/,/^```/p' "$WORKFLOW" | head -n -1)
 bootstrap_step4=$(echo "$bootstrap_section" | sed -n '/^4\. /,/^5\. /p' | head -n -1)
 if echo "$bootstrap_step4" | grep -qiE 'ROADMAP-DESIGN-PROMPT|skip this step|design-first'; then
   pass "ROADMAP_BOOTSTRAP_SKIP"
 else
-  fail "ROADMAP_BOOTSTRAP_SKIP" "TEMPLATE step 4 missing design-first alternative (skip when Roadmap.md exists)"
+  fail "ROADMAP_BOOTSTRAP_SKIP" "WORKFLOW.md step 4 missing design-first alternative (skip when Roadmap.md exists)"
 fi
 
 # 6.6 Audit script has a check() function

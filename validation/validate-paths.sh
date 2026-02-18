@@ -2,7 +2,7 @@
 # validate-paths.sh — Path simulation for workflow definition.
 #
 # Verifies that all major workflow paths (decision points, branches, recovery flows)
-# are fully specified in TEMPLATE.md. Each scenario extracts a specific section
+# are fully specified in WORKFLOW.md. Each scenario extracts a specific section
 # and checks that required branch/path text exists within that section.
 #
 # Usage:
@@ -22,8 +22,9 @@ LC_ALL=C
 export LC_ALL
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE="$SCRIPT_DIR/TEMPLATE.md"
-ROADMAP="$SCRIPT_DIR/ROADMAP-DESIGN-PROMPT.md"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+WORKFLOW="$REPO_ROOT/WORKFLOW.md"
+ROADMAP="$REPO_ROOT/ROADMAP-DESIGN-PROMPT.md"
 
 passes=0
 warnings=0
@@ -87,7 +88,7 @@ file_check() {
 
 # ── Pre-flight ──────────────────────────────────────────────
 preflight_ok=true
-for f in "$TEMPLATE" "$ROADMAP"; do
+for f in "$WORKFLOW" "$ROADMAP"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR  Required file not found: $f"
     preflight_ok=false
@@ -103,21 +104,21 @@ fi
 
 if $SELF_TEST; then
   echo "Running self-test (negative tests)..."
-  echo "Using temp copy — real TEMPLATE.md is never modified."
+  echo "Using temp copy — real WORKFLOW.md is never modified."
   echo ""
 else
   echo "Validating workflow paths..."
-  echo "  TEMPLATE: $TEMPLATE"
+  echo "  WORKFLOW: $WORKFLOW"
   echo ""
 fi
 
 # ── Extract all major sections once ─────────────────────────
 
-# Use the active TEMPLATE (real or temp copy, set later for self-test)
-ACTIVE_TEMPLATE="$TEMPLATE"
+# Use the active WORKFLOW.md (real or temp copy, set later for self-test)
+ACTIVE_WORKFLOW="$WORKFLOW"
 
 run_checks() {
-  local tmpl="$ACTIVE_TEMPLATE"
+  local tmpl="$ACTIVE_WORKFLOW"
   passes=0; warnings=0; failures=0
 
   local eg_section cg_section sc_section
@@ -370,25 +371,56 @@ run_checks() {
   echo ""
   echo "── SCENARIO 11: Design-First Path ──"
 
-  # TEMPLATE step 4 has the design-first skip alternative
+  # WORKFLOW.md step 4 has the design-first skip alternative
   file_check "S11_STEP4_SKIP" "$tmpl" \
     "design-first alternative|skip this step entirely" \
-    "TEMPLATE step 4 missing design-first alternative (skip when Roadmap.md exists)"
+    "WORKFLOW.md step 4 missing design-first alternative (skip when Roadmap.md exists)"
 
-  # TEMPLATE bootstrap detects existing Roadmap.md and skips Initial Planning
+  # WORKFLOW.md bootstrap detects existing Roadmap.md and skips Initial Planning
   file_check "S11_ROADMAP_DETECT" "$tmpl" \
     "Roadmap\.md already exists|skip Initial Planning" \
-    "TEMPLATE missing bootstrap detection of existing Roadmap.md → skip step 4"
+    "WORKFLOW.md missing bootstrap detection of existing Roadmap.md → skip step 4"
 
-  # TEMPLATE step 5 feeds Non-Negotiable Contracts from Roadmap.md into CLAUDE.md
+  # WORKFLOW.md step 5 feeds Non-Negotiable Contracts from Roadmap.md into CLAUDE.md
   file_check "S11_CONTRACT_FEED" "$tmpl" \
     "Non-Negotiable Contracts.*CLAUDE|read Roadmap.*§Non-Negotiable" \
-    "TEMPLATE step 5 missing design-first contract feed into CLAUDE.md"
+    "WORKFLOW.md step 5 missing design-first contract feed into CLAUDE.md"
 
-  # ROADMAP-DESIGN-PROMPT.md usage flow references TEMPLATE.md bootstrap step
+  # ROADMAP-DESIGN-PROMPT.md usage flow references WORKFLOW.md bootstrap step
   file_check "S11_USAGE_FLOW" "$ROADMAP" \
-    "TEMPLATE\.md.*bootstrap|bootstrap.*TEMPLATE\.md" \
-    "ROADMAP-DESIGN-PROMPT.md usage flow missing link to TEMPLATE.md bootstrap"
+    "WORKFLOW.md.*bootstrap|bootstrap.*WORKFLOW.md" \
+    "ROADMAP-DESIGN-PROMPT.md usage flow missing link to WORKFLOW.md bootstrap"
+
+  # ═══════════════════════════════════════════════════════════════
+  #  SCENARIO 12: Workflow Integrity — Recurring Bug Categories
+  # ═══════════════════════════════════════════════════════════════
+  echo ""
+  echo "── SCENARIO 12: Workflow Integrity ──"
+
+  # CP1 must reference Phase 1 step 3 (not "step 6" which is API contract review)
+  file_check "CP1_STEP_REF" "$tmpl" \
+    "Checkpoint 1.*Phase 1 step 3|CP1.*Phase 1 step 3" \
+    "CP1 label must reference Phase 1 step 3 (not step 6 — step 6 is API contract review)"
+
+  # Abbreviated mode must include section-clearing step after step 2 (Fix B side effect)
+  section_check "ABBREVIATED_CLEARS" "$eg_section" \
+    "abbreviated only.*[Cc]lear|After step 2.*abbreviated" \
+    "Abbreviated Entry Gate missing clearing step for Predicted Failure Modes after step 2"
+
+  # TRACKING.md template must contain Performance Baseline Log section
+  file_check "PERF_BASELINE_TMPL" "$tmpl" \
+    "Performance Baseline Log" \
+    "TRACKING.md template missing §Performance Baseline Log (read by CP1, written by Sprint Close step 5)"
+
+  # Session Start step 4a must NOT auto-start Entry Gate (user-initiated principle)
+  section_check "ENTRY_GATE_INITIATED" "$session_section" \
+    "Do NOT begin Entry Gate|inform user.*Entry Gate.*wait" \
+    "Session Start Protocol step 4a must state Entry Gate is user-initiated (not auto-start)"
+
+  # Session Start step 4d must NOT auto-suggest Close Gate (user-initiated principle)
+  section_check "CLOSE_GATE_INITIATED" "$session_section" \
+    "Do NOT suggest Close Gate" \
+    "Session Start Protocol step 4d must prohibit unprompted Close Gate suggestion"
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -396,11 +428,11 @@ run_checks() {
 # ═══════════════════════════════════════════════════════════════
 
 if ! $SELF_TEST; then
-  # Normal mode: run checks against real TEMPLATE.md
+  # Normal mode: run checks against real WORKFLOW.md
   run_checks
 else
   # Self-test mode: verify that removing each GAP fix causes the corresponding check to FAIL.
-  # CRITICAL: Never modify the real TEMPLATE.md. Use a temp copy with trap cleanup.
+  # CRITICAL: Never modify the real WORKFLOW.md. Use a temp copy with trap cleanup.
   tmp_dir=$(mktemp -d)
   trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -419,6 +451,11 @@ else
     "GAP_S9_EXIT"
     "GAP_S10_CONTRACT"
     "GAP_S11_DESIGNFIRST"
+    "CP1_STEP_REF_REMOVAL"
+    "ABBREV_CLEARS_REMOVAL"
+    "PERF_BASELINE_REMOVAL"
+    "ENTRY_INITIATED_REMOVAL"
+    "CLOSE_INITIATED_REMOVAL"
   )
   declare -a gap_patterns=(
     "does not approve.*return to"
@@ -433,6 +470,11 @@ else
     "[Ee]xit code 0.*clean|[Ee]xit code 0.*proceed"
     "blast radius"
     "design-first alternative|skip this step entirely"
+    "Checkpoint 1.*Phase 1 step 3|CP1.*Phase 1 step 3"
+    "abbreviated only.*[Cc]lear|After step 2.*abbreviated"
+    "Performance Baseline Log"
+    "Do NOT begin Entry Gate"
+    "Do NOT suggest Close Gate"
   )
   declare -a gap_expected=(
     "S2_STEP12E_REJECT"
@@ -447,6 +489,11 @@ else
     "S9_EXIT_0"
     "S10_BLAST_RADIUS"
     "S11_STEP4_SKIP"
+    "CP1_STEP_REF"
+    "ABBREVIATED_CLEARS"
+    "PERF_BASELINE_TMPL"
+    "ENTRY_GATE_INITIATED"
+    "CLOSE_GATE_INITIATED"
   )
 
   self_test_pass=0
@@ -460,11 +507,11 @@ else
     echo "── Self-test: $test_name ──"
 
     # Create a temp copy with the GAP fix text removed
-    tmp_file="$tmp_dir/TEMPLATE.md"
-    grep -vE "$remove_pattern" "$TEMPLATE" > "$tmp_file" 2>/dev/null || cp "$TEMPLATE" "$tmp_file"
+    tmp_file="$tmp_dir/WORKFLOW.md"
+    grep -vE "$remove_pattern" "$WORKFLOW" > "$tmp_file" 2>/dev/null || cp "$WORKFLOW" "$tmp_file"
 
     # Run checks against the modified copy (capture output)
-    ACTIVE_TEMPLATE="$tmp_file"
+    ACTIVE_WORKFLOW="$tmp_file"
     output=$(run_checks 2>&1)
 
     # Check if the expected check FAILed
@@ -480,7 +527,7 @@ else
   done
 
   # Reset to real template for summary
-  ACTIVE_TEMPLATE="$TEMPLATE"
+  ACTIVE_WORKFLOW="$WORKFLOW"
 
   echo "══════════════════════════════════════════════════════"
   echo "Self-test: $self_test_pass passed, $self_test_fail failed out of ${#gap_names[@]} tests."
@@ -500,7 +547,7 @@ echo ""
 echo "══════════════════════════════════════════════════════"
 if [[ $failures -gt 0 ]]; then
   echo "Path validation: $passes passed, $warnings warning(s), $failures FAILURE(s)."
-  echo "FAIL findings indicate missing workflow paths — fix in TEMPLATE.md."
+  echo "FAIL findings indicate missing workflow paths — fix in WORKFLOW.md."
   exit 2
 elif [[ $warnings -gt 0 ]]; then
   echo "Path validation: $passes passed, $warnings warning(s), 0 failures."
