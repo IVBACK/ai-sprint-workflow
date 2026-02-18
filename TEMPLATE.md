@@ -2405,6 +2405,8 @@ Three interruption types and how to handle each:
 - Run ALL tests written so far after each item (D.6) — do not accumulate failures across items
 - Update TRACKING.md after every significant change
 - Never skip self-verification or D.6 incremental test run to "save time"
+- Before fixing a bug, write the root cause in one sentence.
+  If you can't write it confidently, investigate more before implementing.
 ```
 
 ### Auto-Detection Obligation
