@@ -9,13 +9,13 @@ Works with existing projects and greenfield (empty) projects alike.
 
 ### Compatibility
 
-| Agent | Status |
-|-------|--------|
-| **Claude Code** | Tested |
-| Cursor | Should work (untested) |
-| GitHub Copilot | Should work (untested) |
-| Windsurf | Should work (untested) |
-| Any agent that reads markdown | Should work (untested) |
+| Agent | Status | Notes |
+|-------|--------|-------|
+| **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) |
+| Cursor | Should work (untested) | |
+| GitHub Copilot | Should work (untested) | |
+| Windsurf | Should work (untested) | |
+| Any agent that reads markdown | Should work (untested) | |
 
 > The workflow uses plain markdown files and bash scripts — no agent-specific APIs.
 > Any AI coding agent that can read files and follow instructions should work.
@@ -168,6 +168,10 @@ lessons to capture), design the roadmap in a separate focused session before boo
 ### Claude Code: Hook Enforcement (Optional)
 
 If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer that enforces workflow rules mechanically — without relying on the agent reading and remembering them.
+
+**How to get the hooks:**
+- **Bootstrap (recommended):** The agent creates all hook files automatically during bootstrap (step 8.5) — file contents are embedded in WORKFLOW.md's File Templates section, no separate download needed.
+- **Manual:** Clone this repo and copy the `.claude/` directory into your project.
 
 | Hook | Trigger | What it enforces |
 |------|---------|-----------------|
