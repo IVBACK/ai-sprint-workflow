@@ -115,6 +115,10 @@ run_mutation "EG-S06" \
   'should it be Should[?]' \
   'should it be Should?'
 
+run_mutation "EG-S07" \
+  'Check previous sprint.*Sprint Close completion|Sprint Close.*complete.*Change Log' \
+  "Check previous sprint's Sprint Close completion:"
+
 echo ""
 
 # ─── CLOSE GATE ──────────────────────────────────────────────────────────────
@@ -160,6 +164,14 @@ run_mutation "IL-S02" \
 run_mutation "IL-S03" \
   'Max 3 attempts.*if still failing.*log visual gap' \
   'Max 3 attempts; if still failing: log visual gap in'
+
+run_mutation "IL-S04" \
+  'scope-outside fix.*immediately log|immediately log.*TRACKING.*Change Log' \
+  'immediately log it in TRACKING.md §Change Log:'
+
+run_mutation "IL-S05" \
+  'Read the GUARDRAILS sections identified in Entry Gate Phase 1' \
+  'Read the GUARDRAILS sections identified in Entry Gate Phase 1 step 4 (relevant to this task type)'
 
 echo ""
 
@@ -238,12 +250,105 @@ run_mutation "PB-S01" \
 
 echo ""
 
+# ─── GUARDRAIL UPDATE ────────────────────────────────────────────────────────
+echo "▶ Guardrail Update"
+
+run_mutation "GU-S01" \
+  'present proposed rule to user' \
+  'Before adding: present proposed rule to user'
+
+run_mutation "GU-S02" \
+  'Update sprint-audit.sh if pattern is grep-detectable' \
+  '6. Update sprint-audit.sh if pattern is grep-detectable'
+
+echo ""
+
+# ─── ARCHITECTURE REVIEW ─────────────────────────────────────────────────────
+echo "▶ Architecture Review"
+
+run_mutation "AR-S01" \
+  'Same category 2\+ times in last 3 sprints.*flag.*Architecture Review Required' \
+  'Same category 2+ times in last 3 sprints → flag "Architecture Review Required" at next Entry Gate'
+
+echo ""
+
 # ─── FAILURE MODE HISTORY ────────────────────────────────────────────────────
 echo "▶ Failure Mode History"
 
 run_mutation "FM-S01" \
   'failure modes in 3 categories' \
   'list known failure modes in 3 categories:'
+
+echo ""
+
+# ─── Session Boundary ────────────────────────────────────────────────────────
+echo "▶ Session Boundary"
+
+run_mutation "SB-S01" \
+  'AI MUST recommend starting a new session' \
+  'AI MUST recommend starting a new session for implementation ("Continue sprint N").'
+
+echo ""
+
+# ─── Implementation Loop (continued) ─────────────────────────────────────────
+echo "▶ Implementation Loop (Close Gate initiation)"
+
+run_mutation "IL-S06" \
+  'Close Gate is always user-initiated.*AI does not ask' \
+  'Close Gate is always user-initiated — AI does not ask "shall we close?" unprompted.'
+
+echo ""
+
+# ─── Close Gate ───────────────────────────────────────────────────────────────
+echo "▶ Close Gate (blocking escalation)"
+
+run_mutation "CG-S07" \
+  'automatically a blocker' \
+  'the gap is automatically a blocker. It must be resolved before the current sprint'"'"'s Close Gate.'
+
+echo ""
+
+# ─── Entry Gate (Bootstrap) ───────────────────────────────────────────────────
+echo "▶ Entry Gate (VCS=none fallback)"
+
+run_mutation "EG-S08" \
+  'VCS=none.*Phase 1b|Phase 1b uses Entry Gate notes' \
+  'If VCS=none: skip Q11 (commit style); Phase 1b uses Entry Gate notes'
+
+echo ""
+
+# ─── Sprint Close ─────────────────────────────────────────────────────────────
+echo "▶ Sprint Close"
+
+run_mutation "SC-S01" \
+  'Transfer rows to TRACKING.*Failure Mode History' \
+  'Transfer rows to TRACKING.md §Failure Mode History (include Detection column:'
+
+run_mutation "SC-S02" \
+  'Delete.*ENTRY_GATE' \
+  'its purpose (sprint-scoped reference) is fulfilled.'
+
+echo ""
+
+# ─── Audit Signal ─────────────────────────────────────────────────────────────
+echo "▶ Audit Signal"
+
+run_mutation "AS-S01" \
+  'Surface it to the user immediately using.*AUDIT SIGNAL' \
+  'Surface it to the user immediately using the ⚠ AUDIT SIGNAL format'
+
+run_mutation "AS-S02" \
+  'dismissed twice.*not re-surfaced' \
+  'A signal dismissed twice for the same system is not re-surfaced unless a new trigger fires.'
+
+echo ""
+
+# ─── Implementation Loop (D.6 test run) ──────────────────────────────────────
+echo "▶ Implementation Loop (D.6 incremental test run)"
+
+run_mutation "IL-S07" \
+  'Run ALL tests written so far — current item' \
+  'Run ALL tests written so far — current item + all previous items in this sprint:'
 
 echo ""
 

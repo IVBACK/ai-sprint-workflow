@@ -421,6 +421,71 @@ run_checks() {
   section_check "CLOSE_GATE_INITIATED" "$session_section" \
     "Do NOT suggest Close Gate" \
     "Session Start Protocol step 4d must prohibit unprompted Close Gate suggestion"
+
+  # Entry Gate Phase 1 Step 0: Sprint Close completion check before proceeding
+  section_check "SPRINT_CLOSE_CHECK" "$eg_section" \
+    "Check previous sprint.*Sprint Close|Sprint Close.*complete.*Change Log|Change Log.*Sprint Close.*complete" \
+    "Entry Gate Phase 1 missing Sprint Close completion check (Step 0)"
+
+  # Implementation Loop B: side fix logging rule
+  file_check "SIDE_FIX_LOGGING" "$tmpl" \
+    "Side fix:.*Change Log|scope-outside fix|scope.outside fix" \
+    "Implementation Loop B missing side fix logging rule"
+
+  # Implementation Loop A: guardrails must be read before writing code
+  file_check "GUARDRAIL_READ_BEFORE_CODE" "$tmpl" \
+    "Read the GUARDRAILS sections identified in Entry Gate Phase 1" \
+    "Implementation Loop A missing guardrail read step before writing code"
+
+  # Session boundary: AI MUST recommend new session after Entry Gate (and before Close Gate)
+  file_check "SESSION_BOUNDARY_MANDATORY" "$tmpl" \
+    "AI MUST recommend starting a new session" \
+    "Workflow missing mandatory session boundary recommendation (Entry Gate → impl, impl → Close Gate)"
+
+  # Implementation Loop: Close Gate is user-initiated — AI must NOT suggest it unprompted
+  file_check "CLOSE_GATE_UNPROMPTED" "$tmpl" \
+    "Close Gate is always user-initiated.*AI does not ask" \
+    "Implementation Loop missing explicit constraint: AI must not suggest Close Gate unprompted"
+
+  # Close Gate verdict: pre-verdict guard checklist is mandatory before issuing any recommendation
+  file_check "PREVERDICT_GUARD" "$tmpl" \
+    "Pre-verdict guard.*mandatory" \
+    "Close Gate missing pre-verdict guard (mandatory phase checklist before issuing verdict)"
+
+  # Retroactive audit: REGRESSION/INTEGRATION_GAP affecting Must item → automatic blocker
+  file_check "BLOCKING_ESCALATION" "$tmpl" \
+    "automatically a blocker" \
+    "Retroactive audit missing blocking escalation rule (REGRESSION/INTEGRATION_GAP → Must item blocker)"
+
+  # Bootstrap Q8: VCS=none → Phase 1b falls back to Entry Gate notes
+  file_check "VCS_NONE_FALLBACK" "$tmpl" \
+    "VCS=none.*Phase 1b|Phase 1b uses Entry Gate notes" \
+    "Bootstrap section missing VCS=none fallback for Phase 1b (no git diff available)"
+
+  # Sprint Close step 7d: Failure Encounters rows must be transferred to Failure Mode History
+  file_check "FAILURE_HISTORY_TRANSFER" "$tmpl" \
+    "Transfer rows to TRACKING.*Failure Mode History" \
+    "Sprint Close step 7d missing explicit transfer of Failure Encounters to Failure Mode History"
+
+  # Audit signal: AI MUST surface to user immediately — cannot silently continue
+  file_check "AUDIT_SIGNAL_MANDATORY" "$tmpl" \
+    "Surface it to the user immediately using.*AUDIT SIGNAL" \
+    "Audit signal section missing mandatory surface obligation (AI must not silently continue)"
+
+  # Sprint Close step 7: Entry Gate report file must be deleted after sprint closes
+  file_check "ENTRY_GATE_REPORT_DELETE" "$tmpl" \
+    "Delete.*ENTRY_GATE" \
+    "Sprint Close missing Entry Gate report deletion step (S<N>_ENTRY_GATE.md is temporary)"
+
+  # Audit signal: a signal dismissed twice is not re-surfaced without a new trigger
+  file_check "DISMISSED_SIGNAL_THRESHOLD" "$tmpl" \
+    "dismissed twice.*not re-surfaced" \
+    "Audit signal section missing dismissed-twice suppression threshold rule"
+
+  # Implementation Loop D.6: incremental test run after each item (catches regressions early)
+  file_check "IMPL_LOOP_TEST_RUN" "$tmpl" \
+    "Run ALL tests written so far — current item" \
+    "Implementation Loop D.6 missing incremental test run instruction (run all tests after each item)"
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -456,6 +521,19 @@ else
     "PERF_BASELINE_REMOVAL"
     "ENTRY_INITIATED_REMOVAL"
     "CLOSE_INITIATED_REMOVAL"
+    "SPRINT_CLOSE_CHECK_REMOVAL"
+    "SIDE_FIX_LOGGING_REMOVAL"
+    "GUARDRAIL_READ_BEFORE_CODE_REMOVAL"
+    "SESSION_BOUNDARY_REMOVAL"
+    "CLOSE_GATE_UNPROMPTED_REMOVAL"
+    "PREVERDICT_GUARD_REMOVAL"
+    "BLOCKING_ESCALATION_REMOVAL"
+    "VCS_NONE_FALLBACK_REMOVAL"
+    "FAILURE_HISTORY_TRANSFER_REMOVAL"
+    "AUDIT_SIGNAL_MANDATORY_REMOVAL"
+    "ENTRY_GATE_REPORT_DELETE_REMOVAL"
+    "DISMISSED_SIGNAL_THRESHOLD_REMOVAL"
+    "IMPL_LOOP_TEST_RUN_REMOVAL"
   )
   declare -a gap_patterns=(
     "does not approve.*return to"
@@ -475,6 +553,19 @@ else
     "Performance Baseline Log"
     "Do NOT begin Entry Gate"
     "Do NOT suggest Close Gate"
+    "Check previous sprint.*Sprint Close|Sprint Close.*complete.*Change Log|Change Log.*Sprint Close.*complete"
+    "Side fix:.*Change Log|scope-outside fix|scope.outside fix"
+    "Read the GUARDRAILS sections identified in Entry Gate Phase 1"
+    "AI MUST recommend starting a new session for implementation"
+    "Close Gate is always user-initiated — AI does not ask"
+    "Pre-verdict guard \\(mandatory\\)"
+    "automatically a blocker"
+    "Phase 1b uses Entry Gate notes"
+    "Transfer rows to TRACKING.md §Failure Mode History"
+    "Surface it to the user immediately using the"
+    "Delete.*ENTRY_GATE"
+    "dismissed twice.*not re-surfaced"
+    "Run ALL tests written so far — current item"
   )
   declare -a gap_expected=(
     "S2_STEP12E_REJECT"
@@ -494,6 +585,19 @@ else
     "PERF_BASELINE_TMPL"
     "ENTRY_GATE_INITIATED"
     "CLOSE_GATE_INITIATED"
+    "SPRINT_CLOSE_CHECK"
+    "SIDE_FIX_LOGGING"
+    "GUARDRAIL_READ_BEFORE_CODE"
+    "SESSION_BOUNDARY_MANDATORY"
+    "CLOSE_GATE_UNPROMPTED"
+    "PREVERDICT_GUARD"
+    "BLOCKING_ESCALATION"
+    "VCS_NONE_FALLBACK"
+    "FAILURE_HISTORY_TRANSFER"
+    "AUDIT_SIGNAL_MANDATORY"
+    "ENTRY_GATE_REPORT_DELETE"
+    "DISMISSED_SIGNAL_THRESHOLD"
+    "IMPL_LOOP_TEST_RUN"
   )
 
   self_test_pass=0

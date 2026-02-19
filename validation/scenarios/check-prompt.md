@@ -336,6 +336,33 @@ step 12d logs "Entry Gate (abbreviated)" so Close Gate knows.
 
 ---
 
+### EG-S07
+- id: EG-S07
+- category: entry_gate
+- title: Phase 1 Step 0 — Sprint Close completion check before Entry Gate proceeds
+
+**Situation:** Entry Gate Phase 1 begins. The previous sprint's Sprint Close may not
+have been completed, meaning the failure mode retrospective (Step 7) and any resulting
+guardrail updates may be missing.
+
+**Required behavior:**
+- Must check TRACKING.md §Change Log for Sprint Close completion entry before proceeding
+- If entry is missing: must warn the user explicitly (not silently skip)
+- Must ask user whether to proceed or complete Sprint Close first
+- If proceeding: must log the gap in §Open Risks
+
+**Evidence pattern:**
+```
+Check previous sprint.*Sprint Close completion|Sprint Close.*complete.*Change Log
+```
+
+**Mutation target:**
+```
+Check previous sprint's Sprint Close completion:
+```
+
+---
+
 ### IL-S01
 - id: IL-S01
 - category: impl_loop
@@ -405,6 +432,58 @@ Max 3 attempts.*if still failing.*log visual gap
 **Mutation target:**
 ```
 Max 3 attempts; if still failing: log visual gap in
+```
+
+---
+
+### IL-S05
+- id: IL-S05
+- category: impl_loop
+- title: Implementation Loop A — guardrails must be read BEFORE writing code, not after
+
+**Situation:** The AI is about to start implementing a sprint item. It must read the
+relevant CODING_GUARDRAILS.md sections before writing any code — not after.
+This is the retrieval step that makes the memory system work.
+
+**Required behavior:**
+- Must read guardrail sections identified in Entry Gate Phase 1 step 4
+- Must happen in step A (Pre-code check), before step B (Write code)
+- Reading after writing defeats the purpose — bugs may already be introduced
+
+**Evidence pattern:**
+```
+Read the GUARDRAILS sections identified in Entry Gate Phase 1
+```
+
+**Mutation target:**
+```
+Read the GUARDRAILS sections identified in Entry Gate Phase 1 step 4 (relevant to this task type)
+```
+
+---
+
+### IL-S04
+- id: IL-S04
+- category: impl_loop
+- title: Implementation Loop B — scope-outside fix must be logged in Change Log immediately
+
+**Situation:** During implementation, the AI fixes a bug in a system that is NOT the
+current sprint item (a side fix). This fix is outside sprint scope and will not appear
+in the Close Gate audit unless explicitly logged.
+
+**Required behavior:**
+- Must log the fix immediately in TRACKING.md §Change Log with "Side fix:" prefix
+- Must include: system name, what was wrong, what was changed
+- Must note that this is not a sprint item (so Sprint Close Step 7 can include it)
+
+**Evidence pattern:**
+```
+scope-outside fix.*immediately log|immediately log.*TRACKING.*Change Log
+```
+
+**Mutation target:**
+```
+immediately log it in TRACKING.md §Change Log:
 ```
 
 ---
@@ -679,6 +758,87 @@ Do not invent fake baselines.
 
 ---
 
+## GUARDRAIL UPDATE SCENARIOS
+
+---
+
+### GU-S01
+- id: GU-S01
+- category: guardrail_update
+- title: Sprint Close Step 7e — unpredicted failure must not silently become a guardrail; user approves first
+
+**Situation:** Sprint Close Step 7 retrospective identifies an unpredicted failure.
+The AI wants to add a new guardrail rule to CODING_GUARDRAILS.md.
+
+**Required behavior:**
+- Must present the proposed rule to the user before adding it
+- Must NOT add the guardrail silently
+- User approves → then follow §Update Rule (7 steps)
+- User rejects → no guardrail added
+
+**Evidence pattern:**
+```
+present proposed rule to user
+```
+
+**Mutation target:**
+```
+Before adding: present proposed rule to user
+```
+
+---
+
+### GU-S02
+- id: GU-S02
+- category: guardrail_update
+- title: Update Rule — full 7-step chain must include sprint-audit.sh update and LESSONS_INDEX entry
+
+**Situation:** A guardrail rule is being added via §Update Rule. The chain must be
+complete — stopping at step 5 leaves the rule unenforced by automated scanning and
+untraceable in LESSONS_INDEX.md.
+
+**Required behavior:**
+- Step 6: update sprint-audit.sh if pattern is grep-detectable
+- Step 7: add entry to LESSONS_INDEX.md (RuleID, root cause, section, sprint, source)
+- Both steps are mandatory — skipping either breaks traceability and automation
+
+**Evidence pattern:**
+```
+Update sprint-audit.sh if pattern is grep-detectable
+```
+
+**Mutation target:**
+```
+6. Update sprint-audit.sh if pattern is grep-detectable
+```
+
+---
+
+### AR-S01
+- id: AR-S01
+- category: architecture_review
+- title: Failure Mode History — same category 2+ times triggers Architecture Review Required flag
+
+**Situation:** Sprint Close Step 7f checks Failure Mode History. The same failure
+category has appeared 2+ times in the last 3 sprints.
+
+**Required behavior:**
+- Must flag "Architecture Review Required" at next Entry Gate
+- Must record the flag in TRACKING.md §Open Risks (so Entry Gate 9a picks it up)
+- Must NOT silently note and move on
+
+**Evidence pattern:**
+```
+Same category 2\+ times in last 3 sprints.*flag.*Architecture Review Required
+```
+
+**Mutation target:**
+```
+Same category 2+ times in last 3 sprints → flag "Architecture Review Required" at next Entry Gate
+```
+
+---
+
 ## FAILURE MODE HISTORY SCENARIOS
 
 ---
@@ -707,6 +867,230 @@ list known failure modes in 3 categories:
 
 ---
 
+### SB-S01
+- id: SB-S01
+- category: session_boundary
+- title: Entry Gate complete — new session recommended (mandatory)
+
+**Situation:** Entry Gate Phase 3 step 12e has just approved the sprint. The AI is
+writing the final Entry Gate summary and approval record.
+
+**Required behavior:**
+- Must recommend starting a new session before implementation begins
+- This is mandatory — user may choose to continue but AI must make the recommendation
+- The same rule applies after Close Gate (recommend new session before Close Gate runs)
+
+**Evidence pattern:**
+```
+AI MUST recommend starting a new session
+```
+
+**Mutation target:**
+```
+AI MUST recommend starting a new session for implementation ("Continue sprint N").
+```
+
+---
+
+### IL-S06
+- id: IL-S06
+- category: impl_loop
+- title: Must items done — Close Gate must NOT be auto-suggested by AI
+
+**Situation:** Implementation Loop: all Must items have been verified. The AI is
+deciding what to present to the user next (Should/Could prompt).
+
+**Required behavior:**
+- AI must offer Should/Could continuation prompt only
+- AI must NOT ask "shall we close the sprint?" unprompted
+- Close Gate is always user-initiated — the user opens it when ready
+
+**Evidence pattern:**
+```
+Close Gate is always user-initiated.*AI does not ask
+```
+
+**Mutation target:**
+```
+Close Gate is always user-initiated — AI does not ask "shall we close?" unprompted.
+```
+
+---
+
+### CG-S07
+- id: CG-S07
+- category: close_gate
+- title: Retroactive audit — REGRESSION/INTEGRATION_GAP on Must item is an automatic blocker
+
+**Situation:** A retroactive sprint audit finds a gap classified as REGRESSION or
+INTEGRATION_GAP that affects a current sprint Must item.
+
+**Required behavior:**
+- Gap must be automatically elevated to a sprint blocker
+- AI must present the blocker to the user before continuing with other sprint items
+- Gap cannot be silently deferred or classified as non-blocking
+
+**Evidence pattern:**
+```
+automatically a blocker
+```
+
+**Mutation target:**
+```
+the gap is automatically a blocker. It must be resolved before the current sprint's Close Gate.
+```
+
+---
+
+### EG-S08
+- id: EG-S08
+- category: entry_gate
+- title: Bootstrap — VCS=none uses Entry Gate notes as Phase 1b fallback
+
+**Situation:** During bootstrap, the user answers that the project has no VCS (VCS=none).
+
+**Required behavior:**
+- Phase 1b must NOT attempt to run git diff
+- Phase 1b must fall back to Entry Gate implementation plan notes
+- Q11 (commit style) must be skipped entirely
+
+**Evidence pattern:**
+```
+VCS=none.*Phase 1b|Phase 1b uses Entry Gate notes
+```
+
+**Mutation target:**
+```
+If VCS=none: skip Q11 (commit style); Phase 1b uses Entry Gate notes
+```
+
+---
+
+### SC-S01
+- id: SC-S01
+- category: sprint_close
+- title: Sprint Close — Failure Encounters must be transferred to Failure Mode History
+
+**Situation:** Sprint Close step 7: the AI is processing the retrospective and
+has filled the Failure Encounters table from the sprint.
+
+**Required behavior:**
+- Rows must be explicitly transferred to TRACKING.md §Failure Mode History
+- Transfer must include the Detection column (test / user-visual / profiler)
+- Empty Failure Encounters table → step is incomplete, not skipped
+
+**Evidence pattern:**
+```
+Transfer rows to TRACKING.*Failure Mode History
+```
+
+**Mutation target:**
+```
+Transfer rows to TRACKING.md §Failure Mode History (include Detection column:
+```
+
+---
+
+### AS-S01
+- id: AS-S01
+- category: audit_signal
+- title: Audit signal fires — AI MUST surface immediately and wait for YES/NO
+
+**Situation:** During any checkpoint, an audit signal condition is detected
+(e.g., metric regression, new failure category).
+
+**Required behavior:**
+- AI must surface the signal to the user immediately using the ⚠ AUDIT SIGNAL format
+- AI must NOT silently continue past the signal
+- AI must wait for explicit user YES/NO before proceeding
+
+**Evidence pattern:**
+```
+Surface it to the user immediately using.*AUDIT SIGNAL
+```
+
+**Mutation target:**
+```
+Surface it to the user immediately using the ⚠ AUDIT SIGNAL format
+```
+
+---
+
+### SC-S02
+- id: SC-S02
+- category: sprint_close
+- title: Sprint Close — Entry Gate report file must be deleted
+
+**Situation:** Sprint Close: the sprint has been closed and the Entry Gate report
+file (S<N>_ENTRY_GATE.md) still exists on disk.
+
+**Required behavior:**
+- File must be deleted as part of Sprint Close
+- It is a sprint-scoped temporary artifact — its purpose is fulfilled at close
+- Deletion must be an explicit step, not assumed
+
+**Evidence pattern:**
+```
+Delete.*ENTRY_GATE
+```
+
+**Mutation target:**
+```
+its purpose (sprint-scoped reference) is fulfilled.
+```
+
+---
+
+### AS-S02
+- id: AS-S02
+- category: audit_signal
+- title: Dismissed signal threshold — twice dismissed suppresses re-surface
+
+**Situation:** An audit signal has been dismissed by the user twice for the same
+system. The condition persists. At the next checkpoint, the same signal would fire again.
+
+**Required behavior:**
+- Signal dismissed twice for the same system must NOT be re-surfaced again
+- Re-surface only if a new trigger fires (new data, new sprint item, etc.)
+- This prevents alert fatigue from repeatedly surfacing ignored signals
+
+**Evidence pattern:**
+```
+dismissed twice.*not re-surfaced
+```
+
+**Mutation target:**
+```
+A signal dismissed twice for the same system is not re-surfaced unless a new trigger fires.
+```
+
+---
+
+### IL-S07
+- id: IL-S07
+- category: impl_loop
+- title: D.6 incremental test run — previous item test FAIL is a regression
+
+**Situation:** Implementation Loop D.6: after implementing a new item, the AI runs
+all tests written so far. A test from a previous sprint item fails.
+
+**Required behavior:**
+- Previous item test failure = regression — must be fixed before writing any more code
+- AI must NOT continue to the next item or skip the failure
+- Max 3 fix attempts, then present options to user
+
+**Evidence pattern:**
+```
+Run ALL tests written so far — current item
+```
+
+**Mutation target:**
+```
+Run ALL tests written so far — current item + all previous items in this sprint:
+```
+
+---
+
 ## SUMMARY
 
 | ID     | Category         | Title                                              |
@@ -723,9 +1107,11 @@ list known failure modes in 3 categories:
 | CG-S04 | close_gate       | Pre-verdict checklist mandatory                    |
 | CG-S05 | close_gate       | Critical Axis finding cannot be silently deferred  |
 | CG-S06 | close_gate       | Abbreviated mode logged for Close Gate             |
+| EG-S07 | entry_gate       | Phase 1 Step 0: Sprint Close completion check      |
 | IL-S01 | impl_loop        | Self-verify: 3 rounds max then escalate            |
 | IL-S02 | impl_loop        | D.6 regression: fix before more code              |
 | IL-S03 | impl_loop        | Visual verify: 3 attempts max then gap log         |
+| IL-S04 | impl_loop        | Side fix: must be logged in Change Log immediately |
 | MS-S01 | mid_sprint       | Scope change: user-only initiation                 |
 | MS-S02 | mid_sprint       | Scope change: all 4 options offered                |
 | SA-S01 | sprint_abort       | Abort: user-only initiation                        |
@@ -736,4 +1122,17 @@ list known failure modes in 3 categories:
 | CR-S01 | contract_revision  | Contract revision: user-only initiation            |
 | SN-S01 | scope_negotiation  | Scope: features never silently dropped             |
 | PB-S01 | perf_baseline      | Baseline: never invent when no data exists         |
+| IL-S05 | impl_loop          | Guardrails read before writing code (step A)       |
+| GU-S01 | guardrail_update   | Unpredicted failure: user approves before guardrail added |
+| GU-S02 | guardrail_update   | Update Rule: sprint-audit.sh + LESSONS_INDEX mandatory |
+| AR-S01 | architecture_review| Same category 2+ times → Architecture Review flag  |
 | FM-S01 | failure_modes      | Failure modes: 3-category analysis required        |
+| SB-S01 | session_boundary   | Entry Gate complete: new session recommended (mandatory) |
+| IL-S06 | impl_loop          | Must items done: Close Gate not auto-suggested     |
+| CG-S07 | close_gate         | REGRESSION/INTEGRATION_GAP on Must item → automatic blocker |
+| EG-S08 | entry_gate         | Bootstrap: VCS=none → Phase 1b uses Entry Gate notes |
+| SC-S01 | sprint_close       | Failure Encounters transferred to Failure Mode History |
+| AS-S01 | audit_signal       | Signal fires: surface immediately, wait for YES/NO |
+| SC-S02 | sprint_close       | Sprint Close: Entry Gate report file deleted       |
+| AS-S02 | audit_signal       | Signal dismissed twice: not re-surfaced without new trigger |
+| IL-S07 | impl_loop          | D.6: previous item test FAIL = regression, fix before continuing |
