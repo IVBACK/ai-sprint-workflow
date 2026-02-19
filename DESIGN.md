@@ -111,6 +111,14 @@ AI reads this file
                          └────────┬─────────┘
                                   │
                                   ▼
+                         ┌──────────────────┐     ┌─────────────────────┐
+                         │ 8.5 Claude Code  │────►│ .claude/            │
+                         │ only (optional)  │     │  hooks-config.sh    │
+                         │ Create hook      │     │  settings.json      │
+                         │ infrastructure   │     │  hooks/*.sh (×5)    │
+                         └────────┬─────────┘     └─────────────────────┘
+                                  │
+                                  ▼
                          ┌──────────────────┐
                          │ 9. Confirm        │
                          └──────────────────┘

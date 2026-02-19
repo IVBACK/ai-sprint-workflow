@@ -75,6 +75,17 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
      • "File Templates"
      • "Generic sprint-audit.sh Template"
      • "Checklist — Is Your Project Set Up?"
+8.5. **[Claude Code only — skip if using a different agent]** Create hook infrastructure:
+   - `.claude/hooks-config.sh` — feature flags (enable/disable per hook)
+   - `.claude/settings.json` — hook registrations
+   - `.claude/hooks/protect-claude.sh` — blocks `Write` to `CLAUDE.md`
+   - `.claude/hooks/validate-tracking.sh` — validates TRACKING.md status values after every edit
+   - `.claude/hooks/validate-id-uniqueness.sh` — detects duplicate `CORE-###` IDs
+   - `.claude/hooks/session-start.sh` — injects session start protocol context
+   - `.claude/hooks/entry-gate-session.sh` — injects mandatory session boundary after Entry Gate
+   Make all hook scripts executable (`chmod +x .claude/hooks/*.sh`).
+   File contents: see §File Templates → "Claude Code Hook Templates".
+   These hooks enforce WORKFLOW.md rules mechanically. Other agents are unaffected — `.claude/` is Claude Code-specific.
 9. Confirm the setup with the user. Do NOT silently start Entry Gate — wait for explicit confirmation.
 
 ### Discovery Questions
@@ -434,6 +445,8 @@ If the sprint is still a one-line sketch from Initial Planning:
     - Zero Should/Could? → check if Must includes nice-to-haves that should move down.
     - Must item has no dependencies and no metric? → should it be Should?
     Flag misplacements to user with reasoning. User decides final placement.
+    If user demotes → move item to Should, re-run distribution check.
+    If user keeps → item remains Must, continue to Pass 2.
     **Pass 2 — Dependency promotion (after distribution is validated):**
     Q: Would removing this Should/Could item cause a Must item's metric gate to FAIL?
        YES → promote to Must. It was misclassified — it's a real dependency.
@@ -449,6 +462,15 @@ This is the same process as Initial Planning step 4, applied to the next sprint.
 If items exceed scope limit → apply §Scope Negotiation.
 
 **Phase 1 — State Review (analysis + tracking corrections):**
+0. Check previous sprint's Sprint Close completion:
+   Read TRACKING.md §Change Log for entry: "Sprint Close: complete — Sprint N" (or equivalent).
+   If not found → warn user before proceeding:
+   "Sprint N Sprint Close has no completion entry in Change Log. This means the failure mode
+   retrospective (Step 7) may not have run — guardrails from Sprint N bugs may be missing.
+   Recommended: complete Sprint Close for Sprint N before opening Sprint N+1.
+   Proceed anyway?" User decides.
+   If proceeding without: log in TRACKING.md §Open Risks:
+   "R-###: Sprint N Sprint Close incomplete — retrospective not confirmed, guardrails may be missing. Target: resolve before Sprint N+2."
 1. Read TRACKING.md → open items, blockers, in_progress items from interrupted sessions
    Do NOT clear §Predicted Failure Modes or §Failure Encounters yet — they are cleared
    at step 9a when new predictions are written (clearing before 9a risks data loss if
@@ -621,6 +643,10 @@ For each Must item (in dependency order from Entry Gate step 11):
 
 **B. Write code**
 - Follow guardrails and immutable contracts throughout
+- If you make a fix to a system that is NOT the current sprint item (scope-outside fix):
+  immediately log it in TRACKING.md §Change Log:
+  "Side fix: [system] — [what was wrong] — [what was changed] — not a sprint item."
+  This ensures Sprint Close Step 7 can include it in the retrospective.
 
 **C. Self-verify (5-point checklist)**
 Run before writing any tests:
@@ -930,6 +956,8 @@ Do not declare "audit complete" without per-item acknowledgment.
 7. Failure mode retrospective:
    a. Reconstruct actual failures: review Sprint Board for items that went through fix cycles,
       Change Log for bug-related entries, and §Failure Encounters (if logged during implementation).
+      Also check Change Log for "Side fix:" entries — scope-outside fixes made during implementation.
+      Include these in the retrospective (they are real bugs, even if unplanned).
       List every failure encountered with: Item, Category (direct/interaction/stress-edge), Detection method.
    b. Read TRACKING.md §Predicted Failure Modes (written at 9a).
    c. **Fill structured retrospective table** — one row per predicted mode + one row per actual failure:
@@ -1729,6 +1757,171 @@ Maps bug root causes to guardrail rules. Grows as bugs are found and fixed.
 This file starts empty on new projects. Add entries when:
 1. A bug is fixed and a guardrail rule is created
 2. A known anti-pattern from a previous project is imported
+```
+
+---
+
+### Claude Code Hook Templates
+
+**Only create these if the project uses Claude Code.** Other agents do not read `.claude/`.
+Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
+
+**`.claude/hooks-config.sh`** — feature flags; set to `"false"` to disable a hook without touching `settings.json`:
+
+```bash
+# Claude Code Hooks — Feature Flags
+HOOK_PROTECT_CLAUDE_MD=true
+HOOK_VALIDATE_TRACKING=true
+HOOK_SESSION_START_PROTOCOL=true
+HOOK_VALIDATE_ID_UNIQUENESS=true
+HOOK_ENTRY_GATE_SESSION=true
+```
+
+**`.claude/settings.json`** — hook registrations:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh" }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-claude.sh" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-tracking.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-id-uniqueness.sh" }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/entry-gate-session.sh" }]
+      }
+    ]
+  }
+}
+```
+
+**`.claude/hooks/protect-claude.sh`** — hard block; exit 2 aborts the Write:
+
+```bash
+#!/bin/bash
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_PROTECT_CLAUDE_MD" != "true" ]] && exit 0
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+if [[ "$TOOL" == "Write" ]] && [[ "$FILE" == *"CLAUDE.md"* ]]; then
+    echo "BLOCKED: Writing to CLAUDE.md is not allowed (would overwrite existing content)." >&2
+    echo "Use the Edit tool to append or modify specific sections." >&2
+    exit 2
+fi
+exit 0
+```
+
+**`.claude/hooks/validate-tracking.sh`** — soft warn (exit 1) after TRACKING.md edit:
+
+```bash
+#!/bin/bash
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_VALIDATE_TRACKING" != "true" ]] && exit 0
+INPUT=$(cat)
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+[[ "$FILE" != *"TRACKING.md"* ]] && exit 0
+[[ ! -f "$FILE" ]] && exit 0
+ERRORS=()
+LEGAL="open|in_progress|fixed|verified|deferred|blocked"
+ILLEGAL=$(grep -E '^\| CORE-[0-9]+' "$FILE" | awk -F'|' '{gsub(/ /,"",$4); print NR": "$4}' | grep -Ev "^[0-9]+:($LEGAL)$")
+[[ -n "$ILLEGAL" ]] && ERRORS+=("Illegal status values: $ILLEGAL")
+MISSING_EV=$(grep -E '^\| CORE-[0-9]+' "$FILE" | awk -F'|' '{gsub(/^ +| +$/,"",$4); gsub(/^ +| +$/,"",$6); if ($4=="verified" && $6=="") print $2}')
+[[ -n "$MISSING_EV" ]] && ERRORS+=("'verified' items missing evidence: $MISSING_EV")
+MISSING_RS=$(grep -E '^\| CORE-[0-9]+' "$FILE" | awk -F'|' '{gsub(/^ +| +$/,"",$4); gsub(/^ +| +$/,"",$6); if ($4=="deferred" && $6=="") print $2}')
+[[ -n "$MISSING_RS" ]] && ERRORS+=("'deferred' items missing reason: $MISSING_RS")
+if [[ ${#ERRORS[@]} -gt 0 ]]; then
+    echo "TRACKING.md validation warnings:" >&2
+    for e in "${ERRORS[@]}"; do echo "  $e" >&2; done
+    exit 1
+fi
+exit 0
+```
+
+**`.claude/hooks/validate-id-uniqueness.sh`** — soft warn on duplicate `CORE-###`:
+
+```bash
+#!/bin/bash
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_VALIDATE_ID_UNIQUENESS" != "true" ]] && exit 0
+INPUT=$(cat)
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+[[ "$FILE" != *"TRACKING.md"* ]] && exit 0
+[[ ! -f "$FILE" ]] && exit 0
+DUPES=$(grep -oE 'CORE-[0-9]+' "$FILE" | sort | uniq -d)
+if [[ -n "$DUPES" ]]; then
+    echo "TRACKING.md ID uniqueness violation — duplicate CORE-### IDs found (never reuse an ID):" >&2
+    while IFS= read -r id; do
+        echo "  $id appears $(grep -oE "$id" "$FILE" | wc -l) times" >&2
+    done <<< "$DUPES"
+    exit 1
+fi
+exit 0
+```
+
+**`.claude/hooks/session-start.sh`** — injects session start protocol as additional context:
+
+```bash
+#!/bin/bash
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_SESSION_START_PROTOCOL" != "true" ]] && exit 0
+TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
+CLAUDE_MD=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 1 -name "CLAUDE.md" 2>/dev/null | head -1)
+[[ -z "$TRACKING" && -z "$CLAUDE_MD" ]] && exit 0
+jq -n --arg t "$TRACKING" --arg c "$CLAUDE_MD" '{
+  "additionalContext": (
+    "=== SESSION START PROTOCOL (WORKFLOW.md) ===\n" +
+    "Before doing anything else:\n" +
+    (if $c != "" then "1. Read CLAUDE.md (\($c))\n" else "" end) +
+    (if $t != "" then "2. Read TRACKING.md (\($t))\n" else "" end) +
+    "3. State current sprint and last known status before proceeding.\n" +
+    "============================================"
+  )
+}'
+```
+
+**`.claude/hooks/entry-gate-session.sh`** — injects mandatory session boundary after `S<N>_ENTRY_GATE.md` is written:
+
+```bash
+#!/bin/bash
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_ENTRY_GATE_SESSION" != "true" ]] && exit 0
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+[[ "$TOOL" != "Write" ]] && exit 0
+[[ "$FILE" != *"_ENTRY_GATE.md"* ]] && exit 0
+SPRINT=$(basename "$FILE" | grep -oE 'S[0-9]+')
+jq -n --arg s "$SPRINT" '{
+  "additionalContext": (
+    "=== MANDATORY SESSION BOUNDARY (WORKFLOW.md) ===\n" +
+    "Entry Gate for \($s) written. REQUIRED: tell the user:\n" +
+    "  \"Entry Gate complete. Recommend starting a new session for implementation.\"\n" +
+    "Do NOT begin implementation in this session.\n" +
+    "================================================="
+  )
+}'
 ```
 
 ---

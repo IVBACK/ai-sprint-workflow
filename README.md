@@ -42,7 +42,7 @@ AI coding agents (Claude Code, Cursor, Copilot, etc.) are powerful but stateless
 Every session starts from zero. This workflow solves three problems:
 
 1. **Context loss** — Structured files (`CLAUDE.md`, `TRACKING.md`, `CODING_GUARDRAILS.md`) give the agent instant context on every session start.
-2. **Quality drift** — Three gates (Entry, Self-Verification, Close) catch mistakes before they compound.
+2. **Quality drift** — Three gates (Entry Gate, Close Gate, Sprint Close) catch mistakes before they compound.
 3. **Scope creep** — Must/Should/Could prioritization and strategic alignment checks keep sprints focused.
 
 ## How It Works
@@ -50,7 +50,7 @@ Every session starts from zero. This workflow solves three problems:
 ```
                   ┌──────────────┐
                   │  ENTRY GATE  │  "Are we building the right thing?"
-                  │(ph0-3,12 st)│  Sprint detail + alignment + dependency check
+                  │(ph0-3,13 st)│  Sprint detail + alignment + dependency check
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 1 (metric regression)
                          │               Auto-Detection Checkpoint 2 (failure pattern)
                          ▼
@@ -92,13 +92,15 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
-**Rewrite or complex project with prior experience?** Start with `ROADMAP-DESIGN-PROMPT.md` → then bootstrap. See [Want a richer roadmap?](#want-a-richer-roadmap-design-it-first) below.
-**Everything else:** Go straight to bootstrap.
+**Rewrite or complex project with prior experience?** Design the roadmap first — see [Want a richer roadmap?](#want-a-richer-roadmap-design-it-first) below. Otherwise:
 
 **Already in an AI session (recommended):**
 
-Tell the agent:
-> "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
+Copy and paste to your agent:
+
+```
+"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
+```
 
 The agent fetches the file and runs the bootstrap directly — no manual download needed.
 
@@ -106,7 +108,7 @@ The agent fetches the file and runs the bootstrap directly — no manual downloa
 ```bash
 curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md
 ```
-Then tell the agent: "Read WORKFLOW.md and bootstrap this project."
+Then tell the agent: `"Read WORKFLOW.md and bootstrap this project."`
 
 **Either way, the agent will:**
 - Detect whether this is a greenfield or existing project (Step 0)
@@ -118,10 +120,17 @@ Then tell the agent: "Read WORKFLOW.md and bootstrap this project."
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
 - Adapt audit script patterns to your detected language (multi-language projects supported)
 - Create `Docs/SPRINT_WORKFLOW.md` from `WORKFLOW.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
+- **[Claude Code only]** Create `.claude/` hook infrastructure (step 8.5) — enforces workflow rules mechanically; see [Claude Code: Hook Enforcement](#claude-code-hook-enforcement-optional) below
 - Confirm the setup with you before writing any feature code
 
-Start your first sprint — the agent will ask before running Entry Gate.
-For subsequent sessions: tell the agent **"Continue sprint N"** or **"Resume"**.
+After setup is confirmed, start your first sprint:
+
+```
+"Open Sprint 1 for [brief description of what you're building]."
+```
+
+The agent runs the Entry Gate — you review the plan, then implementation begins.
+For subsequent sessions: tell the agent `"Continue sprint N"` or `"Resume"`.
 
 ### Want a richer roadmap? Design it first.
 
@@ -152,8 +161,25 @@ lessons to capture), design the roadmap in a separate focused session before boo
 7. Adapt audit script to detected language
                      Migration: call existing CI commands, don't duplicate checks
 8. WORKFLOW.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
+8.5 [Claude Code only] Create .claude/ hook infrastructure → see below
 9. Confirm with user
 ```
+
+### Claude Code: Hook Enforcement (Optional)
+
+If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer that enforces workflow rules mechanically — without relying on the agent reading and remembering them.
+
+| Hook | Trigger | What it enforces |
+|------|---------|-----------------|
+| `protect-claude.sh` | Before any `Write` | Hard-blocks overwriting `CLAUDE.md` |
+| `validate-tracking.sh` | After `TRACKING.md` edit | Illegal status values, missing evidence on `verified`, missing reason on `deferred` |
+| `validate-id-uniqueness.sh` | After `TRACKING.md` edit | Duplicate `CORE-###` IDs |
+| `session-start.sh` | Every session start | Injects "read TRACKING.md first" protocol into agent context |
+| `entry-gate-session.sh` | After Entry Gate report written | Injects mandatory session boundary recommendation |
+
+All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable that hook without modifying `settings.json`.
+
+Other agents (Cursor, Copilot, Windsurf, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
 Empty project? Step 1 is skipped — Discovery Questions cover language/framework.
 
@@ -170,6 +196,7 @@ Questions are asked in a single batch. Answers inferrable from project files
 
 Q0 auto-detects from project files; asks explicitly if the project is empty. If user is undecided, AI proposes options with trade-offs.
 VCS is auto-detected (`.git`, `.svn`, `.hg`). Result recorded in `CLAUDE.md`. If VCS=none: Q11 skipped, Close Gate Phase 1b uses Entry Gate implementation notes instead of `git diff`, TRACKING.md recovery falls back to user verification.
+Q12 (Immutable contracts): technical constraints that must never change mid-sprint — e.g. "API response format X", "must support offline mode". Recorded in `CLAUDE.md §Immutable Contracts` and enforced at every Entry Gate. "None yet" is a valid answer — contracts are discovered during implementation.
 Q13 is an open-ended catch-all for context that doesn't fit the predefined categories.
 Q14 (Critical Axis): the project's #1 non-negotiable quality concern — security, performance, reliability, correctness, or other. If unanswered, inferred from domain (payment/auth → security; game/realtime → performance; medical/finance → correctness). Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis; Close Gate Phase 2 prevents silent deferral of findings in this domain.
 
@@ -206,6 +233,20 @@ your-project/
     └── sprint-audit.sh           # Automated close gate checks
 ```
 
+If using Claude Code (step 8.5 — optional):
+
+```
+.claude/                          # Claude Code hook enforcement layer
+├── hooks-config.sh               # Feature flags (toggle individual hooks on/off)
+├── settings.json                 # Hook registrations
+└── hooks/
+    ├── protect-claude.sh         # Hard-blocks Write to CLAUDE.md
+    ├── validate-tracking.sh      # Validates TRACKING.md status values
+    ├── validate-id-uniqueness.sh # Detects duplicate CORE-### IDs
+    ├── session-start.sh          # Injects session start protocol
+    └── entry-gate-session.sh     # Injects session boundary after Entry Gate
+```
+
 ### Why Separate Files?
 
 ```
@@ -237,18 +278,20 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 
 → Full design rationale (39 decisions): [DESIGN.md](DESIGN.md)
 
-## Self-Validation
+## For Contributors — Self-Validation
+
+> These scripts validate the workflow template itself. Skip this section unless you're contributing to or modifying `WORKFLOW.md`.
 
 The workflow validates itself at five levels. All scripts live in `validation/`.
 
 | Level | Script | What it catches | When to run |
 |-------|--------|----------------|-------------|
 | **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
-| **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (49 checks) | Same as above |
+| **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (62 checks) | Same as above |
 | **Formal model** | `bash validation/validate-model.sh` | FSM reachability/traps, decision point locations, loop termination, guard blocking (58 checks) | After adding/changing a decision point, loop, or guard in WORKFLOW.md — also update `validation/workflow-model.yaml` |
-| **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (26 mutation tests) | After changing scenario-related WORKFLOW.md text |
-| **Negative tests** | `bash validation/validate-paths.sh --self-test` and `bash validation/validate-model.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies scripts catch it (17+8 tests) | After changing validation scripts or gap-related WORKFLOW.md text |
-| **Semantic** | Copy `validation/verify-workflow-semantic.md` into an AI session | Intent correctness, dead ends, user gate enforcement, data provenance (~21 questions; F/C/A already automated) | After major workflow changes or periodically |
+| **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (41 mutation tests) | After changing scenario-related WORKFLOW.md text |
+| **Negative tests** | `bash validation/validate-paths.sh --self-test` and `bash validation/validate-model.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies scripts catch it (30+8 tests) | After changing validation scripts or gap-related WORKFLOW.md text |
+| **Semantic** | Copy `validation/verify-workflow-semantic.md` into an AI session | Intent correctness, dead ends, user gate enforcement, data provenance (~27 questions; C and F automated, skip those) | After major workflow changes or periodically |
 
 CI runs structural + path + model + scenario checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
 
