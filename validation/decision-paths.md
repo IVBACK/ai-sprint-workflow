@@ -44,6 +44,7 @@ Reference for logic review — each row can be challenged with "is this correct?
 
 | ID | Trigger | Condition | Options | Decides | ? |
 |----|---------|-----------|---------|---------|---|
+| EG1-00 | Step 0: Sprint Close completion check | TRACKING.md §Change Log has "Sprint Close: complete" for previous sprint? | Yes → continue / No → warn user, ask whether to proceed; if proceeding → log in §Open Risks | user | Does not block — user can override. Risk: guardrails from previous sprint may be missing. |
 | EG1-01 | `blocked` item | Blocker still active? | No longer active → update status to `open` / Still active → carry as `blocked` or drop | user | Who decides to drop? Left open. |
 | EG1-02 | `blocked` item | §Open Risks has R-### entry? | Yes → continue / No → create now (ID, Risk, Mitigation, Target Sprint) | AI | How is new R-### ID assigned? No rule. |
 | EG1-03 | `deferred` item | Still valid? | Carry / drop | user | No decision criteria. |
