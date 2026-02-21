@@ -325,6 +325,8 @@ Written at Sprint Close step 7 (retrospective). Read at Entry Gate step 9a (fail
 Pattern rules:
 - Same category 2+ times in last 3 sprints → Architecture Review Required at next Entry Gate.
 - Same detection=user-visual 2+ times → "Can an automated proxy test replace visual check?" mandatory question at next Entry Gate.
+Category naming: use `type:subsystem` format (e.g. `null-ref:Renderer`, `mem-leak:AudioPool`).
+Generic categories (`null-ref`, `crash`) cause CP2 false positives across unrelated subsystems.
 
 | Sprint | Category | Predicted? | Detection | Mode | Impact | Root Cause | Guardrail | Escalate? |
 |--------|----------|------------|-----------|------|--------|------------|-----------|-----------|
@@ -344,10 +346,12 @@ Detection: test / user-visual / profiler / code-review.
 
 Recorded at Sprint Close step 5. Read at Entry Gate Phase 1 step 3 (CP1).
 New row per sprint per tracked metric. Delta = current vs previous sprint value.
+`Value` must be a plain number (no unit suffix) — unit goes in the `Unit` column.
+This format is required for automated CP1 regression detection.
 
-| Sprint | Metric | Value | Method | vs Previous | Delta |
-|--------|--------|-------|--------|-------------|-------|
-| S1 | [metric name] | [value] | [how measured] | — (first entry) | — |
+| Sprint | Metric          | Value | Unit | Method         | vs Previous | Delta  |
+|--------|-----------------|-------|------|----------------|-------------|--------|
+| S1     | [metric_name]   | 12    | ms   | [how measured] | — (first)   | —      |
 
 ## Retroactive Audits
 
@@ -940,6 +944,9 @@ Do not declare "audit complete" without per-item acknowledgment.
      If regression detected → surface to user: "⚠ Performance regression: [metric] was [X]
      in Sprint N-1, now [Y]. Options: (1) fix now — reopen Close Gate Phase 2,
      (2) accept and log in §Open Risks with target sprint." User decides.
+   - If regression is intentional and accepted by user: add a new row to §Performance Baseline
+     Log with the accepted value. This resets the comparison baseline so CP1 does not
+     re-fire next sprint for the same accepted change.
    - No measurable metrics yet? Log: "Performance baseline: not yet established.
      Target: [which metrics to set up] by Sprint [N]." This is valid for early sprints.
      Do not invent fake baselines.
@@ -1122,6 +1129,72 @@ When the user decides to abandon a sprint mid-way (wrong direction, requirements
 ```
 
 Rule: abort ≠ failure. Verified work persists, unfinished work is deferred, not deleted.
+
+### Roadmap Realignment
+
+**Purpose:** Re-synchronize Roadmap.md, TRACKING.md, and reality after unplanned events
+(emergency fixes, mid-sprint pivots, accumulated scope creep, or multiple aborts) have caused
+the planning documents to drift from the actual project state.
+
+**When to use:** Roadmap no longer reflects what was actually built, deferred, or abandoned.
+Items exist in one file but not the other. Sprint assignments are wrong. You look at the
+roadmap and think "this isn't what happened."
+
+**Who initiates:** User. AI may suggest realignment if it detects significant drift during
+Entry Gate Phase 1 (e.g., orphan items, status mismatches), but the user decides.
+
+```
+Phase 1 — Snapshot current reality
+
+1. Open TRACKING.md Sprint Board.
+2. For each item, answer: "What is the ACTUAL status of this right now?"
+   - Does the code exist and work? → verified (add evidence)
+   - Does the code exist but is broken/incomplete? → open or in_progress
+   - Was it intentionally skipped/postponed? → deferred (add reason + target sprint)
+   - Was it abandoned and will never be done? → remove from Sprint Board,
+     log in Change Log: "Removed: [ID] — [reason], [date]"
+3. Update TRACKING.md statuses to match reality. Do not guess — check the code.
+
+Phase 2 — Sync Roadmap.md to TRACKING.md
+
+4. Open Roadmap.md Sprint Overview table.
+   Update each sprint's Status column to match reality:
+   - All items verified → completed
+   - Some items still open → in_progress
+   - Sprint was aborted → aborted
+5. Walk through each sprint section in Roadmap.md:
+   - Items verified in TRACKING.md → [x] in Roadmap
+   - Items deferred in TRACKING.md → [~] in Roadmap + note target sprint
+   - Items removed from TRACKING.md → delete from Roadmap sprint section
+   - Items in TRACKING.md but missing from Roadmap → add to correct sprint section
+   - Items in Roadmap but missing from TRACKING.md → either add to TRACKING.md
+     (if still planned) or delete from Roadmap (if abandoned)
+6. After sync: every CORE-### in TRACKING.md should appear in Roadmap.md
+   and vice versa. No orphans.
+
+Phase 3 — Repair forward plan
+
+7. Identify items with status open/in_progress/deferred that have no sprint assignment
+   or are assigned to a past sprint. These are "homeless items."
+8. For each homeless item, user decides:
+   - Assign to next sprint (add to that sprint's section in Roadmap)
+   - Assign to a future sprint (add to sketch section)
+   - Drop entirely (remove + log in Change Log)
+9. Check sprint scope: if next sprint now has too many Must items from accumulated
+   deferrals, run Scope Negotiation (see §Scope Negotiation above).
+
+Phase 4 — Log and checkpoint
+
+10. Log in TRACKING.md Change Log:
+    "Roadmap realignment: [date] — Reason: [why drift occurred].
+     Moved: [list]. Removed: [list]. Added: [list]."
+11. Update CLAUDE.md §Last Checkpoint with current state.
+12. Proceed to normal Entry Gate for next sprint.
+```
+
+Rule: realignment is a one-time cleanup, not a recurring process. If you need it often,
+the root cause is likely insufficient Mid-Sprint Scope Change discipline — items are being
+changed without logging. Address the process, not just the symptoms.
 
 ### Retroactive Sprint Audit
 

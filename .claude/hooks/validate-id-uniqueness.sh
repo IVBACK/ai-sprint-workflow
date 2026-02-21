@@ -17,7 +17,7 @@ FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 [[ ! -f "$FILE" ]] && exit 0
 
 # Extract all CORE-### IDs and find duplicates
-DUPLICATES=$(grep -oE 'CORE-[0-9]+' "$FILE" | sort | uniq -d)
+DUPLICATES=$(grep -E '^\| CORE-[0-9]+' "$FILE" | grep -oE 'CORE-[0-9]+' | sort | uniq -d)
 
 if [[ -n "$DUPLICATES" ]]; then
     echo "TRACKING.md ID uniqueness violation:" >&2

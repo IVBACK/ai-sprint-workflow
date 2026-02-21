@@ -9,6 +9,7 @@ HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOKS_DIR/../hooks-config.sh"
 
 [[ "$HOOK_SESSION_START_PROTOCOL" != "true" ]] && exit 0
+command -v jq >/dev/null 2>&1 || { echo "WARNING: jq not found — session-start hook disabled. Install jq to enable workflow enforcement." >&2; exit 0; }
 
 # Detect if TRACKING.md exists in working directory
 TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)

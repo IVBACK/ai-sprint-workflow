@@ -26,7 +26,7 @@ LEGAL_STATUSES="open|in_progress|fixed|verified|deferred|blocked"
 # Check 1: Illegal status values in Sprint Board table
 # Table rows look like: | CORE-001 | summary | STATUS | sprint | evidence |
 ILLEGAL=$(grep -E '^\| CORE-[0-9]+' "$TRACKING_FILE" \
-    | awk -F'|' '{gsub(/ /,"",$4); print NR": "$4}' \
+    | awk -F'|' '{gsub(/ /,"",$4); print NR":"$4}' \
     | grep -Ev "^[0-9]+:($LEGAL_STATUSES)$")
 
 if [[ -n "$ILLEGAL" ]]; then
