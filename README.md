@@ -1,6 +1,6 @@
 # AI Sprint Workflow
 
-A sprint workflow template designed for human + AI coding agent collaboration.
+A sprint workflow template (methodology, not a tool) for human + AI coding agent collaboration.
 
 Drop `WORKFLOW.md` into any project and the AI agent bootstraps the full structure:
 tracking, guardrails, audit scripts, and sprint gates — all adapted to your stack.
