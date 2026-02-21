@@ -10,7 +10,7 @@
 # Individual overrides below still take precedence over the mode preset.
 #
 #   lite     — Solo dev, fast iteration. Core safety only.
-#              Enables: protect-claude, validate-tracking, session-start
+#              Enables: protect-claude, validate-tracking, session-start, id-uniqueness
 #              Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression
 #
 #   standard — Default. Full workflow with all hooks.
