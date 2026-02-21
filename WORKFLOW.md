@@ -345,13 +345,13 @@ Detection: test / user-visual / profiler / code-review.
 ## Performance Baseline Log
 
 Recorded at Sprint Close step 5. Read at Entry Gate Phase 1 step 3 (CP1).
-New row per sprint per tracked metric. Delta = current vs previous sprint value.
+New row per sprint per tracked metric. Deltas are derived on demand from adjacent rows.
 `Value` must be a plain number (no unit suffix) — unit goes in the `Unit` column.
 This format is required for automated CP1 regression detection.
 
-| Sprint | Metric          | Value | Unit | Method         | vs Previous | Delta  |
-|--------|-----------------|-------|------|----------------|-------------|--------|
-| S1     | [metric_name]   | 12    | ms   | [how measured] | — (first)   | —      |
+| Sprint | Metric          | Value | Unit | Method         |
+|--------|-----------------|-------|------|----------------|
+| S1     | [metric_name]   | 12    | ms   | [how measured] |
 
 ## Retroactive Audits
 
@@ -540,6 +540,31 @@ If items exceed scope limit → apply §Scope Negotiation.
    AI does not unilaterally change sprint scope — user decides.
    After all items reviewed: if Must count now exceeds scope limit → apply §Scope Negotiation
    before proceeding to step 9.
+
+**Domain Research (conditional — per item, before step 9):**
+For each item, before writing the verification plan:
+- Does this item require domain-specific knowledge? (mathematical formulas, protocol
+  specifications, algorithm implementations, hardware/API behavior, specialized techniques)
+- Is the AI confident it holds correct, verified knowledge — or is it working from
+  approximate memory that could contain errors?
+
+If uncertain or if the domain is specialized:
+   1. **Research:** search for authoritative sources — academic papers (SIGGRAPH, GDC),
+      official specifications, reference implementations from established engines/frameworks.
+   2. **Extract:** document the exact formulas, algorithms, or specifications found.
+   3. **Verify:** cross-reference at least 2 independent sources where possible.
+   4. **Record:** write findings to the Entry Gate report (step 12a) under a
+      "§Domain Research" section — sources, key formulas, and how they map to sprint items.
+
+This step prevents trial-and-error implementation loops. The AI must treat
+"I think the formula is roughly X" as a knowledge gap — not as sufficient basis for coding.
+
+Skip when: item uses well-known patterns within the project's existing stack,
+or the AI can point to a specific authoritative source it has already verified.
+
+Flag items that required research as `research: done` in the Entry Gate report
+so Implementation Loop step A.5 knows research is already complete.
+
 9. Verification plan:
    a. Failure mode analysis (per item — Must, Should, and Could):
       First: read TRACKING.md §Failure Mode History — which categories failed before?
@@ -577,6 +602,8 @@ If items exceed scope limit → apply §Scope Negotiation.
    b. For each item: how will behavior be verified? (unit test / integration test / manual + screenshot)
       Algorithmic items: what invariants must hold? (mathematical properties, reference output, determinism)
       "It runs" ≠ "it is correct".
+      Complex or hard-to-isolate systems: would a dedicated test scene/sandbox accelerate
+      development and verification? If so, note in the verification plan.
    c. Metric sufficiency (per item — Must, Should, and Could):
       Item has no metric gate? Propose one.
       For each metric, all four must hold:
@@ -645,6 +672,24 @@ For each Must item (in dependency order from Entry Gate step 11):
 - Mark item `in_progress` in TRACKING.md
 - Read the GUARDRAILS sections identified in Entry Gate Phase 1 step 4 (relevant to this task type)
 
+**A.5 Domain Research (conditional)**
+Trigger: item was flagged `research: done` at Entry Gate (findings already documented),
+OR the AI encounters uncertainty about the correct approach during pre-code check.
+
+If Entry Gate already completed research for this item:
+→ Read the §Domain Research section from `Docs/Planning/S<N>_ENTRY_GATE.md`.
+  Verify findings are still applicable. Proceed to B.
+
+If research was not done at Entry Gate but a knowledge gap is now apparent:
+1. Search for authoritative sources (papers, specs, reference implementations).
+2. Document exact formulas, algorithms, or specifications.
+3. Cross-reference with at least 2 sources where possible.
+4. Log research findings in TRACKING.md §Change Log:
+   `"Domain research for CORE-###: [topic] — sources: [list]"`
+
+Skip when: item uses well-known patterns, or Entry Gate already completed
+research for this item and findings are documented and still valid.
+
 **B. Write code**
 - Follow guardrails and immutable contracts throughout
 - If you make a fix to a system that is NOT the current sprint item (scope-outside fix):
@@ -660,10 +705,19 @@ Run before writing any tests:
 - [ ] Follows project conventions?
 - [ ] Tech debt introduced? → fix now or document in TRACKING.md
 
-If any item fails: fix and recheck. Max 3 rounds. Still failing after 3 → stop and present
+If any item fails: fix and recheck. Max 3 rounds.
+
+**Research fallback (before 3rd attempt):** If the failure pattern suggests incorrect domain
+knowledge (wrong output values, mathematical errors, spec non-compliance) rather than a
+coding bug — return to step A.5 for domain research before the 3rd attempt. The 3rd attempt
+then uses verified knowledge instead of another guess. Log: "Research fallback triggered for
+CORE-### at self-verify round [N]" in TRACKING.md §Change Log.
+
+Still failing after 3 → stop and present
 to user: "Self-verify item [X] still failing after 3 attempts. Options: (1) accept as known
 technical debt — log in TRACKING.md and continue, (2) block — do not proceed until resolved,
-(3) Sprint Abort if item is critical." User decides.
+(3) Sprint Abort if item is critical, (4) domain research — AI investigates root cause via
+authoritative sources before next attempt (resets attempt counter)." User decides.
 
 **D. Write tests**
 Match test type to what was specified in Entry Gate 9b:
@@ -693,7 +747,8 @@ Run ALL tests written so far — current item + all previous items in this sprin
 - Max 3 fix attempts → stop and present to user: "Test [X] still failing after 3 attempts.
   Options: (1) accept as known gap — log in TRACKING.md, mark test pending for Close Gate,
   (2) block — do not proceed to next item until resolved, (3) Sprint Abort if failure is
-  critical." User decides.
+  critical, (4) domain research — AI investigates root cause via authoritative sources
+  before next attempt (resets attempt counter)." User decides.
 
 Test needs infrastructure not available locally?
 → Mark "pending" in TRACKING.md → it will run at Close Gate Phase 3.
@@ -927,6 +982,9 @@ Do not declare "audit complete" without per-item acknowledgment.
      (explain gap, trace blocker, propose target sprint, user decides).
    If gap is unacceptable and cannot be deferred: reopen Close Gate Phase 0 for that item —
    do not mark sprint done until resolved or explicitly accepted by user.
+   After all checkmarks are applied: archive completed sprint sections older than 1 sprint
+   to Docs/Archive/roadmap-archive.md. Keep active sprint + 1 previous sprint in Roadmap.md.
+   Sprint Overview table stays in Roadmap.md (it is a summary, not per-sprint detail).
 2. TRACKING.md update — `fixed → verified` transition:
    For each item being marked `verified`, confirm before writing:
    - Evidence column is filled (test file:line or run reference from Close Gate Phase 4b).
@@ -990,10 +1048,22 @@ Do not declare "audit complete" without per-item acknowledgment.
    - If §Failure Mode History exceeds 30 rows: archive rows older than 5 sprints
      to Docs/Archive/failure-history-S1-S[N].md. Keep last 5 sprints in TRACKING.md.
    - Entry Gate 9a only needs recent history (last 3 sprints) for pattern detection.
-9. Entry Gate report cleanup:
-   - Delete `Docs/Planning/S<N>_ENTRY_GATE.md` — its purpose (sprint-scoped reference) is fulfilled.
-   - The gate execution log in TRACKING.md (from Entry Gate step 12d) persists as the permanent record.
-10. User handoff summary:
+9. Sprint Board maintenance:
+   - Verified items older than 3 sprints → archive to Docs/Archive/sprint-board-archive.md.
+     Keep current sprint + last 3 sprints in TRACKING.md.
+10. Performance Baseline Log maintenance:
+    - Keep last 5 sprints. Older rows → Docs/Archive/baseline-archive.md.
+      CP1 only needs the last 2 sprints for regression detection.
+11. Retroactive Audits maintenance:
+    - CLOSED audits older than 3 sprints → archive to Docs/Archive/audits-archive.md.
+      OPEN / IN_PROGRESS audits are never archived.
+12. Dismissed Signals maintenance:
+    - Suppressed signals older than 3 sprints → archive to Docs/Archive/signals-archive.md.
+      Non-suppressed signals are never archived (they may still re-surface).
+13. Entry Gate report cleanup:
+    - Delete `Docs/Planning/S<N>_ENTRY_GATE.md` — its purpose (sprint-scoped reference) is fulfilled.
+    - The gate execution log in TRACKING.md (from Entry Gate step 12d) persists as the permanent record.
+14. User handoff summary:
     For each completed item, present to user:
     - **Before/after:** what changed in behavior (1-2 sentences, non-technical)
     - **How:** implementation approach in one sentence (user-level, not method names)
@@ -1004,8 +1074,8 @@ Do not declare "audit complete" without per-item acknowledgment.
     "No visible change — verify via [specific diagnostic/counter/log]"
     Present before marking sprint done. Do not skip if user "already knows" —
     the summary serves as a session handoff record, not just explanation.
-11. Sprint "done"
-    Log to TRACKING.md: "Sprint Close: [date], steps 1-11 ✓"
+15. Sprint "done"
+    Log to TRACKING.md: "Sprint Close: [date], steps 1-15 ✓"
 
 ---
 
@@ -1120,9 +1190,10 @@ When the user decides to abandon a sprint mid-way (wrong direction, requirements
 2. Mark all non-verified items as `deferred` with reason: "sprint aborted — [reason]"
 3. Verified items keep their status (work is not lost)
 4. Skip Close Gate (no items to audit)
-5. Run abbreviated Sprint Close: steps 1-4 + step 6 + step 9 (checkmarks, TRACKING update,
+5. Run abbreviated Sprint Close: steps 1-4 + step 6 + step 13 (checkmarks, TRACKING update,
    checkpoint, changelog archive, workflow integrity check, Entry Gate report cleanup).
-   Skip steps 5, 7-8, and 10 (no baselines, no FM retrospective for an aborted sprint).
+   Skip steps 5, 7-12, 14, and 15 (no baselines, no FM retrospective, no archive maintenance
+   for an aborted sprint). Abort step 6 below replaces the Sprint Close step 15 done log.
 6. Log in TRACKING.md Change Log:
    "Sprint aborted: [date] — Reason: [why]. Verified: [list]. Deferred: [list]."
 7. Next sprint Entry Gate runs normally — deferred items are reviewed at step 3

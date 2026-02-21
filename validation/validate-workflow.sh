@@ -409,14 +409,14 @@ fi
 # 4.2 Key Design Decisions step/phase references exist in WORKFLOW.md
 kdd_bad_refs=""
 if [[ -n "$readme_kdd" ]]; then
-  # Check all Entry Gate step refs
+  # Check Entry Gate step refs (exclude "Sprint Close step" and "Implementation loop step" matches)
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-e]*}"
     if [[ -n "$eg_section" ]] && ! echo "$eg_section" | grep -qE "^${step_num}\. |[[:space:]]${ref}[.):,[:space:]]"; then
       kdd_bad_refs="$kdd_bad_refs EG-$ref"
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'step [0-9]+[a-e]?' | grep -oE '[0-9]+[a-e]?' | sort -u)
+  done < <(echo "$readme_kdd" | grep -oE 'Entry Gate step [0-9]+[a-e]?' | grep -oE '[0-9]+[a-e]?' | sort -u)
 
   # Check Close Gate phase refs (Phase N or sub-item Nx like 4b)
   while IFS= read -r ref; do

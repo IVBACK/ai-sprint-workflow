@@ -33,7 +33,7 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **Cross-sprint learning loop.** `TRACKING.md §Failure Mode History` accumulates failure mode data across sprints. Entry Gate step 9a reads this history before predicting new modes and checks for escalation triggers (Architecture Review, proxy test questions). Sprint Close step 7 writes to it after comparing predictions vs reality. History is archived after 5 sprints to prevent TRACKING.md bloat.
 - **Incremental testing.** Implementation loop step D.6: after each item, all tests written so far (current + previous items) are run before moving to the next item. Regressions are caught immediately — not accumulated until Close Gate. Tests that need unavailable infrastructure are marked "pending" and run at Close Gate Phase 3.
 - **Verification plan quality gate.** Entry Gate step 12c: user reviews each item's test scenario before coding begins. Trivial scenarios ("it runs", "no crash") are sent back for revision. Acceptable scenario must specify inputs, expected outputs or invariants, and at least one failure-inducing case. Prevents the chain from starting with weak verification.
-- **User handoff summary.** Sprint Close step 10: before marking the sprint done, the AI presents each completed item with before/after behavior, one-sentence implementation summary, where to find it, what to verify in the running application, and what should not have changed. Invisible sprints (no visual change) include explicit diagnostic instructions. Never skipped — serves as both explanation and session handoff record.
+- **User handoff summary.** Sprint Close step 14: before marking the sprint done, the AI presents each completed item with before/after behavior, one-sentence implementation summary, where to find it, what to verify in the running application, and what should not have changed. Invisible sprints (no visual change) include explicit diagnostic instructions. Never skipped — serves as both explanation and session handoff record.
 - **Critical Axis enforcement.** Every project declares a #1 non-negotiable quality axis (security, performance, reliability, correctness) at Bootstrap. Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis. Close Gate Phase 2 cannot silently defer findings in this domain — the AI stops, presents options (fix now / defer with explicit rationale / Sprint Abort), and waits for user decision. Prevents an AI agent from treating a payment security gap the same as a missing log line.
 - **Retroactive Sprint Audit.** When a completed sprint's output is found broken or inconsistent with its Close Gate claims, a 7-phase audit procedure opens: evidence collection from the original Close Gate record, current state measurement, gap analysis (5% tolerance on continuous metrics; 0 vs non-zero is always a gap), root cause classification (REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION / COLD_STATE / SCOPE_DRIFT / ENVIRONMENT_DELTA), dependency impact assessment, resolution plan, and audit close written to `TRACKING.md §Retroactive Audits`. The AI actively watches for suspicious signals at 4 checkpoints — Entry Gate (metric regression, failure pattern), Implementation session (broken past-sprint API or failing test), and Close Gate (Must item unverifiable due to past-sprint dependency). When a signal fires, the AI must surface it to the user — it cannot silently continue. Dismissed signals are logged and re-surfaced next sprint; dismissed twice for the same system, they are suppressed (but Checkpoint 3 and 4 are never suppressed by prior dismissals). COLD_STATE classification is valid for a maximum of 2 consecutive sprints — after that, a warm-start measurement is mandatory.
 - **Workflow evolution guard.** AI Agent Operational Rules: before adding any new step or check to the workflow, three questions must pass — does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Does it verify a new class of failure rather than just confirming a previous check ran? The last question is the "who watches the watchers" test. Complexity is a cost paid on every sprint.
@@ -42,6 +42,7 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
 - **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
 - **Abbreviated Entry Gate.** Small sprints (≤3 Must items, no cross-sprint dependencies) run a lighter gate: Phase 0 → state review → strategic alignment → test plan (9b-lite) → scope check → approval. Skips failure mode analysis, metric sufficiency deep check, dependency verification, and implementation ordering. Close Gate Phase 1b adapts automatically — failure mode check is skipped when 9a data is absent. Logged as "Entry Gate (abbreviated)" so the audit trail is clear.
+- **Domain research before trial-and-error.** When an item requires specialized domain knowledge (mathematical formulas, protocol specifications, algorithm implementations, hardware/API behavior), the AI researches authoritative sources before coding — not after failing. Entry Gate flags knowledge gaps proactively (conditional block between steps 8 and 9); Implementation Loop step A.5 executes the research. A reactive fallback triggers research after 2 failed attempts when the failure pattern suggests incorrect domain knowledge rather than a coding bug (wrong output values, mathematical errors, spec non-compliance). "I think the formula is roughly X" is treated as a knowledge gap, not as sufficient basis for implementation. Findings are documented in the Entry Gate report and TRACKING.md Change Log with source references for traceability.
 - **Interruption handling.** Three cases defined: (1) user asks a question mid-task — AI answers, then states where it left off and waits for confirmation before resuming; (2) AI stopped and restarted in the same session — AI reads TRACKING.md, states the in_progress item and best sub-step estimate, verifies code matches status; (3) session fully closed — Session Start Protocol reconstructs from CLAUDE.md Last Checkpoint + TRACKING.md statuses; if sub-step is ambiguous, item restarts from step A rather than guessing mid-item state.
 
 ---
@@ -249,6 +250,15 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  │ relevant?│ │ aligned?  │ │ valid?   │ │ appropriate?    │    │
 │  └──────────┘ └───────────┘ └──────────┘ └─────────────────┘    │
 │                                                                 │
+│  Domain Research (conditional, per item — before step 9):       │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ Requires specialized domain knowledge?                    │  │
+│  │ YES + uncertain → research authoritative sources,         │  │
+│  │   extract formulas/specs, cross-ref 2+ sources,           │  │
+│  │   record in Entry Gate report §Domain Research            │  │
+│  │ NO / already verified → skip                              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
 │  Then:                                                          │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ 9. Verification plan:                                     │  │
@@ -302,6 +312,12 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  │     Read guardrails sections relevant to task type      │    │
 │  │                        │                                │    │
 │  │                        ▼                                │    │
+│  │  A.5 Domain Research (conditional)                      │    │
+│  │     Entry Gate flagged research? → read findings        │    │
+│  │     New knowledge gap? → research authoritative sources │    │
+│  │     Well-known pattern? → skip                          │    │
+│  │                        │                                │    │
+│  │                        ▼                                │    │
 │  │  B. Write code                                          │    │
 │  │     Follow guardrails + immutable contracts             │    │
 │  │                        │                                │    │
@@ -322,9 +338,13 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  │              │ All pass?         │                      │    │
 │  │              │  NO → fix, recheck│                      │    │
 │  │              │  (max 3 rounds;  │                      │    │
+│  │              │   before 3rd:     │                      │    │
+│  │              │   domain knowledge│                      │    │
+│  │              │   issue? → A.5    │                      │    │
+│  │              │   research first) │                      │    │
 │  │              │   still failing → │                      │    │
 │  │              │   escalate to     │                      │    │
-│  │              │   user)           │                      │    │
+│  │              │   user: 4 options │                      │    │
 │  │              │  YES ↓            │                      │    │
 │  │              └───────────────────┘                      │    │
 │  │                        │                                │    │
@@ -366,6 +386,7 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  │     │ FAIL (prev item test) → regression:   │      │    │
 │  │     │   fix before adding more code         │      │    │
 │  │     │ max 3 fix attempts → escalate to user │      │    │
+│  │     │   (4 options incl. domain research)   │      │    │
 │  │     │                                       │      │    │
 │  │     │ Test needs unavailable infra?         │      │    │
 │  │     │ → mark "pending" in TRACKING.md       │      │    │
@@ -638,11 +659,20 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │  8. Failure Mode History maintenance                            │
 │     → >30 rows? Archive older entries to Docs/Archive/          │
 │                                                                 │
-│  9. Entry Gate report cleanup                                   │
+│  9. Sprint Board maintenance                                    │
+│     → Verified items older than 3 sprints → archive             │
+│ 10. Performance Baseline Log maintenance                        │
+│     → Keep last 5 sprints, older → archive                      │
+│ 11. Retroactive Audits maintenance                              │
+│     → CLOSED + older than 3 sprints → archive                   │
+│ 12. Dismissed Signals maintenance                               │
+│     → Suppressed + older than 3 sprints → archive               │
+│                                                                 │
+│ 13. Entry Gate report cleanup                                   │
 │     → Delete Docs/Planning/S<N>_ENTRY_GATE.md                   │
 │     → TRACKING.md gate log persists as permanent record         │
 │                                                                 │
-│ 10. User handoff summary (per completed item):                  │
+│ 14. User handoff summary (per completed item):                  │
 │     → Before/after: behavior change (1-2 sentences)            │
 │     → How: implementation in one sentence (user-level)          │
 │     → Where: file / Inspector path                              │
@@ -651,8 +681,8 @@ Visual overview of the full sprint lifecycle. Authoritative text: `## Entry Gate
 │     Invisible sprint? → state explicitly + name diagnostic      │
 │     Present before marking done. Never skip.                    │
 │                                                                 │
-│ 11. Sprint "done"                                               │
-│     Log: "Sprint Close: [date], steps 1-11 ✓"                   │
+│ 15. Sprint "done"                                               │
+│     Log: "Sprint Close: [date], steps 1-15 ✓"                   │
 │     ──────────► next sprint Entry Gate                          │
 └─────────────────────────────────────────────────────────────────┘
 

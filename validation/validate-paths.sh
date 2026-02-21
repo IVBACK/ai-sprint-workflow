@@ -214,7 +214,7 @@ run_checks() {
     "Sprint Abort missing verified item preservation"
 
   section_check "S4_ABBREVIATED_CLOSE" "$abort_section" \
-    "steps 1-4.*step 9|abbreviated Sprint Close" \
+    "steps 1-4.*step 13|abbreviated Sprint Close" \
     "Sprint Abort missing abbreviated Sprint Close reference"
 
   # ═══════════════════════════════════════════════════════════
@@ -472,7 +472,7 @@ run_checks() {
     "Surface it to the user immediately using.*AUDIT SIGNAL" \
     "Audit signal section missing mandatory surface obligation (AI must not silently continue)"
 
-  # Sprint Close step 7: Entry Gate report file must be deleted after sprint closes
+  # Sprint Close step 13: Entry Gate report file must be deleted after sprint closes
   file_check "ENTRY_GATE_REPORT_DELETE" "$tmpl" \
     "Delete.*ENTRY_GATE" \
     "Sprint Close missing Entry Gate report deletion step (S<N>_ENTRY_GATE.md is temporary)"
