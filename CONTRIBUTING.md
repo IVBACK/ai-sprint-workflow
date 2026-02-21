@@ -12,7 +12,31 @@ If your stack isn't covered, add it:
 
 - Add grep patterns to the Language-Specific Pattern Examples table in `WORKFLOW.md`
 - Add commented examples to `sprint-audit-template.sh`
+- Add a modular adapter to `checks/` (see below)
 - Languages we'd love to see: Swift/iOS, Flutter/Dart, Kotlin, PHP/Laravel, Ruby/Rails, Elixir
+
+### Language Audit Adapters
+
+The `checks/` directory contains modular audit adapters that `sprint-audit.sh`
+can load with `--modular`. To add a new adapter:
+
+1. Create `checks/your-language.sh` following the pattern in existing adapters
+2. Source `common.sh` helpers (`check`, `check_blocker`, `check_multi`)
+3. Add the EXT-to-adapter mapping in `sprint-audit-template.sh`'s `case` statement
+4. Test with: `EXT=your-ext bash sprint-audit-template.sh --modular`
+
+### Agent Playbooks
+
+Adaptation guides for specific AI agents live in `examples/[agent]-playbook/`.
+To contribute a playbook:
+
+1. Create `examples/your-agent-playbook/README.md`
+2. Include: setup steps, hook equivalents table, session prompts, known limitations
+3. Include the agent's native rule file (e.g., `.cursor/rules/*.mdc`, `.clinerules`, `.windsurfrules`)
+4. Add "Read CLAUDE.md" to the session start protocol in the rule file
+5. Update the compatibility table in `README.md`
+
+Existing playbooks: Cursor, GitHub Copilot, Windsurf, Cline, OpenAI Codex CLI, Gemini CLI.
 
 ### Agent Compatibility Reports
 
