@@ -111,7 +111,7 @@ ProjectRoot/
 
 ## Key Learnings
 
-1. **Guardrails from predecessor project saved weeks.** 14.5 sprints of PG-II experience was encoded as Day 0 rules. Zero repeat bugs from known issues.
+1. **Guardrails from predecessor project saved weeks.** 14.5 sprints of predecessor project experience was encoded as Day 0 rules. Zero repeat bugs from known issues.
 
 2. **sprint-audit.sh reduced close gate context from ~4000 lines to ~500 lines.** The script pre-filters mechanical issues, freeing AI context window for semantic analysis.
 

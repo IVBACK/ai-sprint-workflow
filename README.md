@@ -392,10 +392,9 @@ Measurements from real projects using this workflow.
 | Unintended scope changes | 3/sprint avg | 0 | unity-csharp ("AI flags, user decides" rule) |
 | Obsolete item detection | Manual review | Automatic | Entry Gate Step 8 strategic alignment |
 | Repeat bugs from known issues | Recurring | 0 after guardrail | unity-csharp (50+ rules from predecessor project) |
-| Token cost per session start | Baseline | +2-3% of 200K window | [MEMORY-ANALYSIS.md](Docs/MEMORY-ANALYSIS.md) (plateaus at S20) |
-
 ### Known Trade-offs
 
+- **Token cost per session start:** +2-3% of 200K context window at S20 (plateaus due to archive rules)
 - **Bootstrap overhead:** ~15-30 min for first sprint setup (front-loaded, amortized over project lifetime)
 - **Gate overhead:** ~5-25 min per gate depending on mode (Lite → Strict)
 - **Learning curve:** Agent needs ~1 sprint to internalize the workflow patterns
