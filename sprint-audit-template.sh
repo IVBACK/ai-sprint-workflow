@@ -9,7 +9,24 @@ set -uo pipefail
 # the patterns to your language, framework, and project conventions.
 #
 # Usage:
-#   Tools/sprint-audit.sh                       # Full scan
+#   Tools/sprint-audit.sh                       # Full scan (inline checks)
+#   Tools/sprint-audit.sh --modular             # Use checks/ adapter plugins
+#
+# Modular mode:
+#   Instead of uncommenting language-specific patterns in this file, you can
+#   use the checks/ directory with language-specific adapter scripts:
+#     checks/common.sh            — shared helpers (check, check_blocker)
+#     checks/generic.sh           — language-agnostic checks (scaffolding tags)
+#     checks/csharp-unity.sh      — C#/Unity patterns
+#     checks/typescript-react.sh  — TypeScript/React patterns
+#     checks/python.sh            — Python patterns
+#     checks/java.sh              — Java patterns
+#     checks/go.sh                — Go patterns
+#     checks/rust.sh              — Rust patterns
+#     checks/cpp.sh               — C++ patterns
+#
+#   Set CHECKS_DIR and LANG_ADAPTER below, or pass --modular flag.
+#   Custom adapters: create checks/your-framework.sh following the same pattern.
 #
 # Exit codes:
 #   0 = Clean (0 findings)
@@ -20,6 +37,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_DIR="$ROOT/src"         # ← adjust to your source directory
 TEST_DIR="$ROOT/tests"      # ← adjust to your test directory
 EXT="*"                     # ← adjust: "cs", "ts", "py", "java", "go", "rs", "cpp"
+
+# ── Modular adapter settings ──
+CHECKS_DIR="$ROOT/checks"   # ← directory containing adapter scripts
+LANG_ADAPTER=""              # ← set to adapter filename: "typescript-react", "python", etc.
+                             #    or leave empty to use inline checks below
+USE_MODULAR=false
+[[ "${1:-}" == "--modular" ]] && USE_MODULAR=true
 
 total=0
 errors=0
@@ -55,6 +79,61 @@ check() {
     echo "PASS  [$name]"
   fi
 }
+
+# ═══════════════════════════════════════════════════════
+# MODULAR ADAPTER LOADING
+# If --modular flag or LANG_ADAPTER is set, source
+# adapter scripts from checks/ directory instead of
+# using inline checks. Falls back to inline if adapter
+# not found.
+# ═══════════════════════════════════════════════════════
+
+if [[ "$USE_MODULAR" == true ]] || [[ -n "$LANG_ADAPTER" ]]; then
+  # Auto-detect adapter from EXT if not explicitly set
+  if [[ -z "$LANG_ADAPTER" ]]; then
+    case "$EXT" in
+      cs)   LANG_ADAPTER="csharp-unity" ;;
+      ts|tsx) LANG_ADAPTER="typescript-react" ;;
+      py)   LANG_ADAPTER="python" ;;
+      java) LANG_ADAPTER="java" ;;
+      go)   LANG_ADAPTER="go" ;;
+      rs)   LANG_ADAPTER="rust" ;;
+      cpp|hpp) LANG_ADAPTER="cpp" ;;
+      *)    LANG_ADAPTER="" ;;
+    esac
+  fi
+
+  if [[ -f "$CHECKS_DIR/common.sh" ]]; then
+    # shellcheck source=checks/common.sh
+    source "$CHECKS_DIR/common.sh"
+    echo "── Modular mode: common.sh loaded ──"
+
+    # Generic checks (scaffolding, etc.) — always run
+    if [[ -f "$CHECKS_DIR/generic.sh" ]]; then
+      source "$CHECKS_DIR/generic.sh"
+    fi
+
+    # Language-specific adapter
+    if [[ -n "$LANG_ADAPTER" ]] && [[ -f "$CHECKS_DIR/${LANG_ADAPTER}.sh" ]]; then
+      source "$CHECKS_DIR/${LANG_ADAPTER}.sh"
+      echo ""
+      echo "── Adapter loaded: ${LANG_ADAPTER}.sh ──"
+    elif [[ -n "$LANG_ADAPTER" ]]; then
+      echo "WARN  Adapter $CHECKS_DIR/${LANG_ADAPTER}.sh not found — using generic checks only"
+    fi
+  else
+    echo "WARN  $CHECKS_DIR/common.sh not found — falling back to inline checks"
+    USE_MODULAR=false
+  fi
+fi
+
+# ═══════════════════════════════════════════════════════
+# INLINE CHECKS (skipped if modular adapter loaded)
+# Sections 1-8: language-specific patterns.
+# Sections 9+: language-agnostic, always run.
+# ═══════════════════════════════════════════════════════
+
+if [[ "$USE_MODULAR" != true ]]; then
 
 # ═══════════════════════════════════════════════════════
 # SECTION 1: Scaffolding tags
@@ -144,6 +223,13 @@ check "SCAFFOLDING" "TODO\|HACK\|FIXME\|TEMP(S"
 # This is harder to grep — usually a manual check.
 # For Unity, you can check for ProfilerMarker usage:
 # check "OBSERVABILITY" "Dispatch\|Upload\|Evaluate" and cross-check with ProfilerMarker
+
+fi  # End of inline checks (sections 1-8)
+
+# ═══════════════════════════════════════════════════════
+# SECTIONS 9+ below are language-agnostic and always run
+# regardless of modular/inline mode.
+# ═══════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════
 # SECTION 9: Test coverage gap

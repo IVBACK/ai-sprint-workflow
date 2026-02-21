@@ -9,6 +9,9 @@ on:
       - sprint-audit-template.sh
       - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
+      - 'checks/**'
+      - '.claude/hooks-config.sh'
+      - 'Docs/WORKFLOW-MODES.md'
       - validation/validate-workflow.sh
       - validation/validate-paths.sh
       - validation/validate-model.sh
@@ -23,6 +26,9 @@ on:
       - sprint-audit-template.sh
       - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
+      - 'checks/**'
+      - '.claude/hooks-config.sh'
+      - 'Docs/WORKFLOW-MODES.md'
       - validation/validate-workflow.sh
       - validation/validate-paths.sh
       - validation/validate-model.sh

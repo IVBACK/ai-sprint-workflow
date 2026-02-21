@@ -597,6 +597,67 @@ else
   fail "AUDIT_CHECK_FN" "Audit script missing check() function definition"
 fi
 
+# 6.8 Modular audit adapter infrastructure
+CHECKS_DIR="$REPO_ROOT/checks"
+checks_ok=true
+if [[ -f "$CHECKS_DIR/common.sh" ]]; then
+  # Verify common.sh defines check() helper
+  if ! grep -qE '^check\(\)' "$CHECKS_DIR/common.sh"; then
+    fail "CHECKS_COMMON" "checks/common.sh missing check() function"
+    checks_ok=false
+  fi
+  # Verify at least one language adapter exists
+  adapter_count=$(ls "$CHECKS_DIR"/*.sh 2>/dev/null | grep -v common.sh | grep -v generic.sh | wc -l)
+  if [[ "$adapter_count" -lt 1 ]]; then
+    fail "CHECKS_ADAPTERS" "checks/ directory has no language adapters (expected at least 1)"
+    checks_ok=false
+  fi
+  # Verify generic.sh exists
+  if [[ ! -f "$CHECKS_DIR/generic.sh" ]]; then
+    fail "CHECKS_GENERIC" "checks/generic.sh missing (language-agnostic checks)"
+    checks_ok=false
+  fi
+  $checks_ok && pass "CHECKS_MODULAR ($adapter_count adapters)"
+else
+  warn "CHECKS_MODULAR" "checks/common.sh not found — modular audit unavailable"
+fi
+
+# 6.9 Workflow modes configuration
+HOOKS_CONFIG="$REPO_ROOT/.claude/hooks-config.sh"
+if [[ -f "$HOOKS_CONFIG" ]]; then
+  modes_ok=true
+  if ! grep -qE 'WORKFLOW_MODE=' "$HOOKS_CONFIG"; then
+    fail "WORKFLOW_MODE_VAR" "hooks-config.sh missing WORKFLOW_MODE variable"
+    modes_ok=false
+  fi
+  for mode in lite strict; do
+    if ! grep -qE "^\s*${mode}\)" "$HOOKS_CONFIG"; then
+      fail "WORKFLOW_MODE_CASE" "hooks-config.sh missing case for mode: $mode"
+      modes_ok=false
+    fi
+  done
+  # standard uses *) default case — verify it exists with a "standard" comment
+  if ! grep -qE '^\s*\*\).*standard' "$HOOKS_CONFIG"; then
+    fail "WORKFLOW_MODE_CASE" "hooks-config.sh missing default case for standard mode"
+    modes_ok=false
+  fi
+  $modes_ok && pass "WORKFLOW_MODES (lite/standard/strict)"
+else
+  warn "WORKFLOW_MODES" ".claude/hooks-config.sh not found — workflow modes unavailable"
+fi
+
+# 6.10 WORKFLOW-MODES.md exists and is referenced from README
+MODES_DOC="$REPO_ROOT/Docs/WORKFLOW-MODES.md"
+if [[ -f "$MODES_DOC" ]]; then
+  if grep -qF 'WORKFLOW-MODES.md' "$README"; then
+    pass "MODES_DOC_REF"
+  else
+    fail "MODES_DOC_REF" "README does not reference Docs/WORKFLOW-MODES.md"
+  fi
+else
+  warn "MODES_DOC_REF" "Docs/WORKFLOW-MODES.md not found"
+fi
+
 # 6.7 Audit script EXT comment lists all 7 supported language extensions
 audit_ext_ok=true
 for ext in cs ts py java go rs cpp; do

@@ -12,10 +12,13 @@ Works with existing projects and greenfield (empty) projects alike.
 | Agent | Status | Notes |
 |-------|--------|-------|
 | **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) |
-| Cursor | Should work (untested) | |
-| GitHub Copilot | Should work (untested) | |
-| Windsurf | Should work (untested) | |
-| Any agent that reads markdown | Should work (untested) | |
+| Cursor | Playbook available | [Adaptation guide](examples/cursor-playbook/) with `.cursor/rules/` |
+| GitHub Copilot | Playbook available | [Adaptation guide](examples/copilot-playbook/) with `copilot-instructions.md` |
+| Windsurf | Playbook available | [Adaptation guide](examples/windsurf-playbook/) with `.windsurf/rules/` |
+| Cline | Playbook available | [Adaptation guide](examples/cline-playbook/) with `.clinerules` |
+| OpenAI Codex CLI | Playbook available | [Adaptation guide](examples/codex-playbook/) with `AGENTS.md` (reads `CLAUDE.md` via fallback config) |
+| Gemini CLI | Playbook available | [Adaptation guide](examples/gemini-playbook/) with `GEMINI.md` (`@import` for `CLAUDE.md`) |
+| Any agent that reads markdown | Should work | Core workflow is plain markdown — no agent-specific APIs |
 
 > The workflow uses plain markdown files and bash scripts — no agent-specific APIs.
 > Any AI coding agent that can read files and follow instructions should work.
@@ -34,7 +37,7 @@ Works with existing projects and greenfield (empty) projects alike.
 - Single session, clear scope, no follow-up sprints
 - You just want code generated fast without process
 
-When in doubt: try it on one sprint. If the Entry Gate feels like bureaucracy for your project size, you're probably in the "not a good fit" category.
+When in doubt: try it on one sprint. If the Entry Gate feels like bureaucracy for your project size, try [Lite mode](#workflow-modes) before dropping the workflow entirely.
 
 ## Why This Exists
 
@@ -118,7 +121,7 @@ Then tell the agent: `"Read WORKFLOW.md and bootstrap this project."`
   - Existing project: skips files that already exist; asks before touching `TRACKING.md`, `Roadmap.md`, `CODING_GUARDRAILS.md`
 - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
-- Adapt audit script patterns to your detected language (multi-language projects supported)
+- Adapt audit script patterns to your detected language (multi-language projects supported; modular adapters in `checks/` can be loaded with `--modular` flag)
 - Create `Docs/SPRINT_WORKFLOW.md` from `WORKFLOW.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
 - **[Claude Code only]** Create `.claude/` hook infrastructure (step 8.5) — enforces workflow rules mechanically; see [Claude Code: Hook Enforcement](#claude-code-hook-enforcement-optional) below
 - Confirm the setup with you before writing any feature code
@@ -180,10 +183,14 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `validate-id-uniqueness.sh` | After `TRACKING.md` edit | Duplicate `CORE-###` IDs |
 | `session-start.sh` | Every session start | Injects "read TRACKING.md first" protocol into agent context |
 | `entry-gate-session.sh` | After Entry Gate report written | Injects mandatory session boundary recommendation |
+| `detect-audit-signals.sh` | Session start (CP1-CP2) | Metric regression ≥20% between sprints; repeated failure categories across sprints |
+| `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
+| `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 7-point pre-verdict checklist, all-DEFERRED guard |
+| `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
 
-All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable that hook without modifying `settings.json`.
+All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
-Other agents (Cursor, Copilot, Windsurf, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
+Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
 Empty project? Step 1 is skipped — Discovery Questions cover language/framework.
 
@@ -241,14 +248,18 @@ If using Claude Code (step 8.5 — optional):
 
 ```
 .claude/                          # Claude Code hook enforcement layer
-├── hooks-config.sh               # Feature flags (toggle individual hooks on/off)
+├── hooks-config.sh               # Feature flags + WORKFLOW_MODE preset (lite/standard/strict)
 ├── settings.json                 # Hook registrations
 └── hooks/
     ├── protect-claude.sh         # Hard-blocks Write to CLAUDE.md
     ├── validate-tracking.sh      # Validates TRACKING.md status values
     ├── validate-id-uniqueness.sh # Detects duplicate CORE-### IDs
     ├── session-start.sh          # Injects session start protocol
-    └── entry-gate-session.sh     # Injects session boundary after Entry Gate
+    ├── entry-gate-session.sh     # Injects session boundary after Entry Gate
+    ├── detect-audit-signals.sh   # CP1-CP2: metric regression + failure pattern detection
+    ├── detect-test-regression.sh # CP3: surfaces test failures from bash output
+    ├── validate-close-gate.sh    # CP4: unverified items + pre-verdict checklist
+    └── validate-sprint-close.sh  # Retrospective + baseline + handoff presence
 ```
 
 ### Why Separate Files?
@@ -290,7 +301,7 @@ The workflow validates itself at five levels. All scripts live in `validation/`.
 
 | Level | Script | What it catches | When to run |
 |-------|--------|----------------|-------------|
-| **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
+| **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content, modular adapters, workflow modes (29 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
 | **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (62 checks) | Same as above |
 | **Formal model** | `bash validation/validate-model.sh` | FSM reachability/traps, decision point locations, loop termination, guard blocking (58 checks) | After adding/changing a decision point, loop, or guard in WORKFLOW.md — also update `validation/workflow-model.yaml` |
 | **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (46 mutation tests) | After changing scenario-related WORKFLOW.md text |
@@ -309,7 +320,8 @@ bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bas
 
 ## Supported Languages
 
-The template includes audit patterns for 7 languages.
+The template includes audit patterns for 7 languages, available both inline in `sprint-audit-template.sh` and as modular adapters in [`checks/`](checks/).
+Run `sprint-audit-template.sh --modular` to use the adapter system (auto-detects language from `EXT` variable).
 Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no comment prefix required.
 
 | Language | Hot Path Alloc | Cached Ref | Anti-Pattern |
@@ -343,11 +355,54 @@ Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no
 | **Empty project** (no code) | Agent asks Q0 explicitly, runs Initial Planning to create first sprint |
 | **Greenfield** ("make me X") | Agent decomposes goal into phases, details Sprint 1, discovers contracts |
 
+## Workflow Modes
+
+The same template supports three rigor levels:
+
+| Mode | Target | Entry Gate | Hooks | Overhead |
+|------|--------|-----------|-------|----------|
+| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (4/9) | ~5 min/gate |
+| **Standard** | Most projects (default) | Full or abbreviated | All hooks (9/9) | ~15 min/gate |
+| **Strict** | Teams, critical systems | Full always | All, overrides disabled | ~25 min/gate |
+
+Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state the mode at session start.
+
+> Full details: [Docs/WORKFLOW-MODES.md](Docs/WORKFLOW-MODES.md)
+
 ## Examples
 
-See [`examples/`](examples/) for real-world adaptations:
+See [`examples/`](examples/) for adaptations and playbooks:
 
-- [`unity-csharp/`](examples/unity-csharp/) — Unity 6 + URP game project (anonymized)
+- [`demo-todo-app/`](examples/demo-todo-app/) — **End-to-end sprint walkthrough** with all output files (TypeScript/Express)
+- [`unity-csharp/`](examples/unity-csharp/) — Real-world Unity 6 + URP game project (anonymized)
+- [`cursor-playbook/`](examples/cursor-playbook/) — Cursor adaptation with `.cursor/rules/*.mdc`
+- [`copilot-playbook/`](examples/copilot-playbook/) — GitHub Copilot adaptation with `copilot-instructions.md`
+- [`windsurf-playbook/`](examples/windsurf-playbook/) — Windsurf/Cascade adaptation with `.windsurf/rules/*.md`
+- [`cline-playbook/`](examples/cline-playbook/) — Cline adaptation with `.clinerules`
+- [`codex-playbook/`](examples/codex-playbook/) — OpenAI Codex CLI adaptation with `AGENTS.md` + `CLAUDE.md` fallback
+- [`gemini-playbook/`](examples/gemini-playbook/) — Gemini CLI adaptation with `GEMINI.md` + `@import`
+
+## Observed Results
+
+Measurements from real projects using this workflow.
+
+| Metric | Before | After | Source |
+|--------|--------|-------|--------|
+| Close Gate AI context | ~4000 lines | ~500 lines | unity-csharp (sprint-audit.sh pre-filters mechanical issues) |
+| Unintended scope changes | 3/sprint avg | 0 | unity-csharp ("AI flags, user decides" rule) |
+| Obsolete item detection | Manual review | Automatic | Entry Gate Step 8 strategic alignment |
+| Repeat bugs from known issues | Recurring | 0 after guardrail | unity-csharp (50+ rules from predecessor project) |
+| Token cost per session start | Baseline | +2-3% of 200K window | [MEMORY-ANALYSIS.md](Docs/MEMORY-ANALYSIS.md) (plateaus at S20) |
+
+### Known Trade-offs
+
+- **Bootstrap overhead:** ~15-30 min for first sprint setup (front-loaded, amortized over project lifetime)
+- **Gate overhead:** ~5-25 min per gate depending on mode (Lite → Strict)
+- **Learning curve:** Agent needs ~1 sprint to internalize the workflow patterns
+- **Not for throwaway code:** If the project won't survive past one session, the overhead exceeds the value
+
+> These results are from a single origin project (24 sprints, 50+ guardrails, 89+ tests).
+> More data points welcome — submit results via PR.
 
 ## Origin
 
