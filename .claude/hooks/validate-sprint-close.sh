@@ -6,7 +6,7 @@
 # WORKFLOW.md rules:
 #   - Step 7: Failure mode retrospective must be present
 #   - Step 5: Performance baseline update required if measurable metric exists
-#   - Step 10: User handoff summary required
+#   - Step 14: User handoff summary required
 #   - Sprint Close checklist: all items must be addressed
 # Exit: 1 (warning, non-blocking) on missing sections.
 
@@ -39,9 +39,9 @@ if ! grep -qi "baseline\|performance.*log\|metric.*log\|step 5" "$FILE" 2>/dev/n
     WARNINGS+=("Missing: Performance baseline update (Step 5) — record measurable metrics for next sprint comparison.")
 fi
 
-# Step 10: User handoff
-if ! grep -qi "handoff\|what changed\|before.*after\|step 10\|verify.*running\|what to verify" "$FILE" 2>/dev/null; then
-    WARNINGS+=("Missing: User handoff summary (Step 10) — what changed, where, what to verify in the running app.")
+# Step 14: User handoff
+if ! grep -qi "handoff\|what changed\|before.*after\|step 14\|verify.*running\|what to verify" "$FILE" 2>/dev/null; then
+    WARNINGS+=("Missing: User handoff summary (Step 14) — what changed, where, what to verify in the running app.")
 fi
 
 # Check: roadmap checkmarks updated (look in Roadmap.md, not in Sprint Close file)

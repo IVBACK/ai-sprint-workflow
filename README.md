@@ -280,7 +280,7 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 - **Any starting point.** Works with existing codebases and empty projects alike. Existing project: agent wraps workflow structure around existing code without overwriting. Empty project: Initial Planning decomposes the goal into phases and details Sprint 1.
 - **Workflow evolution guard.** Before adding any new step or check: does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Complexity is a cost paid on every sprint.
 
-→ Full design rationale (39 decisions): [DESIGN.md](DESIGN.md)
+→ Full design rationale (40 decisions): [DESIGN.md](DESIGN.md)
 
 ## For Contributors — Self-Validation
 
@@ -293,7 +293,7 @@ The workflow validates itself at five levels. All scripts live in `validation/`.
 | **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content (26 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
 | **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (62 checks) | Same as above |
 | **Formal model** | `bash validation/validate-model.sh` | FSM reachability/traps, decision point locations, loop termination, guard blocking (58 checks) | After adding/changing a decision point, loop, or guard in WORKFLOW.md — also update `validation/workflow-model.yaml` |
-| **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (41 mutation tests) | After changing scenario-related WORKFLOW.md text |
+| **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (46 mutation tests) | After changing scenario-related WORKFLOW.md text |
 | **Negative tests** | `bash validation/validate-paths.sh --self-test` and `bash validation/validate-model.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies scripts catch it (30+8 tests) | After changing validation scripts or gap-related WORKFLOW.md text |
 | **Semantic** | Copy `validation/verify-workflow-semantic.md` into an AI session | Intent correctness, dead ends, user gate enforcement, data provenance (~27 questions; C and F automated, skip those) | After major workflow changes or periodically |
 

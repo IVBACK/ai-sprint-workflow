@@ -1091,6 +1091,137 @@ Run ALL tests written so far — current item + all previous items in this sprin
 
 ---
 
+## ARCHIVE MAINTENANCE SCENARIOS
+
+---
+
+### SC-S03
+- id: SC-S03
+- category: sprint_close
+- title: Sprint Close step 9 — Sprint Board archive rule exists
+
+**Situation:** Sprint Close is running. The Sprint Board has accumulated verified items
+from many past sprints, consuming tokens at every session start.
+
+**Required behavior:**
+- Sprint Close must include a Sprint Board maintenance step
+- Verified items older than 3 sprints must be archived
+- Archive target must be specified (Docs/Archive/sprint-board-archive.md)
+
+**Evidence pattern:**
+```
+Verified items older than 3 sprints.*sprint-board-archive
+```
+
+**Mutation target:**
+```
+Verified items older than 3 sprints → archive to Docs/Archive/sprint-board-archive.md.
+```
+
+---
+
+### SC-S04
+- id: SC-S04
+- category: sprint_close
+- title: Sprint Close step 10 — Performance Baseline Log archive rule exists
+
+**Situation:** Sprint Close is running. The Performance Baseline Log has grown beyond
+what CP1 needs (last 2 sprints).
+
+**Required behavior:**
+- Sprint Close must include a Baseline Log maintenance step
+- Must keep last 5 sprints, archive older rows
+- Archive target must be specified (Docs/Archive/baseline-archive.md)
+
+**Evidence pattern:**
+```
+Keep last 5 sprints.*baseline-archive
+```
+
+**Mutation target:**
+```
+Keep last 5 sprints. Older rows → Docs/Archive/baseline-archive.md.
+```
+
+---
+
+### SC-S05
+- id: SC-S05
+- category: sprint_close
+- title: Sprint Close step 1 — Roadmap completed sections archived
+
+**Situation:** Sprint Close step 1 applies Roadmap checkmarks. Completed sprint sections
+accumulate forever unless archived.
+
+**Required behavior:**
+- After applying checkmarks, completed sprint sections older than 1 sprint must be archived
+- Archive target must be specified (Docs/Archive/roadmap-archive.md)
+- Sprint Overview table stays in Roadmap.md (not archived)
+
+**Evidence pattern:**
+```
+archive completed sprint sections older than 1 sprint
+```
+
+**Mutation target:**
+```
+archive completed sprint sections older than 1 sprint
+```
+
+---
+
+### SA-S03
+- id: SA-S03
+- category: sprint_abort
+- title: Sprint Abort — abbreviated close skips archive maintenance steps
+
+**Situation:** Sprint Abort runs an abbreviated Sprint Close. The new archive maintenance
+steps (9-12) should be skipped for an aborted sprint (no meaningful archival to do).
+
+**Required behavior:**
+- Must explicitly list which steps are skipped
+- Steps 7-12 (FM retrospective + all archive maintenance) must be in the skip list
+- Steps 14 and 15 must also be skipped
+- Step 13 (Entry Gate report cleanup) must be included (not skipped)
+
+**Evidence pattern:**
+```
+Skip steps 5, 7-12, 14, and 15
+```
+
+**Mutation target:**
+```
+Skip steps 5, 7-12, 14, and 15
+```
+
+---
+
+### PB-S02
+- id: PB-S02
+- category: performance_baseline
+- title: Performance Baseline Log — deltas derived on demand, not stored
+
+**Situation:** The Performance Baseline Log template was optimized to remove the
+`vs Previous` and `Delta` columns. These values are derivable from adjacent Value rows
+and are computed on demand by CP1.
+
+**Required behavior:**
+- Template must state that deltas are derived on demand
+- Template must NOT include `vs Previous` or `Delta` columns
+- This reduces per-row token cost without losing information
+
+**Evidence pattern:**
+```
+Deltas are derived on demand
+```
+
+**Mutation target:**
+```
+Deltas are derived on demand from adjacent rows.
+```
+
+---
+
 ## SUMMARY
 
 | ID     | Category         | Title                                              |
@@ -1136,3 +1267,8 @@ Run ALL tests written so far — current item + all previous items in this sprin
 | SC-S02 | sprint_close       | Sprint Close: Entry Gate report file deleted       |
 | AS-S02 | audit_signal       | Signal dismissed twice: not re-surfaced without new trigger |
 | IL-S07 | impl_loop          | D.6: previous item test FAIL = regression, fix before continuing |
+| SC-S03 | sprint_close       | Sprint Board archive rule exists (step 9)          |
+| SC-S04 | sprint_close       | Baseline Log archive rule exists (step 10)         |
+| SC-S05 | sprint_close       | Roadmap completed sections archived (step 1)       |
+| SA-S03 | sprint_abort       | Abbreviated close skips archive maintenance steps  |
+| PB-S02 | perf_baseline      | Baseline Log: deltas derived on demand, not stored |

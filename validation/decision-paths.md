@@ -81,6 +81,7 @@ Reference for logic review — each row can be challenged with "is this correct?
 | EG3-09 | Step 12c: Test scenario quality | Trivial scenario ("it runs") | Send back to 9b | user | No max round count for this loop. |
 | EG3-10 | Abbreviated gate trigger | ≤3 Must items AND no cross-sprint dependency | Abbreviated (fast) / Full (comprehensive) | user | AI cannot choose abbreviated without approval — correct. If user doesn't respond or is ambiguous → full gate runs. ✓ |
 | EG3-11 | Priority & rigor: Should → Must? | Must item lacks dependency and metric? | "should it be Should?" flag | AI | This flag also exists at step 0d (Pass 1). Is it checked again at step 9a? Duplicate check? |
+| EG3-12 | Domain Research (conditional) | Item requires domain-specific knowledge (math, protocols, algorithms)? AI uncertain about correctness? | Research (search authoritative sources, extract formulas, cross-reference 2+ sources, record in Entry Gate report) / Skip (well-known patterns, already verified) | AI | How does AI reliably self-assess "uncertain"? Trigger is subjective. Mitigated by reactive fallback in IL. |
 
 ---
 
@@ -88,6 +89,7 @@ Reference for logic review — each row can be challenged with "is this correct?
 
 | ID | Trigger | Condition | Options | Decides | ? |
 |----|---------|-----------|---------|---------|---|
+| IL-00 | A.5 Domain Research (conditional) | Item flagged `research: done` at Entry Gate, OR AI encounters uncertainty during pre-code check | Read Entry Gate §Domain Research / Execute new research (search, extract, cross-ref, log) / Skip (well-known patterns) | AI | Reactive fallback also triggers at self-verify (2 failed attempts suggesting knowledge gap). |
 | IL-01 | C. Self-verify checklist | Any item fails | Fix → recheck / Max 3 rounds, still failing → escalate | user (escalation) | What does "escalate" mean? What does user do? Continue? Sprint Abort? Accept as debt? Undefined. |
 | IL-02 | D. Test type selection | What was specified at Entry Gate 9b? | Unit / Integration / Manual+screenshot | AI | What if multiple types were specified at 9b? |
 | IL-03 | D.5: Visual verification | User "OK" / "Problem: [desc]" | OK → proceed to D.6 / Problem → fix, ask again / Max 3 attempts → known gap (target sprint) | user | After max 3 attempts, is item marked `fixed`? Or another status? Does "known gap" affect item status? |
@@ -143,7 +145,7 @@ Reference for logic review — each row can be challenged with "is this correct?
 |----|---------|-----------|---------|---------|---|
 | SA-01 | Abort request | Who initiates? | User only — AI can never initiate | user | Sprint Abort also exists at end of Entry Gate (Step 0e, 12c). Same procedure for that scenario? ✓ |
 | SA-02 | Non-verified items | Each non-verified item | Mark `deferred` + reason: "sprint aborted — [reason]" | AI | Verified items' status does not change. ✓ |
-| SA-03 | Abbreviated Sprint Close | Which steps run? | Steps 1-4 + step 9. Steps 5-8 and 10 are skipped (no baselines, no FM retrospective) | AI | Step 6 (Workflow integrity check) is also skipped. Is this intentional? |
+| SA-03 | Abbreviated Sprint Close | Which steps run? | Steps 1-4 + step 6 + step 13. Steps 5, 7-12, and 14 are skipped (no baselines, no FM retrospective, no archive maintenance) | AI | |
 
 ---
 
@@ -197,9 +199,9 @@ Reference for logic review — each row can be challenged with "is this correct?
 | L-01 | Entry Gate — 0e re-present | Unspecified | Sprint Abort | — | No max round. Infinite loop risk? In practice, terminates because user decides. |
 | L-02 | Entry Gate — 12c re-present | Unspecified | Sprint Abort | — | Same. |
 | L-03 | Entry Gate — 9b trivial scenario | Unspecified | — | — | No max round. No limit defined for trivial test loop. |
-| L-04 | Implementation — Self-verify | 3 | Escalate to user | — | What "escalate" means is undefined. |
+| L-04 | Implementation — Self-verify | 3 | Escalate to user (4 options: accept debt / block / Sprint Abort / domain research) | Research fallback before 3rd attempt if knowledge gap suspected | Domain research resets attempt counter. |
 | L-05 | Implementation — Visual verification | 3 | Known gap (target sprint) | Item logged as known gap | What is the known gap item's status? `fixed`? `deferred`? |
-| L-06 | Implementation — Incremental test fix | 3 | Escalate to user | — | What "escalate" means is undefined. |
+| L-06 | Implementation — Incremental test fix | 3 | Escalate to user (4 options: accept gap / block / Sprint Abort / domain research) | — | Domain research option resets attempt counter. |
 | L-07 | Close Gate — Fix loop | Unspecified | — | — | How many fix-retest cycles in Phase 2? No limit. |
 
 ---
@@ -227,10 +229,11 @@ Reference for logic review — each row can be challenged with "is this correct?
 | §Failure Encounters | Implementation step E | Sprint Close step 7a | |
 | §Failure Mode History | Sprint Close step 7d | Entry Gate 9a (pattern detection) | |
 | §Performance Baseline | Sprint Close step 5 | Entry Gate Phase 1 step 3 (CP1) | |
-| S\<N\>_ENTRY_GATE.md | Entry Gate step 12a | Close Gate Phase -1, Phase 1b | Deleted at Sprint Close step 9. |
+| S\<N\>_ENTRY_GATE.md | Entry Gate step 12a | Close Gate Phase -1, Phase 1b | Deleted at Sprint Close step 13. |
 | §Retroactive Audits | Retroactive Audit Phase 7 | Entry Gate step 3 + Sprint Close step 6 | |
 | §Dismissed Signals | Audit dismissal | Entry Gate — CP1/CP2/CP3/CP4 checkpoints | CP3 and CP4 are never suppressed. ✓ |
 | CORE-### metric gate | Entry Gate step 9c → Roadmap | Close Gate Phase 0 | Metric gate change requires step 12c approval. ✓ |
+| §Domain Research | Entry Gate (conditional block) | Implementation Loop A.5 + Entry Gate report 12a | Findings recorded in Entry Gate report; consumed by A.5 before coding. |
 | §Open Risks R-### | Entry Gate Phase 1 / Sprint Close step 7f | Entry Gate step 3 (Architecture Review flag) | |
 
 ---
@@ -318,7 +321,7 @@ Each fix was applied to WORKFLOW.md. Applied fixes are marked `[APPLIED]`.
 
 | # | ID | Fix |
 |---|---|---|
-| 33 | SA-03 | Add step 6 to Abbreviated Sprint Close: "steps 1-4 + step 6 + step 9. Skip steps 5, 7-8, and 10." |
+| 33 | SA-03 | Abbreviated Sprint Close includes step 6: "steps 1-4 + step 6 + step 13. Skip steps 5, 7-12, and 14." |
 
 ### Session Recovery
 

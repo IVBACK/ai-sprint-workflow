@@ -154,8 +154,8 @@ echo ""
 echo "▶ Implementation Loop"
 
 run_mutation "IL-S01" \
-  'Max 3 rounds.*Still failing after 3.*stop and present' \
-  'Max 3 rounds. Still failing after 3'
+  'Still failing after 3.*stop and present' \
+  'Still failing after 3'
 
 run_mutation "IL-S02" \
   'FAIL on previous item.*regression.*fix before writing' \
@@ -327,6 +327,36 @@ run_mutation "SC-S01" \
 run_mutation "SC-S02" \
   'Delete.*ENTRY_GATE' \
   'its purpose (sprint-scoped reference) is fulfilled.'
+
+run_mutation "SC-S03" \
+  'Verified items older than 3 sprints.*sprint-board-archive' \
+  'Verified items older than 3 sprints → archive to Docs/Archive/sprint-board-archive.md.'
+
+run_mutation "SC-S04" \
+  'Keep last 5 sprints.*baseline-archive' \
+  'Keep last 5 sprints. Older rows → Docs/Archive/baseline-archive.md.'
+
+run_mutation "SC-S05" \
+  'archive completed sprint sections older than 1 sprint' \
+  'archive completed sprint sections older than 1 sprint'
+
+echo ""
+
+# ─── Sprint Abort (continued) ─────────────────────────────────────────────
+echo "▶ Sprint Abort (abbreviated close)"
+
+run_mutation "SA-S03" \
+  'Skip steps 5, 7-12, 14, and 15' \
+  'Skip steps 5, 7-12, 14, and 15'
+
+echo ""
+
+# ─── Performance Baseline (continued) ────────────────────────────────────
+echo "▶ Performance Baseline (column optimization)"
+
+run_mutation "PB-S02" \
+  'Deltas are derived on demand' \
+  'Deltas are derived on demand from adjacent rows.'
 
 echo ""
 
