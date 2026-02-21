@@ -18,4 +18,19 @@ HOOK_SESSION_START_PROTOCOL=true
 HOOK_VALIDATE_ID_UNIQUENESS=true
 
 # Inject mandatory session boundary recommendation after Entry Gate report is written
+# Also validates Entry Gate content: failure modes, verification plans, metrics
 HOOK_ENTRY_GATE_SESSION=true
+
+# CP3: Detect test failures in Bash output and surface AUDIT SIGNAL
+HOOK_DETECT_TEST_REGRESSION=true
+
+# CP4: Validate Close Gate report completeness and check for unverified must items
+HOOK_VALIDATE_CLOSE_GATE=true
+
+# Validate Sprint Close report: retrospective, baseline, handoff sections
+HOOK_VALIDATE_SPRINT_CLOSE=true
+
+# CP1+CP2: Self-activating metric regression and failure pattern detector (SessionStart)
+# Requires structured §Performance Baseline Log and §Failure History tables in TRACKING.md
+# Silent if sections missing or data insufficient — zero false positives without structured data
+HOOK_DETECT_AUDIT_SIGNALS=true

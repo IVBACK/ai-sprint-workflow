@@ -15,7 +15,7 @@ TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 # Only act on Write tool (full overwrite). Edit (partial) is allowed.
-if [[ "$TOOL" == "Write" ]] && [[ "$FILE" == *"CLAUDE.md"* ]]; then
+if [[ "$TOOL" == "Write" ]] && [[ "$(basename "$FILE")" == "CLAUDE.md" ]]; then
     echo "BLOCKED: Writing to CLAUDE.md is not allowed (would overwrite existing content)." >&2
     echo "Use the Edit tool to append or modify specific sections." >&2
     echo "WORKFLOW.md rule: 'Never overwrite CLAUDE.md without reading and preserving existing content.'" >&2
