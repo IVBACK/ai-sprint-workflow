@@ -37,7 +37,7 @@ The AI reads `WORKFLOW.md` and runs the 10-step bootstrap.
 3. Asked 15 discovery questions → answers inferred + confirmed
 4. Created file structure
 5. Ran Initial Planning → Sprint 1 decomposed into 4 Must + 2 Should items
-6. Populated CLAUDE.md, CODING_GUARDRAILS.md
+6. Populated CLAUDE.md, scanned codebase for guardrails (stack-specific rules for TypeScript/Express)
 7. Adapted sprint-audit.sh for TypeScript
 
 ---

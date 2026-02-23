@@ -1,6 +1,6 @@
 # TODO API — Coding Guardrails
 
-Engineering rules derived from real bugs. Review before writing code.
+Engineering rules from bootstrap scan and real bugs. Review before writing code.
 
 ## Section Index — Read by Task Type
 
@@ -22,7 +22,7 @@ Always enable `strict: true` in tsconfig.json. Never use `as any` or `!` non-nul
 
 - **Root cause:** Runtime null/undefined errors in production
 - **Scope:** All TypeScript files
-- **Reference:** Industry best practice
+- **Reference:** bootstrap scan (stack-specific: TypeScript strict mode)
 
 ### 1.2 Error handling
 
@@ -30,7 +30,7 @@ Express route handlers must have try/catch or use an error middleware. Never let
 
 - **Root cause:** Unhandled promise rejections crash Node.js
 - **Scope:** All route handlers and async middleware
-- **Reference:** Express.js error handling guide
+- **Reference:** bootstrap scan (stack-specific: Express.js async error handling)
 
 ---
 
@@ -63,7 +63,7 @@ Always use parameterized queries (prepared statements). Never concatenate user i
 
 - **Root cause:** SQL injection
 - **Scope:** All database access code
-- **Reference:** OWASP Top 10
+- **Reference:** bootstrap scan (stack-specific: SQL injection prevention)
 
 ### 3.2 Transaction boundaries
 
@@ -71,7 +71,7 @@ Multi-step writes must be wrapped in a transaction. better-sqlite3 supports `db.
 
 - **Root cause:** Partial writes leave database in inconsistent state
 - **Scope:** Any operation with 2+ write queries
-- **Reference:** Database ACID principles
+- **Reference:** bootstrap scan (stack-specific: SQLite transaction boundaries)
 
 ---
 

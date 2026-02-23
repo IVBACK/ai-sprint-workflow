@@ -160,7 +160,7 @@ lessons to capture), design the roadmap in a separate focused session before boo
 4. Initial Planning→ if no sprint plan exists: goal → phases → detail S1 → contracts
                      Migration: current work = Sprint 1 (no retrospective)
 5. Populate CLAUDE.md with project context
-6. Populate CODING_GUARDRAILS.md with framework-specific rules
+6. Populate CODING_GUARDRAILS.md — project-aware guardrail scan (3 layers: stack/domain/codebase)
 7. Adapt audit script to detected language
                      Migration: call existing CI commands, don't duplicate checks
 8. WORKFLOW.md → Docs/SPRINT_WORKFLOW.md (strip bootstrap sections)
@@ -287,7 +287,7 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 - **User-activated, not automatic.** The agent knows the workflow via `CLAUDE.md` but will not self-invoke Entry Gate on a plain feature request. Explicit trigger phrases are required (see [Effective Prompts](#effective-prompts)).
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
 - **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
-- **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
+- **Guardrails grow from bugs and project scans.** Bootstrap seeds rules by scanning the codebase for real anti-patterns (3 layers: stack, domain, codebase). Post-bootstrap, new rules come from real incidents only. Every guardrail traces to a concrete source — bootstrap scan or production bug.
 - **Any starting point.** Works with existing codebases and empty projects alike. Existing project: agent wraps workflow structure around existing code without overwriting. Empty project: Initial Planning decomposes the goal into phases and details Sprint 1.
 - **Workflow evolution guard.** Before adding any new step or check: does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Complexity is a cost paid on every sprint.
 
