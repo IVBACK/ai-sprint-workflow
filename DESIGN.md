@@ -7,7 +7,7 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **User-activated, not automatic.** The agent knows the workflow via `CLAUDE.md` but will not self-invoke Entry Gate on a plain feature request. Explicit trigger phrases are required (see [Effective Prompts](README.md#effective-prompts)).
 - **AI flags, user decides.** When a gate check fails, the AI presents evidence and options. It never unilaterally changes sprint scope.
 - **Sprint scope, not duration.** A sprint is 1-8 Must items (+ optional Should/Could), not a calendar week. AI can finish a "sprint" in hours.
-- **Guardrails grow from bugs.** No hypothetical rules. Every guardrail traces to a real production issue.
+- **Guardrails grow from bugs and project scans.** Bootstrap seeds rules by scanning the codebase for real anti-patterns (3 layers: stack, domain, codebase). Post-bootstrap, new rules come from real incidents only. Every guardrail traces to a concrete source — bootstrap scan or production bug.
 - **Automated + spec-driven audit.** `sprint-audit.sh` catches grep-detectable patterns (~40 lines of output) including metric-vs-test coverage (Section 12), change log completeness, entry gate log presence, failure transfer, and checkpoint staleness (Sections 13-16). Close Gate Phase 1b is spec-driven: it loads Entry Gate failure mode predictions (9a) and verification plan invariants (9b), then checks per item whether predicted failure modes are handled in code. Generic checks (resource leaks, dead code, observability) run as supplemental. Output is per-item (HANDLED/MISSED/N/A), not per-file. Significant findings pause the gate; clean phases are batched into one report — no approval fatigue on clean sprints.
 - **Any starting point.** Works with existing codebases (scans and wraps structure around existing code) and empty projects alike. If no sprint plan exists, an Initial Planning step decomposes the goal into phases, details Sprint 1, and discovers immutable contracts.
 - **Rich item status model.** Items track `open → in_progress → fixed → verified`, plus `blocked` and `deferred` statuses. `in_progress` prevents wasted rework after session interruptions. Reverse transition `verified → open` is allowed for regressions.
@@ -37,7 +37,7 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **Critical Axis enforcement.** Every project declares a #1 non-negotiable quality axis (security, performance, reliability, correctness) at Bootstrap. Recorded in `CLAUDE.md`. Entry Gate 9a requires deeper failure mode coverage for items touching this axis. Close Gate Phase 2 cannot silently defer findings in this domain — the AI stops, presents options (fix now / defer with explicit rationale / Sprint Abort), and waits for user decision. Prevents an AI agent from treating a payment security gap the same as a missing log line.
 - **Retroactive Sprint Audit.** When a completed sprint's output is found broken or inconsistent with its Close Gate claims, a 7-phase audit procedure opens: evidence collection from the original Close Gate record, current state measurement, gap analysis (5% tolerance on continuous metrics; 0 vs non-zero is always a gap), root cause classification (REGRESSION / INTEGRATION_GAP / FALSE_VERIFICATION / COLD_STATE / SCOPE_DRIFT / ENVIRONMENT_DELTA), dependency impact assessment, resolution plan, and audit close written to `TRACKING.md §Retroactive Audits`. The AI actively watches for suspicious signals at 4 checkpoints — Entry Gate (metric regression, failure pattern), Implementation session (broken past-sprint API or failing test), and Close Gate (Must item unverifiable due to past-sprint dependency). When a signal fires, the AI must surface it to the user — it cannot silently continue. Dismissed signals are logged and re-surfaced next sprint; dismissed twice for the same system, they are suppressed (but Checkpoint 3 and 4 are never suppressed by prior dismissals). COLD_STATE classification is valid for a maximum of 2 consecutive sprints — after that, a warm-start measurement is mandatory.
 - **Workflow evolution guard.** AI Agent Operational Rules: before adding any new step or check to the workflow, three questions must pass — does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Does it verify a new class of failure rather than just confirming a previous check ran? The last question is the "who watches the watchers" test. Complexity is a cost paid on every sprint.
-- **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
+- **Guardrail traceability.** `Docs/LESSONS_INDEX.md` maps every guardrail rule to its root cause, source item, and sprint. Source values distinguish origin: `bootstrap scan` (found during setup), `CORE-###` (incident-driven). The Update Rule checks it before creating new rules to prevent duplicates. Grows organically alongside `CODING_GUARDRAILS.md`.
 - **Single source of truth for gates.** `SPRINT_WORKFLOW.md` is the authoritative source for Entry Gate, Close Gate, and Sprint Close procedures. `CLAUDE.md` references it directly at sprint boundaries. `CODING_GUARDRAILS.md` keeps a brief pointer, not a duplicate.
 - **Orphan detection.** `sprint-audit.sh` Section 11b: detects items that exist in TRACKING.md but not in Roadmap.md (or vice versa), catching cross-file inconsistencies.
 - **Sprint abort.** When a sprint is going in the wrong direction, the user can abort. Verified work persists, unfinished items become `deferred`, and an abbreviated Sprint Close archives the sprint without running full gates.
@@ -98,6 +98,22 @@ AI reads this file
                          │ if no sprint plan │
                          │ Migration:        │
                          │  now = Sprint 1   │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │ 5. Populate       │
+                         │ CLAUDE.md         │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │ 6. Guardrail scan │
+                         │ 3 layers:         │
+                         │  stack-specific   │
+                         │  domain-specific  │
+                         │  codebase-specific│
+                         │ → user reviews    │
                          └────────┬─────────┘
                                   │
                                   ▼
@@ -791,7 +807,8 @@ Bug discovered
         │ LESSONS_INDEX.md   │
         └────────────────────┘
 
-Guardrails grow organically from real bugs.
-Never add hypothetical rules — only rules from production experience.
+Guardrails grow from two sources:
+1. Bootstrap scan — real anti-patterns found in the codebase at setup (source: "bootstrap scan")
+2. Production bugs — incidents during sprints trigger the Update Rule (source: "CORE-###")
 ```
 
