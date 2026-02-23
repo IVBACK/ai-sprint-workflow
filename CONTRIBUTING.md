@@ -77,6 +77,6 @@ Keep it anonymized — no proprietary code, project names, or internal URLs.
 ## Guidelines
 
 - Keep it simple. This is a workflow template, not a framework.
-- Every pattern must come from real experience. No hypothetical rules.
+- Every pattern must trace to a concrete source — bootstrap scan of real code or a production bug. No hypothetical rules.
 - English for all content (docs, comments, code).
 - Test your changes — if you add patterns, run the audit script to verify they work.
