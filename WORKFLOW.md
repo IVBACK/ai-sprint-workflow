@@ -1867,7 +1867,7 @@ Signal does NOT fire if:
     (breakage was unintended), the signal DOES fire — do not suppress it.
     Suppress example: "S8 replaced the entire cache system; S6 metrics no longer apply by design."
     Do NOT suppress: "S8 added config.threshold to ComputeKey() for CORE-106 but
-    inadvertently broke S6's D-A bit-exact guarantee — that breakage was not the intent."
+    inadvertently broke S6's bit-exact output guarantee — that breakage was not the intent."
 ```
 
 **Checkpoint 4 — Close Gate Phase 2 (verdict review)**
