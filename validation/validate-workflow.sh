@@ -160,7 +160,7 @@ readme_cg_claim=$(grep -oE '[0-9]+ phases' "$README" | grep -oE '[0-9]+' | head 
 template_cg_section=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 template_cg_phases=0
 if [[ -n "$template_cg_section" ]]; then
-  template_cg_phases=$(echo "$template_cg_section" | sed 's/−/-/g' | grep -oE '\*\*Phase -?[0-9]+' | grep -oE '-?[0-9]+' | sort -un | wc -l)
+  template_cg_phases=$(echo "$template_cg_section" | sed 's/−/-/g' | grep -oE '\*\*Phase [-]?[0-9]+' | grep -oE -- '-?[0-9]+' | sort -un | wc -l)
 fi
 
 if [[ -z "$readme_cg_claim" ]]; then
