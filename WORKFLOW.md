@@ -459,8 +459,8 @@ AI must confirm with user before running abbreviated mode — do not choose unil
 "Sprint N qualifies for abbreviated Entry Gate (≤3 Must items, no cross-sprint deps).
 Run abbreviated (faster) or full gate (more thorough)?"
 User decides. If user does not respond or is unclear → run full gate.
-Run: Phase 0 (if needed) → steps 1-2 → step 8 (quick pass) → step 9b-lite → step 10 → step 12.
-Skip: steps 3-4, Phase 2 (steps 5-7), step 9a, step 9c, step 11.
+Run: Phase 0 (sprint type + detail if needed) → step 0pre → steps 1-2 → step 8 (quick pass) → step 9b-lite → step 10 → step 12.
+Skip: steps 3-4, Phase 2 (steps 5-7), step 9a, step 9c (including fitness check), step 11.
 After step 2 (abbreviated only): Clear §Predicted Failure Modes and §Failure Encounters now.
   Step 9a is skipped — these sections would otherwise contain previous sprint's stale data.
   Clearing without writing new predictions is correct; Close Gate Phase 1b accounts for this.
@@ -470,7 +470,22 @@ When in doubt → run full gate. Abbreviated saves time; full catches more.
 Log difference: step 12d logs "Entry Gate (abbreviated)" so Close Gate knows.
 
 **Phase 0 — Sprint Detail (conditional):**
-*(Skip if this sprint already has Must/Should/Could items in the Roadmap.)*
+
+**Sprint type detection (always runs, even if sprint already has items):**
+Determine the sprint type by reading the Roadmap description and items:
+- **Feature sprint** (default): new functionality or enhancements. Standard gate rigor.
+- **Hardening sprint**: debt clearance, stabilization, performance tuning on existing code.
+  Characteristics: most items modify existing systems (not new files), focus is on
+  quality improvement rather than new behavior.
+  Adjusted rules for hardening sprints:
+  - Metric gates focus on regression prevention ("no worse than baseline") rather than new thresholds.
+  - Close Gate Phase 1c fitness review focuses on robustness (edge cases, error paths) rather than completeness.
+  - New features discovered during hardening are logged to TRACKING.md §Change Log as
+    opportunities, not added to sprint scope.
+Log sprint type in Entry Gate report (step 12a). Close Gate Phase 1c reads this to adjust criteria.
+
+*(Skip the rest of Phase 0 if this sprint already has Must/Should/Could items in the Roadmap.)*
+
 If the sprint is still a one-line sketch from Initial Planning:
 0a. Read the sketch description + previous sprint's outcomes
 0b. Decompose into Must/Should/Could items with CORE-### IDs
@@ -500,6 +515,16 @@ This is the same process as Initial Planning step 4, applied to the next sprint.
 If items exceed scope limit → apply §Scope Negotiation.
 
 **Phase 1 — State Review (analysis + tracking corrections):**
+
+0pre. Roadmap sanity check (quick — before reading state):
+   - CORE-### IDs in Roadmap.md all have matching entries in TRACKING.md? (orphan detection)
+   - TRACKING.md items all appear in Roadmap.md? (reverse orphan detection)
+   - Roadmap checkbox states match TRACKING.md statuses? (`[x]` = verified, `[~]` = deferred)
+   Mismatches → fix now (ask user if ambiguous). This prevents stale cross-references
+   from corrupting the Entry Gate analysis.
+   If `Tools/sprint-audit.sh` exists: its Section 11 (a/b/c) performs these checks automatically.
+   Run it now for a quick sanity pass; the full audit runs at Close Gate.
+
 0. Check previous sprint's Sprint Close completion:
    Read TRACKING.md §Change Log for entry: "Sprint Close: complete — Sprint N" (or equivalent).
    If not found → warn user before proceeding:
@@ -646,6 +671,11 @@ so Implementation Loop step A.5 knows research is already complete.
       - Threshold non-trivial? (construct a scenario where metric passes but system is broken
         — if one exists, tighten threshold or add scenario constraints)
       - Coverage: every failure mode from 9a maps to a metric or test? Missing → add.
+      **Fitness check:** For each item, verify that "all tests pass" is not the only success
+      criterion. Ask: would a superficially correct implementation (tests green, but incomplete
+      integration, missing edge handling, or poor fit for the project's use case) still pass
+      these metrics? If yes → add at least one fitness-level metric (integration behavior,
+      real-world usage scenario, or Critical Axis compliance).
       Any change (new metric, revised threshold, added test scenario) → propose in Entry Gate
       report (step 12a). Do NOT update roadmap yet — user approves metric changes at step 12c.
       If approved → update roadmap. If rejected → rework at step 9c, re-present.
@@ -705,6 +735,12 @@ For each Must item (in dependency order from Entry Gate step 11):
 **A. Pre-code check**
 - Mark item `in_progress` in TRACKING.md
 - Read the GUARDRAILS sections identified in Entry Gate Phase 1 step 4 (relevant to this task type)
+- Impact analysis (3 questions — answer before writing any code):
+  1. Which files will this change touch? (list explicitly)
+  2. Which existing behaviors could be affected? (side effects, shared state, callers)
+  3. How will you verify nothing broke? (existing tests, new tests, manual check)
+  If Q1 reveals >5 files or Q2 reveals cross-system effects not predicted at Entry Gate 9a:
+  → flag to user before proceeding. Do not silently expand scope.
 
 **A.5 Domain Research (conditional)**
 Trigger: item was flagged `research: done` at Entry Gate (findings already documented),
@@ -724,6 +760,22 @@ If research was not done at Entry Gate but a knowledge gap is now apparent:
 Skip when: item uses well-known patterns, or Entry Gate already completed
 research for this item and findings are documented and still valid.
 
+**A.6 Approach Selection (conditional)**
+Trigger: item has multiple viable implementation strategies (different algorithms,
+data structures, architectural patterns, or library choices) AND the choice
+significantly affects quality, performance, or maintainability.
+
+When triggered:
+1. Identify at least 2 candidate approaches.
+2. Compare on three dimensions: correctness/quality, fit for project context
+   (Critical Axis, existing architecture), and implementation cost.
+3. State the selected approach with a one-line rationale.
+4. Log in TRACKING.md §Change Log:
+   `"Approach selection for CORE-###: chose [X] over [Y] — [reason]"`
+
+Skip when: item has an obvious single approach (CRUD endpoint, config change,
+test addition), or Entry Gate already specified the approach.
+
 **B. Write code**
 - Follow guardrails and immutable contracts throughout
 - If you make a fix to a system that is NOT the current sprint item (scope-outside fix):
@@ -737,7 +789,9 @@ Run before writing any tests:
 - [ ] Matches spec from Entry Gate?
 - [ ] No duplication with existing code?
 - [ ] Follows project conventions?
-- [ ] Tech debt introduced? → fix now or document in TRACKING.md
+- [ ] Tech debt introduced? → fix now or document in TRACKING.md.
+  Temporary code must use `// TEMP(CORE-NNN): [reason]` format linking to a tracked item.
+  Naked `// TODO` / `// FIXME` / `// HACK` without a CORE-ID are flagged at Close Gate.
 
 If any item fails: fix and recheck. Max 3 rounds.
 
@@ -813,7 +867,7 @@ Close Gate is always user-initiated — AI does not ask "shall we close?" unprom
 verification — AI can confirm all phases completed by reading Change Log, not relying on memory.
 
 **Presentation rule:**
-Interim "present to user" steps (Phase −1 state summary, Phase 0, 1a, 1b, 2, 4) are transparency checkpoints, not approval gates.
+Interim "present to user" steps (Phase −1 state summary, Phase 0, 1a, 1b, 1c, 2, 4) are transparency checkpoints, not approval gates.
 - Clean / minimal findings → batch into one combined report, do not pause for confirmation.
 - Significant findings (blocker, regression, MISSED failure mode) → stop at that phase, present and ask.
 - Mandatory user approval: Close Gate verdict only (final step before Sprint Close).
@@ -897,6 +951,13 @@ Regardless of session history, interruptions, or prior context — always run th
   TRACKING.md Change Log.
 - Exit code 1 (findings): review each finding, fix immediately or log with target sprint
   (user decides which findings to defer — same principle as Phase 2).
+  **Blocker findings** (e.g., UNTRACKED_DEBT — naked `TODO`/`FIXME`/`HACK` without a CORE-ID)
+  must be resolved before the gate can pass. Options: formalize as `// TEMP(CORE-NNN): [reason]`
+  with a TRACKING.md entry, or resolve the debt now. Cannot be deferred as-is.
+  **False positive review:** UNTRACKED_DEBT uses case-sensitive substring matching (`TODO`,
+  `FIXME`, `HACK` — uppercase only). Typical camelCase names (`todoItems`) are not caught.
+  However, SCREAMING_CASE identifiers (`TODO_ITEMS`) or strings containing uppercase markers
+  are caught. Review each finding; false positives can be dismissed with a note in the scan summary.
   Present automated scan summary to user before proceeding to Phase 1b.
 - Exit code 0 (clean): proceed (note "clean" to user before Phase 1b).
 
@@ -939,8 +1000,21 @@ Output: per-item summary (CORE-### → failure modes: HANDLED / MISSED / N/A)
   N/A     = mode is not applicable to this item's domain
             (e.g., stress/edge for a pure UI label item).
             Use sparingly: justify why it cannot apply.
-Present summary to user before proceeding to Phase 2.
+Present summary to user before proceeding to Phase 1c.
 Do not declare "audit complete" without per-item acknowledgment.
+
+**Phase 1c — Fitness review:**
+Read sprint type from Entry Gate report (step 12a).
+Per completed item, answer three questions:
+1. Is the implementation complete, or does it only cover the happy path?
+2. Does it integrate correctly with the rest of the system (not just in isolation)?
+3. Does it meet the project's Critical Axis standard (not just "no errors")?
+Hardening sprint adjustment: if sprint type is hardening, focus Q1 on robustness
+(edge cases, error paths) rather than feature completeness, and Q3 on "more robust
+than before" rather than "meets new thresholds."
+Per-item verdict: PASS or CONCERN (with explanation).
+If all items CONCERN with no actionable fix → flag to user before proceeding.
+Skip this phase for abbreviated-gate sprints (fitness metrics were not set at Entry Gate 9c).
 
 **Phase 2 — Fix:**
 - Fix immediately or log with target sprint (user decides which findings to defer).
@@ -979,6 +1053,7 @@ Do not declare "audit complete" without per-item acknowledgment.
   - Phase 0: metric verification table filled and presented? YES/NO
   - Phase 1a: automated scan run (or documented as not applicable)? YES/NO
   - Phase 1b: spec-driven audit run per item? YES/NO
+  - Phase 1c: fitness review run per item (or skipped for abbreviated gate)? YES/NO
   - Phase 2: findings fixed or deferred with user decision? YES/NO
   - Phase 3: regression tests PASS? YES/NO
   - Phase 4: coverage gaps resolved? YES/NO
@@ -989,12 +1064,13 @@ Do not declare "audit complete" without per-item acknowledgment.
   - **Metric summary:** X/Y PASS, Z DEFERRED (list deferred items + target sprints).
     Include action breakdown: N existing, M written, K fixed, J revised, L added, P escalated.
   - **Findings summary:** N fixed, M deferred to target sprint, K untestable items
+  - **Fitness summary:** X/Y PASS, Z CONCERN (list concerns). Omit if Phase 1c was skipped (abbreviated gate).
   - **Risk assessment:** clean / attention points exist (list them)
   - **Recommendation:** "Gate passed — recommend closing sprint" or "Gate blocked by [X]"
 - User approves before Sprint Close begins.
   User does not approve → identify concern → return to the relevant phase for rework:
   Phase 0 (metric concerns) / Phase 1a (automated scan concerns) / Phase 1b (audit concerns)
-  / Phase 2 (fix/defer decisions) / Phase 3 (regression failures) / Phase 4 (coverage gaps).
+  / Phase 1c (fitness concerns) / Phase 2 (fix/defer decisions) / Phase 3 (regression failures) / Phase 4 (coverage gaps).
 - After approval: Update CLAUDE.md §Last Checkpoint: "Close Gate complete — Sprint N approved, starting Sprint Close."
   Session boundary (mandatory): Implementation session is heavily consumed by the time Close Gate runs.
   AI MUST recommend starting a fresh session to run Close Gate ("Run Close Gate, sprint N").
@@ -2157,10 +2233,45 @@ check() {
   fi
 }
 
+check_blocker() {
+  local name="$1" pattern="$2" dir="${3:-$SRC_DIR}"
+  if [[ ! -d "$dir" ]]; then
+    echo "SKIP  $name — directory $dir not found"
+    return
+  fi
+  local results count
+  results=$(grep -rn "$pattern" --include="*.${EXT:-*}" "$dir" 2>/dev/null || true)
+  count=$(echo "$results" | grep -c . 2>/dev/null || echo 0)
+  if [[ $count -gt 0 ]]; then
+    echo "BLOCK $name — $count finding(s) (non-dismissible):"
+    echo "$results" | head -20
+    total=$((total + count))
+    blockers=$((blockers + count))
+  else
+    echo "PASS  $name"
+  fi
+}
+
 # ── Adapt these checks to your project ──
 
-# 1. Scaffolding tags (language-agnostic: no comment prefix needed)
-check "TEMP_TAGS" "TODO\|HACK\|FIXME\|TEMP(S"
+# 1. Formalized debt tags (linked to tracked items)
+check "TEMP_TAGS" "TEMP(CORE-\|TEMP(S"
+
+# 1b. Naked TODO/HACK/FIXME without a tracked CORE-ID — blocks Close Gate.
+# Excludes lines with formalized TEMP(CORE- or TEMP(S to avoid double-counting.
+if [[ -d "$SRC_DIR" ]]; then
+  _untracked=$(grep -rn "TODO\|HACK\|FIXME" --include="*.${EXT:-*}" "$SRC_DIR" 2>/dev/null \
+    | grep -v "TEMP(CORE-" | grep -v "TEMP(S" || true)
+  _ucount=$(echo "$_untracked" | grep -c . 2>/dev/null || echo 0)
+  if [[ $_ucount -gt 0 ]]; then
+    echo "BLOCK UNTRACKED_DEBT — $_ucount finding(s) (non-dismissible):"
+    echo "$_untracked" | head -20
+    total=$((total + _ucount))
+    blockers=$((blockers + _ucount))
+  else
+    echo "PASS  UNTRACKED_DEBT"
+  fi
+fi
 
 # 2. Hot path allocations (example: Java/C#/TypeScript)
 # check "HOT_ALLOC" "new ArrayList\|new HashMap\|new List<"

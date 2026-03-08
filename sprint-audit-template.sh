@@ -80,6 +80,27 @@ check() {
   fi
 }
 
+check_blocker() {
+  local name="$1" pattern="$2" dir="${3:-$SRC_DIR}"
+  if [[ ! -d "$dir" ]]; then
+    echo "SKIP  [$name] — directory $dir not found"
+    return
+  fi
+  local results count
+  results=$(grep -rn "$pattern" --include="*.${EXT}" "$dir" 2>/dev/null || true)
+  count=$(echo "$results" | grep -c . 2>/dev/null || echo 0)
+  if [[ $count -gt 0 ]]; then
+    echo ""
+    echo "BLOCK [$name] — $count finding(s) (non-dismissible):"
+    echo "$results" | head -20
+    [[ $count -gt 20 ]] && echo "  ... and $((count - 20)) more"
+    total=$((total + count))
+    blockers=$((blockers + count))
+  else
+    echo "PASS  [$name]"
+  fi
+}
+
 # ═══════════════════════════════════════════════════════
 # MODULAR ADAPTER LOADING
 # If --modular flag or LANG_ADAPTER is set, source
@@ -141,9 +162,32 @@ if [[ "$USE_MODULAR" != true ]]; then
 # ═══════════════════════════════════════════════════════
 
 # Language-agnostic: search keywords without comment prefix.
-# TODO/HACK/FIXME appear in comments regardless of style (// # <!-- --)
-# TEMP(S matches the sprint-scoped scaffolding tag format: TEMP(S4)
-check "SCAFFOLDING" "TODO\|HACK\|FIXME\|TEMP(S"
+# TEMP(CORE- matches the formalized debt tag format: TEMP(CORE-042): reason
+# TEMP(S matches the legacy sprint-scoped scaffolding tag format: TEMP(S4)
+check "SCAFFOLDING" "TEMP(CORE-\|TEMP(S"
+
+# Naked TODO/HACK/FIXME in comments without a tracked CORE-ID.
+# Excludes lines already containing TEMP(CORE- or TEMP(S to avoid double-counting.
+# Note: grep is line-level — review findings for false positives from variable
+# names or strings (e.g., todoItems, "FIXME instructions"). Mark those as
+# false positives at Close Gate Phase 1a review.
+if [[ -d "$SRC_DIR" ]]; then
+  _untracked=$(grep -rn "TODO\|HACK\|FIXME" --include="*.${EXT}" "$SRC_DIR" 2>/dev/null \
+    | grep -v "TEMP(CORE-" | grep -v "TEMP(S" || true)
+  _ucount=$(echo "$_untracked" | grep -c . 2>/dev/null || echo 0)
+  if [[ $_ucount -gt 0 ]]; then
+    echo ""
+    echo "BLOCK [UNTRACKED_DEBT] — $_ucount finding(s) (non-dismissible):"
+    echo "$_untracked" | head -20
+    [[ $_ucount -gt 20 ]] && echo "  ... and $((_ucount - 20)) more"
+    total=$((total + _ucount))
+    blockers=$((blockers + _ucount))
+  else
+    echo "PASS  [UNTRACKED_DEBT]"
+  fi
+else
+  echo "SKIP  [UNTRACKED_DEBT] — directory $SRC_DIR not found"
+fi
 
 # ═══════════════════════════════════════════════════════
 # SECTION 2: Hot path allocations

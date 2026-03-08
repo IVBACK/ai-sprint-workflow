@@ -6,7 +6,7 @@
 #   2. Warn if all metrics are DEFERRED (blocking guard)
 # WORKFLOW.md rules:
 #   - Close Gate Phase 1b: "Must item unverifiable → surface CP4 AUDIT SIGNAL"
-#   - Close Gate Pre-Verdict Guard: 7-point checklist must pass before verdict
+#   - Close Gate Pre-Verdict Guard: 8-point checklist must pass before verdict
 #   - Close Gate Guard: "Blocked if ALL metrics are DEFERRED"
 # Exit: 1 (warning, non-blocking) on issues.
 

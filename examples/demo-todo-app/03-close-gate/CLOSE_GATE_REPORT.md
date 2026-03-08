@@ -42,7 +42,7 @@ Action breakdown: 1 existing, 4 written, 1 fixed, 0 revised, 0 added, 0 escalate
 
 | Finding | Section | Action |
 |---------|---------|--------|
-| `TODO: add rate limiting` in src/server.ts:42 | SCAFFOLDING | Fixed — removed TODO, added to S2 sketch |
+| `TODO: add rate limiting` in src/server.ts:42 | UNTRACKED_DEBT (blocker) | Fixed — removed naked TODO, added CORE-007 to S2 sketch in Roadmap + TRACKING.md |
 | `document.querySelector` false positive in test helper | UNCACHED | Dismissed — test file, not production |
 
 2 findings → 1 fixed, 1 false positive. Presented to user ✓
@@ -68,9 +68,22 @@ Action breakdown: 1 existing, 4 written, 1 fixed, 0 revised, 0 added, 0 escalate
 
 All failure modes: HANDLED. No MISSED modes.
 
+## Phase 1c — Fitness Review
+
+| Item | Complete? | Integrates? | Critical Axis? | Verdict |
+|------|-----------|-------------|----------------|---------|
+| CORE-001 | PASS — server starts, health endpoint responds | PASS — database init runs at startup | PASS — correctness verified by health check test | PASS |
+| CORE-002 | PASS — schema + migration idempotent | PASS — WAL mode + connection pooling | PASS — schema matches contract | PASS |
+| CORE-003 | PASS — full CRUD lifecycle | PASS — validation middleware integrated | PASS — all status codes match contract | PASS |
+| CORE-004 | PASS — rejects all invalid inputs | PASS — no stack trace leak | PASS — error format matches contract | PASS |
+| CORE-005 | PASS — edge cases (page=0, overlimit) | PASS — works with filters | PASS — correct subsets returned | PASS |
+| CORE-006 | PASS — valid + invalid filter paths | PASS — combined with pagination | PASS — 400 on invalid filter | PASS |
+
+6/6 PASS, 0 CONCERN.
+
 ## Phase 2 — Fix
 
-- 1 scaffolding tag removed (TODO → moved to roadmap sketch)
+- 1 untracked debt tag resolved (naked TODO → formalized as CORE-007 in S2)
 - 1 missing return type added
 - No Critical Axis findings requiring escalation
 
@@ -120,6 +133,7 @@ Final test run: 18/18 PASS ✓
 - Phase 0: metric verification table filled and presented? **YES**
 - Phase 1a: automated scan run? **YES** (exit code 1 → findings resolved)
 - Phase 1b: spec-driven audit run per item? **YES**
+- Phase 1c: fitness review run per item? **YES** (6/6 PASS)
 - Phase 2: findings fixed or deferred with user decision? **YES**
 - Phase 3: regression tests PASS? **YES**
 - Phase 4: coverage gaps resolved? **YES**
@@ -128,6 +142,7 @@ Final test run: 18/18 PASS ✓
 
 - **Metric summary:** 6/6 PASS, 0 DEFERRED. Action breakdown: 1 existing, 4 written, 1 fixed.
 - **Findings summary:** 2 automated + 1 supplemental = 3 total. All fixed (0 deferred).
+- **Fitness summary:** 6/6 PASS, 0 CONCERN.
 - **Risk assessment:** Clean — no open concerns.
 - **Recommendation:** Gate passed — recommend closing sprint.
 

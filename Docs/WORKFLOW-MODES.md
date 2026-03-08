@@ -9,7 +9,7 @@ project size, team structure, and risk tolerance.
 |--------|------|----------|--------|
 | **Target** | Solo dev, small projects | Default for most projects | Teams, critical systems |
 | **Entry Gate** | Abbreviated only | Full or abbreviated (AI recommends) | Full always (abbreviated disabled) |
-| **Close Gate** | sprint-audit.sh + verdict | Full 5-phase | Full 5-phase + peer sign-off |
+| **Close Gate** | sprint-audit.sh + verdict | Full 6-phase | Full 6-phase + peer sign-off |
 | **Sprint Close** | Steps 1-3, 14 (checkmarks, status, checkpoint, handoff) | Full (steps 1-15) | Full + team review |
 | **Failure mode analysis** | Skipped | Per item (3 categories) | Per item + Critical Axis depth |
 | **Metric sufficiency** | Basic (9b-lite) | Full (9c) | Full + threshold review |
@@ -33,11 +33,17 @@ Best for: solo developers, prototypes past throwaway stage, projects with < 5 fi
 
 **What's skipped:**
 - Failure mode analysis (step 9a)
-- Metric sufficiency deep check (step 9c)
+- Metric sufficiency deep check (step 9c) — including fitness check
+- Close Gate Phase 1c (fitness review) — skipped for abbreviated-gate sprints
+- Approach selection (step A.6) — still runs if triggered, but abbreviated gate produces less context
 - Checkpoint signals (CP1-4)
 - Entry Gate session boundary enforcement
 - Close Gate and Sprint Close report validation hooks
 - Architecture Review triggers
+
+**Note:** Sprint type detection (Phase 0) and roadmap sanity check (step 0pre) still run
+in Lite mode — they are lightweight and prevent data corruption regardless of rigor level.
+UNTRACKED_DEBT blocker in sprint-audit.sh also applies in Lite mode when the script is run.
 
 **How to activate:**
 ```bash
@@ -66,11 +72,13 @@ WORKFLOW_MODE="standard"
 Best for: teams, production systems, regulated domains (finance, medical, security-critical).
 
 **Everything in Standard, plus:**
-- Abbreviated Entry Gate disabled — full gate always runs
+- Abbreviated Entry Gate disabled — full gate always runs (including fitness check at 9c, approach selection at A.6)
 - All hooks are forced on (individual overrides ignored)
 - Checkpoint signals cannot be suppressed (CP3/CP4 are already non-suppressible; strict makes CP1/CP2 non-suppressible too)
 - Close Gate requires explicit peer sign-off before Sprint Close
+- Close Gate Phase 1c (fitness review) always runs — CONCERN verdicts must be resolved or explicitly approved
 - sprint-audit.sh exit code 1 blocks Close Gate (in Standard, findings are reviewed but non-blocking)
+- UNTRACKED_DEBT blocker findings cannot be dismissed as false positives without team review
 
 **How to activate:**
 ```bash

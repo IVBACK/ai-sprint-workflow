@@ -65,7 +65,7 @@ Every session starts from zero. This workflow solves three problems:
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
-                  │  (5 phases)  │  Automated scan + spec-driven audit + item-level tests
+                  │  (6 phases)  │  Automated scan + spec-driven audit + fitness review + item-level tests
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 4 (Must item unverifiable)
                          │
                          ▼
@@ -185,7 +185,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `entry-gate-session.sh` | After Entry Gate report written | Injects mandatory session boundary recommendation |
 | `detect-audit-signals.sh` | Session start (CP1-CP2) | Metric regression ≥20% between sprints; repeated failure categories across sprints |
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
-| `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 7-point pre-verdict checklist, all-DEFERRED guard |
+| `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
@@ -322,7 +322,7 @@ bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bas
 
 The template includes audit patterns for 7 languages, available both inline in `sprint-audit-template.sh` and as modular adapters in [`checks/`](checks/).
 Run `sprint-audit-template.sh --modular` to use the adapter system (auto-detects language from `EXT` variable).
-Scaffolding detection (TODO, HACK, FIXME, TEMP tags) is language-agnostic — no comment prefix required.
+Debt detection is two-tier: formalized debt (`TEMP(CORE-NNN)`, `TEMP(S…)`) is flagged as a warning; naked `TODO`/`HACK`/`FIXME` without a CORE-ID is a Close Gate blocker. Both checks are language-agnostic — no comment prefix required.
 
 | Language | Hot Path Alloc | Cached Ref | Anti-Pattern |
 |----------|---------------|-----------|-------------|
