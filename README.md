@@ -388,10 +388,10 @@ Measurements from real projects using this workflow.
 
 | Metric | Before | After | Source |
 |--------|--------|-------|--------|
-| Close Gate AI context | ~4000 lines | ~500 lines | unity-csharp (sprint-audit.sh pre-filters mechanical issues) |
-| Unintended scope changes | 3/sprint avg | 0 | unity-csharp ("AI flags, user decides" rule) |
+| Close Gate AI context | ~4000 lines | ~500 lines | sprint-audit.sh pre-filters mechanical issues |
+| Unintended scope changes | Frequent | 0 | "AI flags, user decides" rule |
 | Obsolete item detection | Manual review | Automatic | Entry Gate Step 8 strategic alignment |
-| Repeat bugs from known issues | Recurring | 0 after guardrail | unity-csharp (50+ rules from predecessor project) |
+| Repeat bugs from known issues | Recurring | 0 after guardrail | Prior experience encoded as Day 0 rules |
 ### Known Trade-offs
 
 - **Token cost per session start:** +2-3% of 200K context window at S20 (plateaus due to archive rules)
@@ -400,14 +400,13 @@ Measurements from real projects using this workflow.
 - **Learning curve:** Agent needs ~1 sprint to internalize the workflow patterns
 - **Not for throwaway code:** If the project won't survive past one session, the overhead exceeds the value
 
-> These results are from a single origin project (24 sprints, 50+ guardrails, 89+ tests).
-> More data points welcome — submit results via PR.
+> These results are from the origin project. More data points welcome — submit results via PR.
 
 ## Origin
 
-This workflow was developed during a 24-sprint production project.
-It evolved over 50+ guardrail rules, 3 automated audit scripts,
-and several hundred AI agent sessions.
+This workflow was developed during a production project.
+It evolved over multiple sprints, accumulating guardrail rules,
+automated audit scripts, and hundreds of AI agent sessions.
 
 ## License
 
