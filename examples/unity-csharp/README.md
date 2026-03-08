@@ -1,8 +1,7 @@
 # Example: Unity 6 + URP (C#) — Game Project
 
 This example shows how the AI Sprint Workflow was adapted for a real
-Unity 6 + URP project building a production system using
-real-time rendering pipeline.
+Unity 6 + URP project with real-time game systems and GPU compute pipelines.
 
 The project completed 4 sprints, accumulated 50+ guardrail rules,
 and runs 89+ EditMode tests with 3 automated audit scripts.
@@ -38,12 +37,11 @@ and runs 89+ EditMode tests with 3 automated audit scripts.
 These were identified early and never changed:
 
 ```
-- Data format: project-specific struct (locked at sprint 1)
-- Data grid: NxNxN (32 cube + ghost)
+- Data format: float4(value, typeID, param1, param2)
+- NxNxN grid with ghost cells for boundary sampling
 - Convention: value > 0 => active, value < 0 => inactive
 - Shader: #pragma use_dxc mandatory
 - Buffer: RWStructuredBuffer + InterlockedAdd (AppendStructuredBuffer forbidden)
-- Domain-specific computation (see project docs)
 ```
 
 ## Guardrail Examples (from CODING_GUARDRAILS.md)

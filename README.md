@@ -374,7 +374,7 @@ Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state t
 See [`examples/`](examples/) for adaptations and playbooks:
 
 - [`demo-todo-app/`](examples/demo-todo-app/) — **End-to-end sprint walkthrough** with all output files (TypeScript/Express)
-- [`unity-csharp/`](examples/unity-csharp/) — Real-world Unity 6 + URP game project (anonymized)
+- [`unity-csharp/`](examples/unity-csharp/) — Real-world C#/Unity game project
 - [`cursor-playbook/`](examples/cursor-playbook/) — Cursor adaptation with `.cursor/rules/*.mdc`
 - [`copilot-playbook/`](examples/copilot-playbook/) — GitHub Copilot adaptation with `copilot-instructions.md`
 - [`windsurf-playbook/`](examples/windsurf-playbook/) — Windsurf/Cascade adaptation with `.windsurf/rules/*.md`
@@ -405,9 +405,9 @@ Measurements from real projects using this workflow.
 
 ## Origin
 
-This workflow was developed during a 24-sprint production project
-(Unity 6 + URP, real-time rendering pipeline). It evolved over 50+ guardrail rules,
-3 automated audit scripts, and several hundred AI agent sessions.
+This workflow was developed during a 24-sprint production project.
+It evolved over 50+ guardrail rules, 3 automated audit scripts,
+and several hundred AI agent sessions.
 
 ## License
 

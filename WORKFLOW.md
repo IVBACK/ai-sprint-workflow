@@ -1507,7 +1507,7 @@ Measure the system as it stands today — using the same measurement method as C
    → capture: screenshots, log excerpts, profiler screenshots
 
 4. Check kill-switch state:
-   → Is the system enabled? (feature flag, feature flag, build define)
+   → Is the system enabled? (feature flag, config toggle, build define)
    → Is it conditionally disabled? (scene-only, platform-only, requires init sequence?)
 
 5. Check initialization sequence:
@@ -1850,7 +1850,7 @@ During any implementation session, while reading code, running tests, or measuri
 Signal fires if:
   - AI is trying to use an output from a past sprint (API, buffer, file) and it is
     missing, differently shaped, or returning unexpected values
-    Example: calling CacheManager.GetCachedItem() → always returns null
+    Example: calling CacheManager.GetCachedValue() → always returns null
              despite S6 claiming "cache read path verified"
   - A test from a past sprint is now failing (sprint-audit.sh section regressed)
   - A profiler measurement contradicts a past sprint's metric gate by > 20%

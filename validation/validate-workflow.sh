@@ -154,12 +154,13 @@ else
 fi
 
 # 1.4 Close Gate phase count
-# README diagram says "(5 phases)". WORKFLOW.md has Phase 0, 1a, 1b, 2, 3, 4 = 5 unique numbers.
+# README diagram says "(6 phases)". WORKFLOW.md has Phase −1, 0, 1a, 1b, 1c, 2, 3, 4 = 6 unique numbers.
+# Phase −1 uses Unicode minus (U+2212), so we normalize to ASCII before counting.
 readme_cg_claim=$(grep -oE '[0-9]+ phases' "$README" | grep -oE '[0-9]+' | head -1)
 template_cg_section=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 template_cg_phases=0
 if [[ -n "$template_cg_section" ]]; then
-  template_cg_phases=$(echo "$template_cg_section" | grep -oE '\*\*Phase [0-9]+' | grep -oE '[0-9]+' | sort -un | wc -l)
+  template_cg_phases=$(echo "$template_cg_section" | sed 's/−/-/g' | grep -oE '\*\*Phase -?[0-9]+' | grep -oE '-?[0-9]+' | sort -un | wc -l)
 fi
 
 if [[ -z "$readme_cg_claim" ]]; then

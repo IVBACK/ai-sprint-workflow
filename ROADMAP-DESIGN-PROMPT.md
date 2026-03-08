@@ -125,9 +125,9 @@ Produce sections that have content. **Omit sections with nothing to say.**
 | ...  | ...    | ... | ...    |
 
 ## Non-Negotiable Contracts  ← only if locked technical decisions exist
-- [Data format: e.g. "struct with fields locked at sprint 1"]
-- [Layout: e.g. "NxNxN grid with ghost cells"]
-- [Convention: e.g. "density > 0 = solid, density < 0 = air"]
+- [Data format: e.g. "float4(value, typeID, reserved1, reserved2)"]
+- [Layout: e.g. "Data grid: NxNxN"]
+- [Convention: e.g. "value > 0 = active, value < 0 = inactive"]
 
 ## Versioning Policy  ← only if project writes versioned formats to disk
 - Format: MAJOR.MINOR — MAJOR = breaking change (old file unreadable), MINOR = backward-compatible addition
