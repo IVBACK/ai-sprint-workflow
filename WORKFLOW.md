@@ -452,6 +452,10 @@ not copied from a generic template. Each rule comes from scanning this specific 
 
 ## Entry Gate — Pre-Sprint Review
 
+> **Parallel execution (user-triggered):** If the user requests parallel execution,
+> agents with sub-agent support can run Entry Gate phases in parallel waves —
+> see [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md) §Entry Gate. Do not load that document automatically.
+
 Before writing code for a new sprint:
 
 **Abbreviated mode** (≤3 Must items AND no cross-sprint dependencies):
@@ -685,6 +689,12 @@ so Implementation Loop step A.5 knows research is already complete.
     longer viable. Which applies?" User decides.
     Return to Phase 0 twice and still 0 Must → Sprint Abort is the only option. User confirms.
 11. Produce dependency-ordered implementation list
+    After producing the dependency graph, if 4+ items have no mutual dependencies
+    (can execute independently), suggest parallel execution to the user:
+    "This sprint has [N] independent items — parallel execution could help.
+    Want me to load the parallel execution guide?"
+    If user accepts → load Docs/PARALLEL-EXECUTION.md and plan waves.
+    If user declines or no response → continue sequentially. Do not ask again.
 12. Gate assessment, report & user approval
     a. Write full Entry Gate report to `Docs/Planning/S<N>_ENTRY_GATE.md`
        Contains: complete analysis from phases 0-3 (state review, dependency/API checks,
@@ -729,6 +739,10 @@ so Implementation Loop step A.5 knows research is already complete.
 ---
 
 ## Implementation Loop
+
+> **Parallel execution (user-triggered):** If the user requests parallel execution,
+> independent items can run in parallel waves via sub-agents —
+> see [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md) §Implementation Loop. Do not load that document automatically.
 
 For each Must item (in dependency order from Entry Gate step 11):
 
@@ -861,6 +875,10 @@ Close Gate is always user-initiated — AI does not ask "shall we close?" unprom
 ---
 
 ## Close Gate — Sprint-End Audit
+
+> **Parallel execution (user-triggered):** If the user requests parallel execution,
+> agents with sub-agent support can run Close Gate audit phases in parallel waves —
+> see [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md) §Close Gate. Do not load that document automatically.
 
 **Phase logging rule:** After completing each Close Gate phase, log to TRACKING.md Change Log:
 "Close Gate Phase [X]: complete — [date]." This enables session recovery and pre-verdict

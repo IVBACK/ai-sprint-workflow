@@ -56,17 +56,19 @@ Every session starts from zero. This workflow solves three problems:
                   │(ph0-3,13 st)│  Sprint detail + alignment + dependency check
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 1 (metric regression)
                          │               Auto-Detection Checkpoint 2 (failure pattern)
+                         │               ║ Step 11: 4+ independent items? → AI suggests parallel ║
                          ▼
                   ┌──────────────┐
                   │ IMPLEMENTATION│  "Are we building it correctly?"
                   │    LOOP      │  Pre-code guardrails → code → self-verify → test → run all tests
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 3 (broken past-sprint output)
-                         │
+                         │               ║ Parallel: per-item agents in dependency waves ║
                          ▼
                   ┌──────────────┐
                   │  CLOSE GATE  │  "Did we build it correctly?"
                   │  (6 phases)  │  Automated scan + spec-driven audit + fitness review + item-level tests
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 4 (Must item unverifiable)
+                                         ║ Parallel: metric + audit waves ║
                          │
                          ▼
                   ┌──────────────┐
@@ -236,6 +238,7 @@ your-project/
 │   ├── CODING_GUARDRAILS.md      # Engineering rules from real bugs
 │   ├── LESSONS_INDEX.md          # Bug → rule traceability (starts empty)
 │   ├── SPRINT_WORKFLOW.md        # Workflow reference (copied from WORKFLOW.md)
+│   ├── PARALLEL-EXECUTION.md    # Parallel wave patterns (optional, for sub-agent capable tools)
 │   ├── Archive/                  # Archived sprint changelogs and failure history
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
@@ -290,6 +293,7 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 - **Guardrails grow from bugs and project scans.** Bootstrap seeds rules by scanning the codebase for real anti-patterns (3 layers: stack, domain, codebase). Post-bootstrap, new rules come from real incidents only. Every guardrail traces to a concrete source — bootstrap scan or production bug.
 - **Any starting point.** Works with existing codebases and empty projects alike. Existing project: agent wraps workflow structure around existing code without overwriting. Empty project: Initial Planning decomposes the goal into phases and details Sprint 1.
 - **Workflow evolution guard.** Before adding any new step or check: does it catch a real observed failure no existing mechanism catches? Is that failure worth the per-sprint overhead? Complexity is a cost paid on every sprint.
+- **Parallel execution as optional layer.** Core workflow stays sequential and agent-agnostic. Agents with sub-agent support can layer parallel waves on top (~2-3x tokens for ~40-50% faster sprints on 4+ independent items). Serial hidden costs (context overflow → session splits) partially close the token gap.
 
 → Full design rationale (40 decisions): [DESIGN.md](DESIGN.md)
 
@@ -369,6 +373,24 @@ Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state t
 
 > Full details: [Docs/WORKFLOW-MODES.md](Docs/WORKFLOW-MODES.md)
 
+### Parallel Execution (Optional)
+
+Agents with sub-agent support (Claude Code Agent tool, etc.) can run gate phases and
+implementation items in parallel waves — a coordinator delegates analysis to narrow-context
+agents, then merges results.
+
+| Phase | Serial | Parallel | Token cost |
+|-------|--------|----------|------------|
+| Entry Gate (per-item analysis) | ~40-60% of gate time | Wave 1 read-only + Wave 2 per-item | ~2-3x tokens |
+| Implementation (independent items) | Sequential A→E per item | Per-item agents in dependency waves | ~2-3x tokens |
+| Close Gate (per-item audit) | ~35-50% of gate time | Wave 1 metrics + Wave 2 FM/fitness | ~2-3x tokens |
+| Sprint Close | Sequential | Not parallelized (shared-file writes) | 1x |
+
+**Good fit:** 4+ independent items touching separate files. **Poor fit:** ≤3 items, shared-file refactors.
+The AI suggests parallel execution at Entry Gate step 11 when 4+ independent items are detected — no need to remember to ask.
+
+> Full guide: [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md)
+
 ## Examples
 
 See [`examples/`](examples/) for adaptations and playbooks:
@@ -397,6 +419,7 @@ Measurements from real projects using this workflow.
 - **Token cost per session start:** +2-3% of 200K context window at S20 (plateaus due to archive rules)
 - **Bootstrap overhead:** ~15-30 min for first sprint setup (front-loaded, amortized over project lifetime)
 - **Gate overhead:** ~5-25 min per gate depending on mode (Lite → Strict)
+- **Parallel execution token cost:** ~2-3x total tokens vs serial (mitigated by avoided session splits on long sprints)
 - **Learning curve:** Agent needs ~1 sprint to internalize the workflow patterns
 - **Not for throwaway code:** If the project won't survive past one session, the overhead exceeds the value
 

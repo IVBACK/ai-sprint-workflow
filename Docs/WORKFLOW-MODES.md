@@ -16,6 +16,7 @@ project size, team structure, and risk tolerance.
 | **Hooks (Claude Code)** | Core safety only (4/9) | All hooks (9/9) | All hooks, overrides disabled |
 | **sprint-audit.sh** | Optional | Recommended | Mandatory (exit code 1 blocks gate) |
 | **Checkpoints (CP1-4)** | Disabled | Enabled | Enabled + no signal suppression |
+| **Parallel execution** | Not recommended | Optional (if agent supports) | Recommended (if agent supports) |
 | **Overhead** | ~5 min/gate | ~15 min/gate | ~25 min/gate |
 
 ## Lite Mode
@@ -41,6 +42,9 @@ Best for: solo developers, prototypes past throwaway stage, projects with < 5 fi
 - Close Gate and Sprint Close report validation hooks
 - Architecture Review triggers
 
+**Parallel execution:** Not recommended. Abbreviated gate + small scope means
+parallelization overhead exceeds the time savings. Run sequentially.
+
 **Note:** Sprint type detection (Phase 0) and roadmap sanity check (step 0pre) still run
 in Lite mode — they are lightweight and prevent data corruption regardless of rigor level.
 UNTRACKED_DEBT blocker in sprint-audit.sh also applies in Lite mode when the script is run.
@@ -61,6 +65,10 @@ Best for: most projects, solo or small teams, 5-50 file codebases.
 This is the default. All workflow features and hooks are active.
 The AI recommends abbreviated vs. full Entry Gate based on sprint size.
 
+**Parallel execution:** Optional. If the agent supports sub-agents and the sprint has
+4+ independent items, parallel execution can reduce gate time by 40-60% at ~2-3x token cost.
+See [PARALLEL-EXECUTION.md](PARALLEL-EXECUTION.md) §Token Cost Trade-off. Evaluate at Entry Gate via dependency graph.
+
 **How to activate:**
 ```bash
 # .claude/hooks-config.sh
@@ -70,6 +78,10 @@ WORKFLOW_MODE="standard"
 ## Strict Mode
 
 Best for: teams, production systems, regulated domains (finance, medical, security-critical).
+
+**Parallel execution:** Recommended when agent supports it. Full gate with per-item
+failure mode analysis and fitness review benefits most from parallel waves (~2-3x tokens,
+~40-50% faster). See [PARALLEL-EXECUTION.md](PARALLEL-EXECUTION.md) §Token Cost Trade-off.
 
 **Everything in Standard, plus:**
 - Abbreviated Entry Gate disabled — full gate always runs (including fitness check at 9c, approach selection at A.6)

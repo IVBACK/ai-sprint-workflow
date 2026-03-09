@@ -52,6 +52,147 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **Pre-implementation impact analysis.** Implementation Loop step A: before writing any code for an item, the AI answers three questions — which files will this touch? which existing behaviors could be affected? how will you verify nothing broke? If the answers reveal >5 files or cross-system effects not predicted at Entry Gate 9a, the AI flags this to the user before proceeding. Observed pattern: analyzing logged deviations revealed the majority traced back to underestimated blast radius at implementation time. Entry Gate 9a catches failure modes at sprint level; this catches scope surprises at item level. Low overhead (3 questions per item), high signal.
 - **Debt formalization.** Naked `// TODO`, `// FIXME`, and `// HACK` comments are treated as untracked debt. `sprint-audit.sh` flags them as blocker findings (UNTRACKED_DEBT) at Close Gate Phase 1a. Resolution: either fix the debt, or formalize it as `// TEMP(CORE-NNN): [reason]` with a corresponding TRACKING.md entry. This ensures every piece of temporary code is tracked, has a target sprint for resolution, and is visible in sprint retrospectives. Observed pattern: unformalized TODOs caused a production issue that had no tracking visibility. Formalized debt (`TEMP(CORE-…)`) is still flagged by the audit (SCAFFOLDING check) but as a warning, not a blocker — it has a tracking trail.
 - **Modular audit adapters.** The inline audit patterns in `sprint-audit-template.sh` work but become unwieldy for multi-language projects and hard for contributors to extend. The `checks/` directory provides one adapter per language that sources `common.sh` helpers (`check`, `check_blocker`, `check_multi`). Loaded via `--modular` flag with auto-detection from file extension. Both modes (inline and modular) produce identical check categories. The adapter pattern lets contributors add a language without touching the main audit script.
+- **Parallel execution (optional layer).** Entry Gate and Close Gate per-item analysis (failure modes, verification plans, metric checks, fitness review) consumes 60-70% of gate time and runs sequentially in a single context — causing both slowness and attention degradation as context fills. These per-item analyses are completely independent (each examines different files). A wave-based parallelization pattern splits gate execution: Wave 1 (read-only reconnaissance) feeds a coordinator merge, then Wave 2 (per-item analysis) runs in parallel agents with narrow context. The coordinator handles only merge, cross-item decisions, and shared-file writes. Implementation loop items that touch separate files also parallelize via the dependency graph from Entry Gate step 11. The pattern is optional — defined in `Docs/PARALLEL-EXECUTION.md`, referenced from WORKFLOW.md gate sections. Core workflow remains sequential and agent-agnostic; parallel execution layers on top for agents with sub-agent support (Claude Code Agent tool, etc.). Sprint Close is intentionally not parallelized: mostly shared-file writes where conflict risk outweighs the ~10-20% time savings. Token trade-off: parallel execution consumes ~2-3x total tokens (duplicated preflight context per agent) but saves ~40-50% wall-clock time on 4+ item sprints. The trade-off is justified because serial execution on long sprints hits context window limits, forcing session splits whose state recovery cost (~30-50K tokens per split) partially closes the gap. For ≤3 items or budget-constrained runs, serial with session boundaries remains cheaper.
+
+---
+
+## Parallel Execution — Visual Reference
+
+Visual overview of the parallel execution pattern. Authoritative text: `Docs/PARALLEL-EXECUTION.md`.
+
+### The Problem: Serial Execution in a Single Context
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   SINGLE AGENT                       │
+│                                                     │
+│  Item 1 analyze ──► Item 2 analyze ──► Item 3 ...   │
+│  Item 1 code    ──► Item 2 code    ──► Item 3 ...   │
+│  Item 1 test    ──► Item 2 test    ──► Item 3 ...   │
+│                                                     │
+│  ████████████████████████████████████░░░░  context   │
+│  fresh start ────────────────► attention degrades   │
+│                                                     │
+│  Time: ═══════════════════════════════════ (long)    │
+└─────────────────────────────────────────────────────┘
+
+By item 5-6-7: context window ~70% full, earlier items still
+in memory (unnecessary), attention drops, error rate increases,
+session split needed → state recovery → token waste.
+```
+
+### The Solution: Coordinator + Narrow-Context Agents
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    COORDINATOR                            │
+│  Delegates work, merges results, writes shared files.     │
+│  Never does heavy analysis itself.                        │
+│                                                          │
+│  1. Build dependency graph                               │
+│  2. Map file ownership (shared file registry)            │
+│  3. Assemble preflight packet per agent                  │
+│  4. Launch agents in waves                               │
+│  5. Review + merge results, run test suite               │
+│  6. Present to user                                      │
+└──────────────────────────────────────────────────────────┘
+
+WAVE 1 (independent items — parallel)
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│   Agent A     │  │   Agent B     │  │   Agent C     │
+│   CORE-350    │  │   CORE-349    │  │   CORE-354    │
+│               │  │               │  │               │
+│ ░░░ context   │  │ ░░░ context   │  │ ░░░ context   │
+│ (narrow,      │  │ (narrow,      │  │ (narrow,      │
+│  fresh)       │  │  fresh)       │  │  fresh)       │
+│               │  │               │  │               │
+│ analyze+code+ │  │ analyze+code+ │  │ analyze+code+ │
+│ test          │  │ test          │  │ test          │
+└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+       │                 │                 │
+       └────────┬────────┘                 │
+                └──────────┬───────────────┘
+                           ▼
+              ┌─────────────────────────┐
+              │  COORDINATOR             │
+              │  • Merge results         │
+              │  • API caller audit      │
+              │  • Run FULL test suite   │
+              │  • Update TRACKING.md    │
+              └────────────┬────────────┘
+                           ▼
+WAVE 2 (dependent items — after Wave 1)
+┌──────────────┐  ┌──────────────┐
+│   Agent D     │  │   Agent E     │
+│   CORE-348    │  │   CORE-351    │
+│  (depends on  │  │  (depends on  │
+│   350)        │  │   349+354)    │
+└──────┬───────┘  └──────┬───────┘
+       └────────┬────────┘
+                ▼
+     COORDINATOR → test → merge → user
+```
+
+### What Each Agent Receives (Preflight Packet)
+
+```
+┌─ Agent A's packet ────────────────────────┐
+│                                            │
+│  Files: cave.rs, cave_test.rs              │
+│  Guardrails: only relevant rules           │
+│  Contracts: only relevant constraints      │
+│  Neighbors: "Agent B writes ore.rs"        │
+│  Entry Gate: this item's failure modes     │
+│  API callers: if signature changes         │
+│                                            │
+│  TOTAL: ~20-30 file references             │
+│  vs single agent: ~100+ file context       │
+└────────────────────────────────────────────┘
+```
+
+### Time vs Token Trade-off
+
+```
+SERIAL:   [====A====][====B====][====C====][====D====]  48 min
+PARALLEL: [====A====]                                   16 min
+          [====B====]  (concurrent)
+          [====C====]  (concurrent)
+                       [====D====] (waits for A)
+
+Time:    ████████░░░░░░░░░░░░░░░░░░░░░░░░  ~60% saved
+Tokens:  ████████████████████████████████░░  ~2-3x cost
+Quality: ████████████████████████████████░░  attention stays fresh
+```
+
+```
+                    SERIAL          PARALLEL
+Tokens              1x              2-3x        each agent gets duplicated context
+Time                1x              0.3-0.5x    concurrent execution
+Attention           degrades        stays fresh  narrow context per agent
+Coordination        none            overhead     merge, audit, conflict check
+Hidden serial cost  session splits  none         overflow → recovery tokens
+
+Entry Gate step 11: dependency graph produced
+                              │
+                              ▼
+                         ┌─────────────────┐
+                         │ 4+ indep. items? │
+                         └────────┬────────┘
+                           YES    │    NO
+                     ┌────────────┴────────────┐
+                     ▼                         ▼
+            AI suggests to user:          Continue serial.
+            "Parallel execution            No doc loaded.
+             could help. Load it?"
+                     │
+               ┌─────┴─────┐
+               ▼           ▼
+         User: YES    User: NO
+               │           │
+               ▼           ▼
+         Load doc,    Continue serial.
+         plan waves.  Don't ask again.
+```
 
 ---
 
