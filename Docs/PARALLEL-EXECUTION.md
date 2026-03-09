@@ -402,6 +402,22 @@ the next wave (expensive to fix at Close Gate).
   (API consistency, type alignment, style, inter-item interactions) with full
   sprint diff context. This is where subtle cross-item issues get caught.
 
+### Review Layers at a Glance
+
+Five review points exist in the workflow. Each has a distinct scope — if two
+reviews start doing the same thing, one should be removed.
+
+| Layer | When | What it checks | Depth | Who |
+|-------|------|----------------|-------|-----|
+| Coordinator between-wave | After each impl wave | Tests pass, imports resolve, no obvious breakage | Surface — seconds, not minutes | Coordinator |
+| Per-item audit | Close Gate Wave 2 | Failure modes handled? Fitness questions pass? | Deep, per-item scope | Sub-agent (1-2 items each) |
+| Cross-cut review | Close Gate Wave 2 | API consistency, type alignment, style, inter-item interactions | Deep, cross-item scope | Sub-agent (full sprint diff) |
+| sprint-audit.sh | Close Gate Wave 1 | Orphan IDs, untracked debt, format, mechanical rules | Automated, policy | Script |
+| Sprint Close step 6 | Sprint Close | Cross-reference integrity (CLAUDE.md ↔ target files) | Automated, structural | Coordinator |
+
+**Rule of thumb:** if you can't explain in one sentence what a review layer
+catches that no other layer catches, it shouldn't exist.
+
 ---
 
 ## Close Gate — Parallel Pattern
