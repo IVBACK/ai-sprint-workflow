@@ -200,6 +200,7 @@ project-root/
 │   ├── SPRINT_WORKFLOW.md             # This file (or project-specific copy)
 │   ├── LESSONS_INDEX.md               # Bug → rule traceability
 │   ├── PARALLEL-EXECUTION.md         # Parallel wave patterns (optional, user-triggered)
+│   ├── SPRINT-INDEX.md               # Topic-first cross-sprint retrieval index
 │   ├── Planning/
 │   │   ├── Roadmap.md                 # Sprint plan with Must/Should/Could
 │   │   └── S<N>_ENTRY_GATE.md         # Entry Gate report (temporary, deleted at Sprint Close)
@@ -407,9 +408,63 @@ Checkpoint: CP1=Entry Gate metric; CP2=Entry Gate failure pattern; CP3=Implement
 
 [Sprint-scoped entries. Archived to Docs/Archive/ at sprint close.]
 
+Tag significant entries for sprint index retrieval (see §Sprint Index Tagging below).
+
 ### Sprint [N]
 - [date] [ID]: [what changed]
 ```
+
+### Sprint Index Tagging
+
+Tag significant TRACKING.md entries (Change Log, Failure Mode History, Decisions) with
+HTML comments so they can be found by topic across sprints. The sprint index
+(`Docs/SPRINT-INDEX.md`) aggregates these tags into a topic-first lookup table.
+
+**Tag format:**
+```
+<!-- topics:auth,api type:failure sprint:5 item:CORE-220 -->
+```
+
+Fields:
+- `topics`: comma-separated domain areas (e.g. `auth`, `api`, `db`, `ui`, `perf`, `config`).
+  Use project-specific terms — no fixed vocabulary. Multiple topics when an entry spans domains.
+- `type`: one of `failure` | `decision` | `regression` | `baseline` | `guardrail`
+- `sprint`: sprint number (integer)
+- `item`: CORE-ID (optional for non-item entries like guardrails)
+
+**When to tag:**
+- Failure Mode History entries (type: `failure`)
+- User decisions at Entry Gate step 8 or mid-sprint scope changes (type: `decision`)
+- Regressions detected at Close Gate or CP1 (type: `regression`)
+- Performance baselines established or changed (type: `baseline`)
+- New guardrail rules added via Update Rule (type: `guardrail`)
+
+**When NOT to tag:** routine Change Log entries ("started item", "tests pass"), status
+transitions, archive operations. Only tag entries that future sprints would want to find.
+
+**Sprint Index format** (`Docs/SPRINT-INDEX.md`):
+```markdown
+# Sprint Index
+
+Topic-first lookup for cross-sprint retrieval. Most recent entries first per topic.
+Updated at Sprint Close step 7h. Source of truth: tagged entries in TRACKING.md.
+
+## auth
+- S8: regression CORE-340 (session invalidation) → G-015
+- S5: failure CORE-220 (token expiry) → G-012
+
+## perf
+- S7: regression (API p95 +40ms) → fixed CORE-310
+- S3: baseline established (API p95: 120ms)
+
+## db
+- S6: decision CORE-280 (connection pooling strategy — chose pgBouncer over app-level)
+```
+
+Rules:
+- One line per entry, newest first within each topic
+- Include CORE-ID, brief description, guardrail reference if applicable
+- Topics with no entries in last 5 sprints → archive to `Docs/Archive/sprint-index-archive.md`
 
 ### CODING_GUARDRAILS.md Template
 
@@ -631,7 +686,8 @@ so Implementation Loop step A.5 knows research is already complete.
 
 9. Verification plan:
    a. Failure mode analysis (per item — Must, Should, and Could):
-      First: read TRACKING.md §Failure Mode History — which categories failed before?
+      First: read `Docs/SPRINT-INDEX.md` for relevant topics (match item's domain areas).
+      Then: read TRACKING.md §Failure Mode History — which categories failed before?
       Check for escalation triggers in §Failure Mode History and §Open Risks:
       - Same category 2+ times in last 3 sprints → Architecture Review Required (see below).
       - Same detection=user-visual 2+ times → propose automated proxy test before proceeding.
@@ -1173,7 +1229,14 @@ Skip this phase for abbreviated-gate sprints (fitness metrics were not set at En
       - Same category 2+ times in last 3 sprints → flag "Architecture Review Required" at next Entry Gate
       - Same detection=user-visual 2+ times → flag "Can automated proxy test replace visual check?" at next Entry Gate
       Record flags in TRACKING.md §Open Risks so Entry Gate 9a picks them up.
-   g. **Present completed retrospective table to user** before proceeding to step 8.
+   g. **Present completed retrospective table to user** before proceeding to step 7h.
+   h. **Sprint index update** — update `Docs/SPRINT-INDEX.md`:
+      Scan TRACKING.md for tagged entries (`<!-- topics:... -->`) from this sprint.
+      For each tagged entry: add a one-line summary under each relevant topic heading,
+      newest first. Create new topic headings as needed. If a topic has no entries in
+      last 5 sprints, archive that topic section to `Docs/Archive/sprint-index-archive.md`.
+      Also tag and index any untagged significant entries discovered during the retrospective
+      (failures, decisions, guardrails added this sprint).
 8. Failure Mode History maintenance:
    - If §Failure Mode History exceeds 30 rows: archive rows older than 5 sprints
      to Docs/Archive/failure-history-S1-S[N].md. Keep last 5 sprints in TRACKING.md.

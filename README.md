@@ -47,6 +47,7 @@ Every session starts from zero. This workflow solves three problems:
 1. **Context loss** — Structured files (`CLAUDE.md`, `TRACKING.md`, `CODING_GUARDRAILS.md`) give the agent instant context on every session start.
 2. **Quality drift** — Three gates (Entry Gate, Close Gate, Sprint Close) catch mistakes before they compound.
 3. **Scope creep** — Must/Should/Could prioritization and strategic alignment checks keep sprints focused.
+4. **Cross-sprint amnesia** — Sprint index (`SPRINT-INDEX.md`) provides topic-first lookup of past failures, decisions, and regressions so the agent doesn't repeat mistakes.
 
 ## How It Works
 
@@ -239,6 +240,7 @@ your-project/
 │   ├── LESSONS_INDEX.md          # Bug → rule traceability (starts empty)
 │   ├── SPRINT_WORKFLOW.md        # Workflow reference (copied from WORKFLOW.md)
 │   ├── PARALLEL-EXECUTION.md    # Parallel wave patterns (optional, for sub-agent capable tools)
+│   ├── SPRINT-INDEX.md          # Topic-first cross-sprint retrieval index
 │   ├── Archive/                  # Archived sprint changelogs and failure history
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
