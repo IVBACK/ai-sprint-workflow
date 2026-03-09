@@ -357,8 +357,12 @@ Each agent in a wave runs the full Implementation Loop (A → E) for its assigne
 - A.5/A.6: Domain research / approach selection (if needed)
 - B: Write code
 - C: Self-verify (5-point checklist)
-- D: Write tests + D.6 incremental test run
+- D: Write tests + D.6 incremental test run + D.7 AC exit check
 - E: Report back (not write to TRACKING.md — coordinator does that)
+
+**D.7 is mandatory for each agent.** The agent's report must include the AC exit check
+table (met/not met per criterion with file:line evidence). Coordinator uses this to
+verify completeness before merging — items without AC evidence are sent back.
 
 **Agent writes code + tests. Coordinator writes TRACKING.md.**
 

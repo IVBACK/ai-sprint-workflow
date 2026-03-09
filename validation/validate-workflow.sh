@@ -670,6 +670,64 @@ done
 $audit_ext_ok && pass "AUDIT_LANG_EXT (7 extensions)"
 
 # ═══════════════════════════════════════════════════════════════
+#  CATEGORY 7: Document Contract & Bootstrap Completeness
+# ═══════════════════════════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════════════════════"
+echo "  CATEGORY 7: Document Contract & Bootstrap Completeness"
+echo "══════════════════════════════════════════════════════"
+
+# 7.1 File tree → Document Contract parity
+# Every .md file in the WORKFLOW.md file tree (under Docs/) should appear in the
+# CLAUDE.md template's Document Contract section.
+doc_contract=$(extract_section "$WORKFLOW" "^## Document Contract" "^##")
+tree_docs_files=$(extract_section "$WORKFLOW" "^project-root" '^\`\`\`' \
+  | grep -E '[├└│]' | sed 's/#.*//' \
+  | grep -oE '[A-Z][A-Za-z_-]+\.md' \
+  | grep -v 'CLAUDE\.md' | grep -v 'S<N>_ENTRY_GATE\.md' \
+  | sort -u)
+
+contract_missing=""
+if [[ -n "$doc_contract" ]] && [[ -n "$tree_docs_files" ]]; then
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    if ! echo "$doc_contract" | grep -qF "$f"; then
+      contract_missing="$contract_missing $f"
+    fi
+  done <<< "$tree_docs_files"
+fi
+
+if [[ -z "$contract_missing" ]]; then
+  pass "DOC_CONTRACT_PARITY"
+else
+  fail "DOC_CONTRACT_PARITY" "Files in file tree but missing from Document Contract:$contract_missing"
+fi
+
+# 7.2 File tree → README bootstrap list parity
+# Every .md file in the WORKFLOW.md file tree (under Docs/) should appear in
+# README.md's bootstrap file creation line (the "Create ..." line).
+readme_bootstrap_line=$(grep -E 'Create.*CLAUDE\.md.*TRACKING\.md' "$README" || true)
+bootstrap_missing=""
+if [[ -n "$readme_bootstrap_line" ]] && [[ -n "$tree_docs_files" ]]; then
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    # Skip files that are optional/user-triggered (not created at bootstrap)
+    case "$f" in
+      PARALLEL-EXECUTION.md) continue ;;  # optional, user-triggered
+    esac
+    if ! echo "$readme_bootstrap_line" | grep -qF "$f"; then
+      bootstrap_missing="$bootstrap_missing $f"
+    fi
+  done <<< "$tree_docs_files"
+fi
+
+if [[ -z "$bootstrap_missing" ]]; then
+  pass "BOOTSTRAP_LIST_PARITY"
+else
+  fail "BOOTSTRAP_LIST_PARITY" "Files in file tree but missing from README bootstrap list:$bootstrap_missing"
+fi
+
+# ═══════════════════════════════════════════════════════════════
 #  SUMMARY
 # ═══════════════════════════════════════════════════════════════
 echo ""
