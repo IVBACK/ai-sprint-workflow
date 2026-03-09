@@ -92,6 +92,11 @@ The coordinator never does heavy analysis — it delegates, merges, and decides.
 Agents never write to shared files (TRACKING.md, Roadmap.md, CLAUDE.md) — only
 the coordinator does.
 
+Sub-agents are not just for speed. They also keep implementation noise out of
+the coordinator's context, allowing it to stay aligned with sprint rules, scope
+boundaries, verification requirements, and final quality control. A coordinator
+that reviews diffs is sharper than one that wrote the code itself.
+
 ### Coordinator Pre-Launch Checklist
 
 Run before **every** wave launch. Do not skip steps — Wave 1-2 production bugs
@@ -370,7 +375,11 @@ For sprints with 4+ items, a separate test agent can:
 
 ### Coordinator Between Waves
 
-After each wave completes:
+After each wave completes, the coordinator does a **lightweight review** — not a
+line-by-line code review, but a structural sanity check. The goal is to catch
+obvious breakage early (cheap to fix now) rather than letting it propagate to
+the next wave (expensive to fix at Close Gate).
+
 1. Review all agent outputs (watchdog)
 2. Resolve any file conflicts discovered (expect merge overhead: 30-45% of wave time
    when file overlap exists — budget for this)
@@ -378,9 +387,20 @@ After each wave completes:
    update all callers? Grep for the old signature across the full codebase (including
    test files). Missing updates → fix before proceeding.
 4. Run full test suite (catch cross-item regressions)
-5. Update TRACKING.md with all items from this wave
-6. **Commit** — mandatory before launching next wave (see §Inter-Wave Commit)
-7. Launch next wave with updated context (agents fork from committed state)
+5. **Quick sanity scan** — skim diffs for obvious issues: broken imports, removed
+   code that other items depend on, test files that reference deleted functions.
+   This is NOT a deep review — that's the cross-cut agent's job at Close Gate.
+6. Update TRACKING.md with all items from this wave
+7. **Commit** — mandatory before launching next wave (see §Inter-Wave Commit)
+8. Launch next wave with updated context (agents fork from committed state)
+
+**Two-layer review model:**
+- **Here (between waves):** coordinator catches surface-level breakage fast. If
+  tests pass and imports resolve, proceed. Don't spend 20 minutes reading code —
+  that defeats the purpose of delegation.
+- **Close Gate Wave 2:** cross-cut review agent does the deep, systematic check
+  (API consistency, type alignment, style, inter-item interactions) with full
+  sprint diff context. This is where subtle cross-item issues get caught.
 
 ---
 
@@ -421,21 +441,54 @@ Each metric verification agent:
 |-------|------|-------|
 | Per-item agent | Phase 1b: predicted failure modes vs implementation | Item's predicted modes + implementing files |
 | Per-item agent | Phase 1c: fitness review (3 fitness questions) | Item's implementation + Critical Axis |
+| Cross-cut review agent (1) | Cross-item consistency check (optional but recommended) | Full sprint diff (`git diff main...sprint-N-impl`) |
 
-Each agent handles 1-2 items and returns:
+Each per-item agent handles 1-2 items and returns:
 - Per-item failure mode status (HANDLED / MISSED / N/A per mode)
 - Per-item fitness verdict (PASS / CONCERN with explanation)
 - Supplemental findings (leaks, dead code, observability gaps)
 
+The cross-cut review agent runs in parallel with per-item agents and checks:
+- **API contract consistency** — if one item changed a function signature, do all
+  callers (including other items' code) use the new signature?
+- **Type/interface alignment** — shared types modified by one item still match
+  usage in other items' files
+- **Style consistency** — naming conventions, error handling patterns, log formats
+  across all changed files
+- **Unintended interactions** — two items touching adjacent code that may conflict
+  at runtime even without merge conflicts
+
+Cross-cut agent returns a structured report:
+
+```
+## Cross-Cut Review — Sprint N
+
+### API Consistency: PASS / ISSUE
+[details if ISSUE]
+
+### Type Alignment: PASS / ISSUE
+[details if ISSUE]
+
+### Style Consistency: PASS / CONCERN
+[details if CONCERN]
+
+### Interaction Risks: NONE / FOUND
+[details if FOUND]
+```
+
 ← **Coordinator merge (sequential from here):**
-- Phase 2: fix findings (coordinator — may require cross-item judgment)
+- Phase 2: fix findings from per-item audits AND cross-cut review (coordinator
+  decides priority — cross-cut issues often have higher blast radius)
 - Phase 3: regression test run (coordinator — full suite)
-- Phase 4: test coverage gap check (coordinator — cross-item view needed)
+- Phase 4: test coverage gap check (coordinator — cross-cut review may have
+  already flagged gaps, reducing coordinator's work here)
 - Compile verdict, present to user
 
-**Why this works:** Phase 1b/1c per item are completely independent — each item
-examines its own implementing files against its own failure modes. The coordinator
-only needs all results for Phase 2 decisions.
+**Why this works:** Per-item audits are completely independent — each item
+examines its own implementing files against its own failure modes. The cross-cut
+agent covers the gap that per-item agents cannot see: inter-item consistency.
+The coordinator merges all results for Phase 2 decisions without having to read
+implementation code itself.
 
 ---
 
@@ -457,7 +510,7 @@ Not worth it. Run sequentially.
 |------|------------|
 | Same-file edits | Shared File Registry prevents conflicts before launch |
 | Guardrail ignorance | Preflight packet includes relevant rules per agent |
-| Cross-item inconsistency | Coordinator reviews + test suite after each wave |
+| Cross-item inconsistency | Two-layer review: coordinator lightweight check between waves + cross-cut agent deep review at Close Gate Wave 2 |
 | Agent going off-track | Watchdog pattern catches early (review as agents complete) |
 | Context pollution | Each agent gets narrow context — no full-project dump |
 | Stale agent context | Coordinator provides Wave 1 summary to Wave 2 agents |
@@ -468,6 +521,7 @@ Not worth it. Run sequentially.
 | Agent scope too wide | Max 2-3 items per agent; 4+ items degrades blast radius scanning quality |
 | Cross-file caller miss | Not an isolation problem — caused by coordinator skipping caller grep; solved by §Preflight Packet item 6 (see L7, L8) |
 | Coordinator prompt errors | Both observed wave bugs traced to coordinator prompts, not agent execution; invest time in preflight research (see L8) |
+| Cross-cut agent coverage gap | Large diffs may exceed agent attention — coordinator's between-wave sanity check (step 5) is the first line of defense; test suite catches runtime issues that static diff review misses |
 
 ---
 
@@ -650,8 +704,9 @@ CLOSE GATE (on sprint-N-impl branch)
            └─ Agent B-N: per-item metric verification
   Coordinator ──── merge → metric table + audit summary → user
   Wave 2 ─┬─ Agent/item: Phase 1b predicted FM vs actual
-           └─ Agent/item: Phase 1c fitness review
-  Coordinator ──── Phase 2 fix (commit to sprint branch) → Phase 3 test → Phase 4 coverage → verdict
+           ├─ Agent/item: Phase 1c fitness review
+           └─ Cross-cut agent: API consistency, type alignment, style, interactions
+  Coordinator ──── Phase 2 fix (per-item + cross-cut findings) → Phase 3 test → Phase 4 coverage → verdict
 
 MERGE (between Close Gate verdict and Sprint Close)
   git checkout main → git merge --squash sprint-N-impl → git commit → git branch -d sprint-N-impl

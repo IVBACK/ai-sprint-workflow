@@ -388,6 +388,7 @@ agents, then merges results.
 
 **Good fit:** 4+ independent items touching separate files. **Poor fit:** ≤3 items, shared-file refactors.
 The AI suggests parallel execution at Entry Gate step 11 when 4+ independent items are detected — no need to remember to ask.
+Sub-agents also keep implementation noise out of the coordinator's context, letting it stay focused on sprint rules, scope, and quality control.
 
 Implementation runs on a sprint branch (`sprint-N-impl`) with mandatory commits between waves.
 Main stays clean until Close Gate passes. Merge overhead: 30-45% of wave time when files overlap — budget explicitly.
