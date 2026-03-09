@@ -199,6 +199,7 @@ project-root/
 │   ├── CODING_GUARDRAILS.md           # Engineering rules (never-again list)
 │   ├── SPRINT_WORKFLOW.md             # This file (or project-specific copy)
 │   ├── LESSONS_INDEX.md               # Bug → rule traceability
+│   ├── PARALLEL-EXECUTION.md         # Parallel wave patterns (optional, user-triggered)
 │   ├── Planning/
 │   │   ├── Roadmap.md                 # Sprint plan with Must/Should/Could
 │   │   └── S<N>_ENTRY_GATE.md         # Entry Gate report (temporary, deleted at Sprint Close)
