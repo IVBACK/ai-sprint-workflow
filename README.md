@@ -389,6 +389,9 @@ agents, then merges results.
 **Good fit:** 4+ independent items touching separate files. **Poor fit:** ≤3 items, shared-file refactors.
 The AI suggests parallel execution at Entry Gate step 11 when 4+ independent items are detected — no need to remember to ask.
 
+Implementation runs on a sprint branch (`sprint-N-impl`) with mandatory commits between waves.
+Main stays clean until Close Gate passes. Merge overhead: 30-45% of wave time when files overlap — budget explicitly.
+
 > Full guide: [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md)
 
 ## Examples
@@ -420,6 +423,7 @@ Measurements from real projects using this workflow.
 - **Bootstrap overhead:** ~15-30 min for first sprint setup (front-loaded, amortized over project lifetime)
 - **Gate overhead:** ~5-25 min per gate depending on mode (Lite → Strict)
 - **Parallel execution token cost:** ~2-3x total tokens vs serial (mitigated by avoided session splits on long sprints)
+- **Parallel merge overhead:** 30-45% of wave time when file overlap exists (group overlapping items to minimize)
 - **Learning curve:** Agent needs ~1 sprint to internalize the workflow patterns
 - **Not for throwaway code:** If the project won't survive past one session, the overhead exceeds the value
 

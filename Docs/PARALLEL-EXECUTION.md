@@ -32,9 +32,11 @@ Evaluate at Entry Gate via the dependency graph:
 | Most items share files or have sequential deps | Poor fit — sequential is fine |
 | Architectural sprint (shared core refactor) | Poor fit — overhead not worth it |
 | ≤3 Must items (abbreviated gate) | Usually not worth it |
+| 5+ overlapping files between items | Poor fit — merge overhead eats time savings |
 
 **Rule: Don't force it.** If the dependency graph shows mostly sequential items,
-work normally. Parallelization adds coordination overhead — it must earn its keep.
+work normally. Parallelization adds coordination overhead (merge = 30-45% of wave
+time when file overlap exists) — it must earn its keep.
 
 ### Token Cost Trade-off
 
@@ -47,6 +49,7 @@ Parallel execution trades tokens for time and context quality:
 | Per-agent context | N/A | Narrow (2-3 items + packet) | Better attention per item |
 | Context overflow risk | High on 5+ items | Low (split across agents) | Serial often needs session splits anyway |
 | Duplicated information | None | Guardrails, contracts, Entry Gate data copied per agent | ~30-50% of agent tokens are shared context |
+| Merge overhead | None | 30-45% of wave time | Grows with file overlap — budget explicitly |
 
 **When token cost is justified:**
 - 4+ independent items — time savings outweigh token overhead
@@ -63,6 +66,17 @@ Parallel execution trades tokens for time and context quality:
 per split. A sprint with 7 items might need 2-3 session splits serially, partially closing
 the token gap with parallel execution.
 
+**Production benchmark (13 items, 3 waves):**
+
+| Wave | Agents | Execution | Merge | Issues |
+|------|--------|-----------|-------|--------|
+| 1 | 3 parallel | ~8 min | ~5 min | 1 (missed test callers) |
+| 2 | 2 parallel | ~9 min | ~12 min | 1 (file overwrite) |
+| 3 | 3 parallel | ~5 min | ~1 min | 0 (clean base after commit) |
+| **Total** | | **~35 min** | | **Serial estimate: 90+ min → ~2.5x speedup** |
+
+Wave 3's zero-issue result directly followed inter-wave commit discipline + zero file overlap.
+
 ---
 
 ## Concepts
@@ -77,6 +91,62 @@ the token gap with parallel execution.
 The coordinator never does heavy analysis — it delegates, merges, and decides.
 Agents never write to shared files (TRACKING.md, Roadmap.md, CLAUDE.md) — only
 the coordinator does.
+
+### Coordinator Pre-Launch Checklist
+
+Run before **every** wave launch. Do not skip steps — Wave 1-2 production bugs
+all traced to skipped checklist items (see L7, L8).
+
+```
+PRE-LAUNCH CHECKLIST (per wave)
+──────────────────────────────────────────────────────────────────
+□ 1. PREVIOUS WAVE COMMITTED?
+     Wave 1: skip (no previous wave)
+     Wave 2+: verify git log shows previous wave's commit on sprint branch.
+     If not committed → commit now. Do not launch agents on uncommitted state.
+
+□ 2. FILE DISCOVERY — per item
+     For each item in this wave: grep/glob to find which files will be modified.
+     Don't guess — actually grep. Include test files.
+
+□ 3. API CALLER SCAN — per item
+     Does this item change a public API signature (params, return type, constants)?
+     YES → grep the old signature across the FULL codebase (including test files).
+           Include ALL callers in the agent's preflight packet.
+           Do NOT delegate caller discovery to the agent.
+     NO  → skip.
+
+□ 4. FILE OVERLAP MATRIX
+     Cross-reference step 2 results across all items in this wave.
+     - 0 shared files → proceed
+     - 1 shared file → partition scope (agent A edits lines 1-50, agent B edits 60-100)
+       or move one item to next wave
+     - 2+ shared files → group those items into the SAME agent
+     Document the matrix before launching.
+
+□ 5. EDIT-NOT-COPY RULE — per shared file
+     For files touched by previous waves: instruct agents to use Edit (line-level)
+     not Write (full file copy). A full copy from worktree overwrites previous wave's
+     changes even after commit — because the worktree's copy was forked before those
+     changes existed in that file's non-committed form.
+     Explicit in prompt: "Edit lines X-Y only. Do not rewrite the full file."
+
+□ 6. PREFLIGHT PACKET COMPLETE? — per agent
+     Each agent's packet has all 6 items from §Preflight Context Packet?
+     - [ ] File list (from step 2)
+     - [ ] Guardrail sections
+     - [ ] Relevant contracts
+     - [ ] Neighbor awareness (which files other agents in this wave touch)
+     - [ ] Entry Gate data (failure modes, verification plan for these items)
+     - [ ] API callers (from step 3, if applicable)
+
+□ 7. LAUNCH WAVE
+──────────────────────────────────────────────────────────────────
+```
+
+**Time cost:** ~3-5 minutes per wave. **Savings:** prevents 10-15 minute merge rework
+per missed step. Every production bug observed (L1, L4, L5, L8) would have been caught
+by this checklist.
 
 ### Agent Output Contract
 
@@ -108,9 +178,12 @@ Before launching an agent, the coordinator assembles a scoped context packet:
 4. **Neighbor awareness** — which files other parallel agents are touching (read-only)
 5. **Entry Gate data** — failure modes, metrics, verification plan for this item only
 6. **API caller list** — if this item changes a public API signature (function params,
-   return type, uniform/constant names), grep all callers (including test files) and
-   include them in the packet. Agent must update every caller, not just the ones it
-   initially planned to touch. Missing callers are the #1 source of post-wave test failures.
+   return type, uniform/constant names), the **coordinator** must grep all callers
+   (including test files) and include them in the packet before launching the agent.
+   Do not delegate caller discovery to the agent — agents in narrow context tend to
+   be conservative ("that might be another agent's file") and skip callers. The
+   coordinator has full project visibility; the agent does not.
+   Missing callers are the #1 source of post-wave test failures (see L1, L8).
 
 This prevents agents from consuming full project context. Narrow context = better focus.
 
@@ -126,8 +199,13 @@ CORE-348 → writes: src/cave.rs (CONFLICT with CORE-350)
 ```
 
 - **No conflict** → agents run in parallel
-- **Same file** → sequential execution, or explicit scope partitioning
+- **1 shared file** → sequential execution, or explicit scope partitioning
+- **2+ shared files** → group overlapping items into the same agent (merge overhead
+  grows faster than execution time savings — 5 overlapping files ≈ merge taking
+  30-45% of total wave time)
 - Coordinator resolves conflicts before launching the wave
+- **"Zero conflict" is unrealistic** in tightly coupled codebases. Minimize overlap
+  through grouping, but plan merge strategy rather than expecting zero conflicts.
 
 ### Watchdog Pattern
 
@@ -137,10 +215,63 @@ Do not fire-and-forget agents. The coordinator:
 3. Course-corrects early if an agent drifted off-track
 4. Cheaper than discovering errors after full wave completion
 
-### No Auto-Commit
+### Inter-Wave Commit (Mandatory)
 
-Agents write code and pass tests. The coordinator merges and verifies cross-item
-consistency. The **user** decides when to commit. No agent commits autonomously.
+Sub-agents never commit autonomously. But the coordinator **must commit after each wave**
+before launching the next wave. Reason: worktree-based agents fork from the last
+committed state — uncommitted Wave 1 changes are invisible to Wave 2 agents,
+causing silent state loss and duplicate/conflicting edits.
+
+All inter-wave commits happen on a **sprint branch**, not main:
+
+```
+main:              ──A──B──────────────────────────────────── merge ←
+sprint-N-impl:          └──[wave1]──[wave2]──[wave3]──CG──┘
+
+Wave 1 agents complete → coordinator merges + tests pass
+  → coordinator informs user: "Wave 1 complete, committing to sprint branch."
+  → coordinator commits on sprint-N-impl branch
+  → Wave 2 agents fork from committed state → see Wave 1's work
+  → ...
+  → Close Gate passes → merge sprint branch to main
+```
+
+**Why a branch:**
+- main stays clean — no half-sprint commits pollute history
+- Sprint abort → delete branch, main untouched
+- Close Gate is the merge gate — nothing reaches main without passing audit
+- **Squash merge to main** — wave commits are implementation detail, not history.
+  Wave-by-wave history stays on the branch if needed for forensics.
+
+**Merge ceremony (after Close Gate verdict, before Sprint Close step 1):**
+```bash
+# Close Gate Phase 2 fixes are committed to sprint-N-impl (not main)
+git checkout main
+git merge --squash sprint-N-impl
+git commit -m "Sprint N: [summary]"
+git branch -d sprint-N-impl          # cleanup — forensic history in reflog if needed
+```
+All Close Gate Phase 2 fixes must be committed to sprint-N-impl before the squash merge.
+The merge happens **between Close Gate approval and Sprint Close step 1** — Sprint Close
+runs on main with all sprint code already merged.
+
+**Claude Code worktree integration:** The `isolation: "worktree"` parameter on the
+Agent tool maps directly to this model. Coordinator works on `sprint-N-impl` branch →
+each agent launched with `isolation: "worktree"` automatically forks from the branch's
+current committed state → agent works in isolation → coordinator merges result back →
+commits to sprint branch → next wave's worktrees see the previous wave's work.
+No manual branch management needed — the tool handles worktree creation and cleanup.
+
+The coordinator creates the sprint branch at the start of the first implementation
+wave (not at Entry Gate — the branch contains only implementation commits).
+The coordinator announces each commit but does not wait for approval — inter-wave
+commits are a structural necessity, not a discretionary action.
+
+Skipping the inter-wave commit is the #1 source of cross-wave bugs.
+
+**Sequential fallback:** If the user declines parallel execution (Entry Gate step 11),
+no sprint branch is created. Sequential implementation commits directly to the current
+branch as items are completed. The sprint branch model applies **only** to parallel execution.
 
 ---
 
@@ -226,6 +357,10 @@ Each agent in a wave runs the full Implementation Loop (A → E) for its assigne
 
 **Agent writes code + tests. Coordinator writes TRACKING.md.**
 
+**Max 2-3 items per agent.** 4+ items per agent degrades quality — blast radius
+scanning becomes incomplete, edge cases get missed. If you have 8 items, use 3-4
+agents rather than 2 overloaded ones.
+
 ### Dedicated Test Agent (optional)
 
 For sprints with 4+ items, a separate test agent can:
@@ -237,13 +372,15 @@ For sprints with 4+ items, a separate test agent can:
 
 After each wave completes:
 1. Review all agent outputs (watchdog)
-2. **API signature audit** — for each agent that changed a public API: did the agent
+2. Resolve any file conflicts discovered (expect merge overhead: 30-45% of wave time
+   when file overlap exists — budget for this)
+3. **API signature audit** — for each agent that changed a public API: did the agent
    update all callers? Grep for the old signature across the full codebase (including
    test files). Missing updates → fix before proceeding.
-3. Run full test suite (catch cross-item regressions)
-4. Update TRACKING.md with all items from this wave
-5. Resolve any file conflicts discovered
-6. Launch next wave with updated context
+4. Run full test suite (catch cross-item regressions)
+5. Update TRACKING.md with all items from this wave
+6. **Commit** — mandatory before launching next wave (see §Inter-Wave Commit)
+7. Launch next wave with updated context (agents fork from committed state)
 
 ---
 
@@ -254,6 +391,11 @@ Parallel workflow: split into two waves after Phase −1.
 
 **Phase −1 (state recovery) runs sequentially** — mandatory coordinator task.
 Must read TRACKING.md + Entry Gate report and state items/metrics before proceeding.
+
+**Branch checkout:** If Close Gate runs in a fresh session (recommended by WORKFLOW.md),
+the coordinator must `git checkout sprint-N-impl` before starting Phase −1. All Close Gate
+work (including Phase 2 fixes) happens on the sprint branch. Squash merge to main happens
+after Close Gate verdict, before Sprint Close.
 
 ### Wave 1 — Automated Checks (parallel)
 
@@ -321,6 +463,11 @@ Not worth it. Run sequentially.
 | Stale agent context | Coordinator provides Wave 1 summary to Wave 2 agents |
 | Race on shared files | Only coordinator writes TRACKING.md, Roadmap.md, CLAUDE.md |
 | Incomplete API updates | Preflight packet §6 (API caller list) + coordinator post-wave signature audit |
+| Cross-wave state loss | Inter-wave commit mandatory — Wave 2 worktrees must fork from committed state |
+| Merge overhead eating time savings | Group 2+ overlapping files into same agent; budget 30-45% of wave time for merge |
+| Agent scope too wide | Max 2-3 items per agent; 4+ items degrades blast radius scanning quality |
+| Cross-file caller miss | Not an isolation problem — caused by coordinator skipping caller grep; solved by §Preflight Packet item 6 (see L7, L8) |
+| Coordinator prompt errors | Both observed wave bugs traced to coordinator prompts, not agent execution; invest time in preflight research (see L8) |
 
 ---
 
@@ -344,14 +491,19 @@ no callers were missed.
 caller discovery. The preflight packet must expand dynamically when the item's scope
 includes signature changes.
 
-### L2: Worktree Isolation Prevents File Conflicts
+### L2: Worktree Isolation Helps but Doesn't Eliminate Merge Work
 
 **Observed:** Two agents modified different sections of the same compute shader file.
 Worktree isolation (each agent in its own git worktree) meant both agents worked on
-clean copies. Coordinator merged changes without conflict.
+clean copies. Coordinator merged changes without conflict in that case.
 
-**Takeaway:** For agents that support worktree isolation, prefer it over file-level
-partitioning. It is simpler and eliminates an entire class of merge problems.
+**However:** In a 13-item sprint with 5 overlapping files, merge overhead consumed
+30-45% of total wave time. `git apply --3way` partially failed because Wave 1 was
+in uncommitted state. Each overlapping file required manual read + edit.
+
+**Takeaway:** Worktree isolation is better than no isolation, but "eliminates merge
+problems" is too optimistic for tightly coupled codebases. Group items that share
+2+ files into the same agent. Budget merge time explicitly.
 
 ### L3: Wave-End Test Suite Is Non-Negotiable
 
@@ -361,6 +513,105 @@ caught this immediately.
 
 **Takeaway:** Never skip the coordinator's post-wave test suite run, even when all
 agents report success. Cross-agent interactions are invisible to individual agents.
+
+### L4: Cross-Wave State Loss from Uncommitted Work
+
+**Observed:** Wave 2 Agent D's worktree forked from last commit. Wave 1 Agent C had
+added a new method (ComputeNormSum) but it was uncommitted. Agent D copied a helper
+file from committed state — silently dropping Agent C's method. Tests caught it, but
+the root cause was structural: worktrees don't see uncommitted changes.
+
+**Same sprint:** Agent C missed 3 test file callers for a new uniform because its
+preflight packet lacked full caller discovery. Both bugs share the same pattern —
+incomplete visibility of Wave 1's actual state.
+
+**Fix:** Inter-wave commit is now mandatory (see §Inter-Wave Commit). Wave N must be
+committed before Wave N+1 agents are launched.
+
+**Takeaway:** "Fire and merge later" doesn't work. Each wave boundary needs a commit
+checkpoint to give the next wave a clean, complete starting point.
+
+### L5: Agent Quality Degrades at 4+ Items
+
+**Observed:** In a 5-agent wave, agents handling 1-2 items (shader optimization, GC
+allocation fixes) produced clean, hatasız output. The agent handling 4 Should items
+missed blast radius on one item — 3 test callers were not updated.
+
+**Takeaway:** Cap agents at 2-3 items. More items = wider context = weaker attention
+per item. If you have 8 items, use 3-4 agents, not 2.
+
+### L6: Merge Overhead Is 30-45% of Wall-Clock Time
+
+**Observed:** In a 13-item, 2-wave sprint: agent execution ~17 min, merge + conflict
+resolution ~15 min. Merge overhead was not a rounding error — it was nearly half the
+total time. 5 overlapping files between waves drove most of the merge cost.
+
+**Follow-up (3-wave sprint):** Wave 3 had 1 minute merge and 0 issues. Two factors contributed:
+1. **Inter-wave commit** (always reproducible) — committed Wave 1+2 before Wave 3,
+   giving worktrees a clean base. This eliminated the "agent silently drops previous
+   wave's work" class of bugs entirely. Applicable to every sprint regardless of coupling.
+2. **Zero file overlap** (situation-dependent) — Wave 3's 3 Could items touched completely
+   separate files, making merge trivial. But in Wave 1-2, Must+Should items all touched
+   central files — zero overlap was not achievable there.
+
+Don't conflate the two. Commit discipline is a process fix you always control. File overlap
+depends on the codebase — minimize it via grouping, but expect it on tightly coupled items.
+
+**Takeaway:** Two levers for merge overhead: (1) inter-wave commit — always use, eliminates
+state loss bugs; (2) file overlap grouping — use when possible, but budget merge time when
+overlap is unavoidable.
+
+### L7: Isolation Improves Quality — When Coordinator Does Its Job
+
+**Observed (Wave 1-2):** Agents with narrow scope (1-2 files) produced cleaner, faster
+output than serial execution. Agent A finished 2 shader findings in 74 seconds with 0
+errors. But Agent C skipped 3 test file callers — not because isolation hurt quality,
+but because the coordinator didn't include those callers in the preflight packet.
+
+**Observed (Wave 3):** Coordinator traced caller chains, specified exact file ownership,
+used zero-overlap grouping. Result: 0 issues across 3 agents. Per-file quality stayed
+high AND cross-file blast radius was fully covered.
+
+**Initial (wrong) conclusion:** "Isolation helps per-file, hurts cross-file — net neutral."
+**Corrected conclusion:** Cross-file quality drop was caused by coordinator prep failure,
+not by isolation itself. When the coordinator properly greps callers and includes them
+in the preflight packet (§6), isolation provides a net quality improvement — agents get
+focused context without missing cross-file dependencies.
+
+**Takeaway:** Isolation is a quality win, not a trade-off — but only if the coordinator
+invests in preflight research. The fix is in §Preflight Context Packet item 6 and L8.
+
+### L8: Coordinator Prompt Quality Is the #1 Success Factor
+
+**Observed:** Both Wave 1-2 bugs traced to coordinator prompt errors, not agent errors:
+- Agent C missed test callers → coordinator didn't grep callers before writing the prompt
+- Agent D overwrote Wave 1's method → coordinator gave the file as a copy instead of
+  instructing Edit-only on specific lines
+
+Agents executed their prompts correctly. The prompts were wrong.
+
+**Wave 3 (after learning):** Coordinator traced caller chains, specified exact file
+ownership, used zero-overlap grouping. Result: 0 issues across 3 agents.
+
+**Takeaway:** Parallel execution quality is bounded by coordinator preparation quality.
+Time spent on preflight packet assembly (caller grep, overlap analysis, explicit file
+ownership) pays back 10x in avoided merge rework. The coordinator's job is not "delegate
+and wait" — it is "research, plan, delegate precisely."
+
+The §Coordinator Pre-Launch Checklist formalizes this. Every observed bug maps to a
+skipped checklist step: step 3 catches caller misses, step 5 catches file overwrites,
+step 1 catches uncommitted state.
+
+### L9: "Already Implemented" Detection Is a Parallel Bonus
+
+**Observed:** Agent assigned to CORE-359 determined in 40 seconds that CORE-335 (previous
+sprint) had already implemented the same functionality. Serial investigation would have
+taken 10+ minutes of manual grep and diff analysis.
+
+**Takeaway:** Parallel agents are efficient scouts. If an item might already be done,
+assigning an agent to verify is cheaper than investigating manually. The agent either
+confirms "already done" (saving the item's full implementation time) or proceeds with
+implementation.
 
 ---
 
@@ -380,23 +631,31 @@ ENTRY GATE
            └─ Agent/item: ...
   Coordinator ──── steps 10-12 → report → user approval
 
-IMPLEMENTATION
-  Wave plan from Entry Gate step 11
-  Wave N ─┬─ Agent/item: full A-E loop
+IMPLEMENTATION (on sprint-N-impl branch)
+  Create sprint branch at first wave
+  ┌─ PRE-LAUNCH CHECKLIST (§Coordinator Pre-Launch Checklist)
+  │  □ Previous wave committed? □ File discovery □ API caller scan
+  │  □ Overlap matrix □ Edit-not-copy rule □ Packets complete
+  └─
+  Wave N ─┬─ Agent/item: full A-E loop (max 2-3 items/agent)
            ├─ Agent/item: ...
            └─ (optional: dedicated test agent)
-  Coordinator ──── review, test suite, TRACKING.md update
-  Wave N+1 ──── ...
+  Coordinator ──── merge, resolve conflicts, test suite, TRACKING.md update
+                   COMMIT to sprint branch (mandatory before next wave)
+  Wave N+1 ──── PRE-LAUNCH CHECKLIST → launch (forks from committed state)
 
-CLOSE GATE
-  Phase −1 ─────── sequential (coordinator state recovery)
+CLOSE GATE (on sprint-N-impl branch)
+  Phase −1 ─────── sequential (checkout sprint-N-impl + state recovery)
   Wave 1 ─┬─ Agent A: sprint-audit.sh
            └─ Agent B-N: per-item metric verification
   Coordinator ──── merge → metric table + audit summary → user
   Wave 2 ─┬─ Agent/item: Phase 1b predicted FM vs actual
            └─ Agent/item: Phase 1c fitness review
-  Coordinator ──── Phase 2 fix → Phase 3 test → Phase 4 coverage → verdict
+  Coordinator ──── Phase 2 fix (commit to sprint branch) → Phase 3 test → Phase 4 coverage → verdict
+
+MERGE (between Close Gate verdict and Sprint Close)
+  git checkout main → git merge --squash sprint-N-impl → git commit → git branch -d sprint-N-impl
 
 SPRINT CLOSE
-  Sequential (coordinator only)
+  Sequential (coordinator only, on main)
 ```

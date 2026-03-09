@@ -741,7 +741,8 @@ so Implementation Loop step A.5 knows research is already complete.
 ## Implementation Loop
 
 > **Parallel execution (user-triggered):** If the user requests parallel execution,
-> independent items can run in parallel waves via sub-agents —
+> independent items can run in parallel waves via sub-agents on a sprint branch
+> (inter-wave commits mandatory, merge to main after Close Gate) —
 > see [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md) §Implementation Loop. Do not load that document automatically.
 
 For each Must item (in dependency order from Entry Gate step 11):

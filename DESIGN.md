@@ -52,7 +52,7 @@ Rationale behind key design choices. For the workflow itself, see [WORKFLOW.md](
 - **Pre-implementation impact analysis.** Implementation Loop step A: before writing any code for an item, the AI answers three questions — which files will this touch? which existing behaviors could be affected? how will you verify nothing broke? If the answers reveal >5 files or cross-system effects not predicted at Entry Gate 9a, the AI flags this to the user before proceeding. Observed pattern: analyzing logged deviations revealed the majority traced back to underestimated blast radius at implementation time. Entry Gate 9a catches failure modes at sprint level; this catches scope surprises at item level. Low overhead (3 questions per item), high signal.
 - **Debt formalization.** Naked `// TODO`, `// FIXME`, and `// HACK` comments are treated as untracked debt. `sprint-audit.sh` flags them as blocker findings (UNTRACKED_DEBT) at Close Gate Phase 1a. Resolution: either fix the debt, or formalize it as `// TEMP(CORE-NNN): [reason]` with a corresponding TRACKING.md entry. This ensures every piece of temporary code is tracked, has a target sprint for resolution, and is visible in sprint retrospectives. Observed pattern: unformalized TODOs caused a production issue that had no tracking visibility. Formalized debt (`TEMP(CORE-…)`) is still flagged by the audit (SCAFFOLDING check) but as a warning, not a blocker — it has a tracking trail.
 - **Modular audit adapters.** The inline audit patterns in `sprint-audit-template.sh` work but become unwieldy for multi-language projects and hard for contributors to extend. The `checks/` directory provides one adapter per language that sources `common.sh` helpers (`check`, `check_blocker`, `check_multi`). Loaded via `--modular` flag with auto-detection from file extension. Both modes (inline and modular) produce identical check categories. The adapter pattern lets contributors add a language without touching the main audit script.
-- **Parallel execution (optional layer).** Entry Gate and Close Gate per-item analysis (failure modes, verification plans, metric checks, fitness review) consumes 60-70% of gate time and runs sequentially in a single context — causing both slowness and attention degradation as context fills. These per-item analyses are completely independent (each examines different files). A wave-based parallelization pattern splits gate execution: Wave 1 (read-only reconnaissance) feeds a coordinator merge, then Wave 2 (per-item analysis) runs in parallel agents with narrow context. The coordinator handles only merge, cross-item decisions, and shared-file writes. Implementation loop items that touch separate files also parallelize via the dependency graph from Entry Gate step 11. The pattern is optional — defined in `Docs/PARALLEL-EXECUTION.md`, referenced from WORKFLOW.md gate sections. Core workflow remains sequential and agent-agnostic; parallel execution layers on top for agents with sub-agent support (Claude Code Agent tool, etc.). Sprint Close is intentionally not parallelized: mostly shared-file writes where conflict risk outweighs the ~10-20% time savings. Token trade-off: parallel execution consumes ~2-3x total tokens (duplicated preflight context per agent) but saves ~40-50% wall-clock time on 4+ item sprints. The trade-off is justified because serial execution on long sprints hits context window limits, forcing session splits whose state recovery cost (~30-50K tokens per split) partially closes the gap. For ≤3 items or budget-constrained runs, serial with session boundaries remains cheaper.
+- **Parallel execution (optional layer).** Entry Gate and Close Gate per-item analysis (failure modes, verification plans, metric checks, fitness review) consumes 60-70% of gate time and runs sequentially in a single context — causing both slowness and attention degradation as context fills. These per-item analyses are completely independent (each examines different files). A wave-based parallelization pattern splits gate execution: Wave 1 (read-only reconnaissance) feeds a coordinator merge, then Wave 2 (per-item analysis) runs in parallel agents with narrow context. The coordinator handles only merge, cross-item decisions, and shared-file writes. Implementation loop items that touch separate files also parallelize via the dependency graph from Entry Gate step 11. The pattern is optional — defined in `Docs/PARALLEL-EXECUTION.md`, referenced from WORKFLOW.md gate sections. Core workflow remains sequential and agent-agnostic; parallel execution layers on top for agents with sub-agent support (Claude Code Agent tool, etc.). Sprint Close is intentionally not parallelized: mostly shared-file writes where conflict risk outweighs the ~10-20% time savings. Implementation runs on a sprint branch (`sprint-N-impl`) with mandatory inter-wave commits — worktree-based agents fork from last committed state, so uncommitted Wave 1 changes are invisible to Wave 2 agents, causing silent state loss. Main stays clean until Close Gate passes; sprint abort = delete branch. Merge overhead: 30-45% of wave time when file overlap exists — budget explicitly; group items sharing 2+ files into the same agent. Cap agents at 2-3 items (4+ degrades blast radius scanning). Token trade-off: parallel execution consumes ~2-3x total tokens (duplicated preflight context per agent) but saves ~40-50% wall-clock time on 4+ item sprints. The trade-off is justified because serial execution on long sprints hits context window limits, forcing session splits whose state recovery cost (~30-50K tokens per split) partially closes the gap. For ≤3 items or budget-constrained runs, serial with session boundaries remains cheaper.
 
 ---
 
@@ -89,12 +89,14 @@ session split needed → state recovery → token waste.
 │  Delegates work, merges results, writes shared files.     │
 │  Never does heavy analysis itself.                        │
 │                                                          │
-│  1. Build dependency graph                               │
-│  2. Map file ownership (shared file registry)            │
-│  3. Assemble preflight packet per agent                  │
-│  4. Launch agents in waves                               │
-│  5. Review + merge results, run test suite               │
-│  6. Present to user                                      │
+│  1. Create sprint branch (sprint-N-impl)                 │
+│  2. Build dependency graph                               │
+│  3. Map file ownership (shared file registry)            │
+│  4. Assemble preflight packet per agent                  │
+│  5. Launch agents in waves                               │
+│  6. Review + merge results, run test suite               │
+│  7. COMMIT to sprint branch (mandatory between waves)    │
+│  8. Present to user / launch next wave                   │
 └──────────────────────────────────────────────────────────┘
 
 WAVE 1 (independent items — parallel)
@@ -116,12 +118,14 @@ WAVE 1 (independent items — parallel)
               ┌─────────────────────────┐
               │  COORDINATOR             │
               │  • Merge results         │
+              │  • Resolve file conflicts│
               │  • API caller audit      │
               │  • Run FULL test suite   │
               │  • Update TRACKING.md    │
+              │  • COMMIT to sprint branch│  ◄── mandatory before Wave 2
               └────────────┬────────────┘
                            ▼
-WAVE 2 (dependent items — after Wave 1)
+WAVE 2 (dependent items — forks from committed state)
 ┌──────────────┐  ┌──────────────┐
 │   Agent D     │  │   Agent E     │
 │   CORE-348    │  │   CORE-351    │
@@ -130,7 +134,7 @@ WAVE 2 (dependent items — after Wave 1)
 └──────┬───────┘  └──────┬───────┘
        └────────┬────────┘
                 ▼
-     COORDINATOR → test → merge → user
+     COORDINATOR → test → commit → Close Gate → squash merge to main
 ```
 
 ### What Each Agent Receives (Preflight Packet)
