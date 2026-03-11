@@ -1,4 +1,5 @@
 # AI-Assisted Sprint Workflow Template
+<!-- workflow-version: 2.1 -->
 
 A project-agnostic sprint workflow designed for human + AI agent collaboration.
 Copy this file into any project and follow the setup instructions.
@@ -54,6 +55,22 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
 3. Create the file structure listed in §Setup below (skip files that already exist).
    If Q1 = team: see [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) §Bootstrap adjustment for per-person
    TRACKING files and branch naming. Solo: create a single `TRACKING.md`.
+   **Ensure `.gitignore` includes secret file patterns** (create if missing, append if exists):
+   ```
+   .env
+   .env.*
+   !.env.example
+   *.key
+   *.pem
+   *.p12
+   credentials.json
+   secrets.yaml
+   secrets.yml
+   .claude/hooks-config.local.sh
+   .claude/hooks/*.local.sh
+   ```
+   This prevents API keys and secrets from being committed to git.
+   If a `.gitignore` already exists, append only missing entries — do not overwrite.
 4. If Roadmap.md is empty or has no sprint items, run Initial Planning:
    *(Design-first alternative: if the user ran a `ROADMAP-DESIGN-PROMPT.md` session beforehand,
    Roadmap.md already exists — skip this step entirely and proceed to step 5.)*
@@ -77,6 +94,8 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    §Project Summary `Team:` field: if Q1 = solo → `Team: solo`. If Q1 = team → `Team: [names]`
    (e.g., `Team: Dev-A, Dev-B`). The AI will ask which team member it's working with at each
    session start (see §Quick Start).
+   §Project Summary `Cross-LLM Audit:` field: if Q15 = yes → `Cross-LLM Audit: enabled (run setup-audit.sh)`.
+   If Q15 = no → `Cross-LLM Audit: disabled (enable later: bash .claude/setup-audit.sh)`.
    *(Design-first path: if step 4 was skipped, read Roadmap.md §Non-Negotiable Contracts → populate CLAUDE.md §Immutable Contracts.)*
 6. Populate CODING_GUARDRAILS.md — project-aware guardrail seeding:
    a. Scan existing source code for concrete risk patterns in three layers:
@@ -116,6 +135,7 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    - `.claude/hooks-config.sh` — feature flags (enable/disable per hook)
    - `.claude/settings.json` — hook registrations
    - `.claude/hooks/protect-claude.sh` — blocks `Write` to `CLAUDE.md`
+   - `.claude/hooks/protect-secrets.sh` — blocks `Read` and `Bash` access to `.env`, `.key`, `.pem`, `credentials.json` and other secret files. API keys are managed by hooks (e.g., `cross-llm-audit.sh`) — the AI must never see them directly.
    - `.claude/hooks/validate-tracking.sh` — validates TRACKING.md status values after every edit
    - `.claude/hooks/validate-id-uniqueness.sh` — detects duplicate `CORE-###` IDs
    - `.claude/hooks/session-start.sh` — injects session start protocol context
@@ -124,11 +144,18 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    - `.claude/hooks/detect-test-regression.sh` — CP3: surfaces test failures from Bash output
    - `.claude/hooks/validate-close-gate.sh` — CP4: validates Close Gate report, checks for unverified must items
    - `.claude/hooks/validate-sprint-close.sh` — validates Sprint Close report sections (retrospective, baseline, handoff)
-   - `.claude/hooks/cross-llm-audit.sh` — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — requires `ENABLE_CROSS_AUDIT=true` + API key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
-   Make all hook scripts executable (`chmod +x .claude/hooks/*.sh`).
+   - `.claude/hooks/cross-llm-audit.sh` — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — requires `ENABLE_CROSS_AUDIT=true` + API key. If user answered Yes to Q15, remind them: *"Run `bash .claude/setup-audit.sh` in your terminal to complete cross-audit setup."* See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+   - `.claude/setup-audit.sh` — **(always create)** interactive terminal script for cross-LLM audit setup. Collects API key via hidden input (`read -s`), writes to `.env`. Even if the user said No to Q15 — include the script so they can enable it later without re-bootstrapping.
+   Make all hook scripts executable (`chmod +x .claude/hooks/*.sh .claude/setup-audit.sh`).
    File contents: see §File Templates → "Claude Code Hook Templates".
    These hooks enforce WORKFLOW.md rules mechanically. Other agents are unaffected — `.claude/` is Claude Code-specific.
-9. Confirm the setup with the user. Do NOT silently start Entry Gate — wait for explicit confirmation.
+   **⚠ If Step 8.5 is skipped (non-Claude Code agent):** Do NOT set up cross-LLM audit (Q15).
+   Without `protect-secrets.sh`, there is no mechanical barrier preventing the AI from reading
+   `.env` and exposing the API key. Skip Q15 and do not create `setup-audit.sh`.
+9. Confirm the setup with the user:
+   - Verify against §Checklist — Is Your Project Set Up? (end of this file)
+   - If Q15 = yes: remind user to run `bash .claude/setup-audit.sh` in their terminal
+   - Do NOT silently start Entry Gate — wait for explicit confirmation.
 
 ### Discovery Questions
 
@@ -198,11 +225,42 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | 12 | Anything that must NEVER change? (API contracts, data formats) | Seed "Immutable Contracts" in CLAUDE.md | None → discover during implementation ⁶ |
 | 13 | Anything else the AI should know? (e.g., recurring pain points, integration constraints, team conventions, things that burned you before) | Catch requirements not covered above | None |
 | 14 | What is this project's #1 non-negotiable quality axis? (security / performance / reliability / correctness / other: ...) | Sets Critical Axis — findings in this category can never be silently deferred | Infer from domain: payment/auth → security; game/realtime → performance; medical/finance → correctness |
+| 15 | Enable Cross-LLM Audit? ⁷ *(Claude Code only — skip if Step 8.5 was skipped)* | Catches blind spots via independent review | No → skip. Yes → run `bash .claude/setup-audit.sh` after bootstrap ⁷ |
 
 > ⁵ **Q11 details:** Only ask if VCS≠none. If VCS=none, skip entirely — no commits exist.
 >
 > ⁶ **Q12 details:** "None identified yet — to be discovered during implementation" is valid
 > for greenfield projects. Do not invent artificial contracts.
+>
+> ⁷ **Q15 details:** **Prerequisite: Step 8.5 must have been completed** (Claude Code hooks
+> are in place). Cross-LLM audit requires `protect-secrets.sh` to mechanically prevent
+> the AI from reading `.env` (which contains the API key). Without this hook, there is
+> no protection — the AI could read the key and expose it. If the user is not using
+> Claude Code, skip Q15 entirely and do NOT create cross-LLM audit infrastructure.
+>
+> When asking Q15, **explain what it does before asking:**
+> *"Cross-LLM Audit adds an automated second opinion to your workflow. Every ~5 code
+> changes, a second AI (like GPT-4o, a local Ollama model, etc.) silently reviews the
+> diff for bugs, security issues, and blind spots. Results appear inline — I'll present
+> both my assessment and the external review, and you decide what to act on.
+> Cost depends on the model — local models (Ollama, LM Studio) are free, cloud APIs
+> charge per token (see your provider's pricing). Want to enable it?"*
+>
+> **API keys must NEVER be pasted into the AI conversation.** If the user says yes:
+> *"Run this command in your terminal after bootstrap completes: `bash .claude/setup-audit.sh`
+> — it will walk you through provider selection, explain each option, and securely
+> collect your API key. The key never enters our conversation."*
+> The setup script writes to `.env` (git-ignored). The AI never sees the key.
+> See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for details.
+
+**Workflow Mode Recommendation:** After collecting answers, recommend a workflow mode
+based on project analysis. State the recommendation and let the user confirm:
+- **Lite** → Solo dev + small project (≤10 files) or rapid prototyping
+- **Standard** → Most projects (default)
+- **Strict** → Team + production systems, high-risk domains
+
+See [Docs/WORKFLOW-MODES.md](Docs/WORKFLOW-MODES.md) for full comparison.
+Set the chosen mode in `.claude/hooks-config.sh` → `WORKFLOW_MODE`.
 
 **Rule: Ask all questions in a single batch. Do not drip-feed one at a time.**
 If a question can be answered by scanning project files (e.g., `tsconfig.json`
@@ -218,6 +276,7 @@ Do NOT merge them — separation enables focused reads and smaller context loads
 
 ```
 project-root/
+├── .gitignore                         # Must include .env, *.key, *.pem, secrets (step 3)
 ├── CLAUDE.md                          # AI session context (auto-loaded)
 ├── TRACKING.md                        # Single source of truth for status (solo)
 ├── TRACKING-[name].md                 # Per-person tracking (team — see Docs/TEAM-GUIDE.md)
@@ -236,8 +295,24 @@ project-root/
 │   │   └── S<N>_ENTRY_GATE.md         # Entry Gate report (temporary, deleted at Sprint Close)
 │   └── Archive/
 │       └── changelog-S1-S2.md         # Archived sprint changelogs
-└── Tools/
-    └── sprint-audit.sh                # Automated close gate checks
+├── Tools/
+│   └── sprint-audit.sh                # Automated close gate checks
+└── .claude/                           # Claude Code hooks (Step 8.5, skip for other agents)
+    ├── hooks-config.sh                # Feature flags (lite/standard/strict mode)
+    ├── settings.json                  # Hook registrations
+    ├── setup-audit.sh                 # Interactive cross-LLM audit setup (always create)
+    └── hooks/
+        ├── session-start.sh           # Session start protocol injection
+        ├── protect-claude.sh          # Block Write to CLAUDE.md
+        ├── protect-secrets.sh         # Block Read/Bash on .env, *.key, *.pem
+        ├── validate-tracking.sh       # Validate TRACKING.md status values
+        ├── validate-id-uniqueness.sh  # Detect duplicate CORE-### IDs
+        ├── entry-gate-session.sh      # Mandatory session boundary after Entry Gate
+        ├── detect-audit-signals.sh    # CP1+CP2: metric regression detection
+        ├── detect-test-regression.sh  # CP3: test failure surfacing
+        ├── validate-close-gate.sh     # CP4: Close Gate validation
+        ├── validate-sprint-close.sh   # Sprint Close report validation
+        └── cross-llm-audit.sh         # External LLM code review (optional)
 ```
 
 ### Why separate files?
@@ -2411,12 +2486,17 @@ Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
 # Toggle individual hooks on/off without touching settings.json
 # Set WORKFLOW_MODE to auto-configure: "lite", "standard" (default), or "strict"
 
+# Version — tracks which WORKFLOW.md version these hooks were generated from.
+# Updated automatically during bootstrap and upgrade — do not edit manually.
+HOOKS_VERSION="2.1"
+
 WORKFLOW_MODE="standard"
 
 # Mode-based defaults are set automatically (see actual file for case block).
 # Individual overrides — uncomment to override the mode preset:
 
 HOOK_PROTECT_CLAUDE_MD="${HOOK_PROTECT_CLAUDE_MD:-true}"
+HOOK_PROTECT_SECRETS="${HOOK_PROTECT_SECRETS:-true}"
 HOOK_VALIDATE_TRACKING="${HOOK_VALIDATE_TRACKING:-true}"
 HOOK_SESSION_START_PROTOCOL="${HOOK_SESSION_START_PROTOCOL:-true}"
 HOOK_VALIDATE_ID_UNIQUENESS="${HOOK_VALIDATE_ID_UNIQUENESS:-true}"
@@ -2453,6 +2533,10 @@ ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
       {
         "matcher": "Write",
         "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-claude.sh" }]
+      },
+      {
+        "matcher": "Read|Bash",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-secrets.sh" }]
       }
     ],
     "PostToolUse": [
@@ -2496,6 +2580,105 @@ if [[ "$TOOL" == "Write" ]] && [[ "$FILE" == *"CLAUDE.md"* ]]; then
     echo "Use the Edit tool to append or modify specific sections." >&2
     exit 2
 fi
+exit 0
+```
+
+**`.claude/hooks/protect-secrets.sh`** — hard block; prevents AI from reading `.env`, `.key`, `.pem`, `credentials.json`.
+6-layer Bash protection (direct reads, scripting languages, encoding tools, text processors, file redirects, env var exposure):
+
+```bash
+#!/bin/bash
+# Hook: protect-secrets.sh
+# Event: PreToolUse — Read, Bash
+# Purpose: Prevent the AI from reading files that contain secrets.
+#          API keys are managed by shell hooks (cross-llm-audit.sh) —
+#          the AI should never see them directly.
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+
+[[ "$HOOK_PROTECT_SECRETS" != "true" ]] && exit 0
+
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
+
+# ── Block Read tool on secret files ──
+if [[ "$TOOL" == "Read" ]]; then
+    FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+    BASE=$(basename "$FILE")
+
+    # Allow .env.example (template, no secrets)
+    [[ "$BASE" == ".env.example" ]] && exit 0
+
+    case "$BASE" in
+        .env|.env.*|*.key|*.pem|*.p12)
+            echo "BLOCKED: Reading $BASE is not allowed — it may contain API keys or secrets." >&2
+            echo "The cross-LLM audit hook reads .env automatically. You don't need to access it." >&2
+            exit 2
+            ;;
+        credentials.json|secrets.yaml|secrets.yml)
+            echo "BLOCKED: Reading $BASE is not allowed — it may contain secrets." >&2
+            exit 2
+            ;;
+    esac
+fi
+
+# ── Block Bash commands that would expose secrets ──
+if [[ "$TOOL" == "Bash" ]]; then
+    CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+    # Helper: does the command reference a secret file?
+    _has_secret_ref() {
+        local cmd="$1"
+        if echo "$cmd" | grep -qE '\.env([^a-zA-Z0-9_-]|$)'; then
+            if ! echo "$cmd" | grep -qE '\.env\.example'; then
+                return 0
+            fi
+        fi
+        if echo "$cmd" | grep -qE 'credentials\.json|secrets\.ya?ml'; then return 0; fi
+        if echo "$cmd" | grep -qE '\.(key|pem|p12)([^a-zA-Z0-9_-]|$)'; then return 0; fi
+        return 1
+    }
+
+    # Layer 1: Direct read commands
+    if echo "$CMD" | grep -qE '(cat|head|tail|less|more|bat|source)\s' && _has_secret_ref "$CMD"; then
+        echo "BLOCKED: This command would expose secret file contents." >&2
+        exit 2
+    fi
+
+    # Layer 2: Scripting languages
+    if echo "$CMD" | grep -qE '(python|python3|perl|ruby|node|php)' && _has_secret_ref "$CMD"; then
+        echo "BLOCKED: This command would expose secret file contents via scripting." >&2
+        exit 2
+    fi
+
+    # Layer 3: Encoding/dump tools
+    if echo "$CMD" | grep -qE '(base64|xxd|od|hexdump|strings)\s' && _has_secret_ref "$CMD"; then
+        echo "BLOCKED: This command would expose secret file contents." >&2
+        exit 2
+    fi
+
+    # Layer 4: Text processing tools
+    if echo "$CMD" | grep -qE '(awk|sed|grep|rg|jq|yq)\s' && _has_secret_ref "$CMD"; then
+        echo "BLOCKED: This command would expose secret file contents." >&2
+        exit 2
+    fi
+
+    # Layer 5: File redirects: < .env, $(<.env)
+    if echo "$CMD" | grep -qE '<\s*\.env([^a-zA-Z0-9_-]|$)'; then
+        if ! echo "$CMD" | grep -qE '\.env\.example'; then
+            echo "BLOCKED: File redirect on .env detected." >&2
+            exit 2
+        fi
+    fi
+
+    # Layer 6: Explicit env var exposure
+    if echo "$CMD" | grep -qiE '(echo|printf|printenv|env\s).*\$?\{?(CROSS_AUDIT_API_KEY|CROSS_AUDIT_.*KEY)'; then
+        echo "BLOCKED: This command would expose the API key." >&2
+        exit 2
+    fi
+fi
+
 exit 0
 ```
 
@@ -2552,32 +2735,91 @@ fi
 exit 0
 ```
 
-**`.claude/hooks/session-start.sh`** — injects session start protocol as additional context:
+**`.claude/hooks/session-start.sh`** — injects session start protocol as additional context.
+Handles four concerns: existing project (protocol), first-time setup (bootstrap guidance), cross-audit status (on/available/off), and version mismatch detection:
 
 ```bash
 #!/bin/bash
+# Hook: session-start.sh
+# Event: SessionStart
+# Purpose: Inject session start protocol context so the agent reads
+#          TRACKING.md and CLAUDE.md before doing anything else.
+#          WORKFLOW.md rule: "AI Agent Operational Rules — Session Start Protocol"
+
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOKS_DIR/../hooks-config.sh"
+
 [[ "$HOOK_SESSION_START_PROTOCOL" != "true" ]] && exit 0
-# Find TRACKING file(s): solo = TRACKING.md, team = TRACKING-*.md
-TRACKING_FILES=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING*.md" 2>/dev/null | sort)
+command -v jq >/dev/null 2>&1 || { echo "WARNING: jq not found — session-start hook disabled. Install jq to enable workflow enforcement." >&2; exit 0; }
+
+# Detect if TRACKING.md exists in working directory
+TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
 CLAUDE_MD=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 1 -name "CLAUDE.md" 2>/dev/null | head -1)
-[[ -z "$TRACKING_FILES" && -z "$CLAUDE_MD" ]] && exit 0
-# Build tracking file list for context message
-TRACKING_LIST=$(echo "$TRACKING_FILES" | tr '\n' ', ' | sed 's/,$//')
-TRACKING_COUNT=$(echo "$TRACKING_FILES" | wc -l)
-if [[ "$TRACKING_COUNT" -gt 1 ]]; then
-  TRACKING_MSG="Team mode detected. TRACKING files: $TRACKING_LIST\nAsk: \"Which team member are you?\" to determine which file to read."
-else
-  TRACKING_MSG="Read TRACKING file ($TRACKING_LIST)"
+
+if [[ -z "$TRACKING" && -z "$CLAUDE_MD" ]]; then
+    # No workflow files found — guide user through first-time setup
+    WORKFLOW_FILE=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 \( -name "WORKFLOW.md" -o -name "SPRINT_WORKFLOW.md" \) 2>/dev/null | head -1)
+    if [[ -n "$WORKFLOW_FILE" ]]; then
+        # WORKFLOW.md exists but project not bootstrapped yet
+        jq -n --arg wf "$WORKFLOW_FILE" '{
+          "additionalContext": (
+            "=== FIRST-TIME SETUP DETECTED ===\n" +
+            "WORKFLOW.md found but project is not bootstrapped yet.\n" +
+            "No CLAUDE.md or TRACKING.md exists.\n\n" +
+            "Guide the user:\n" +
+            "  → \"Read \($wf) and bootstrap this project.\"\n" +
+            "  → Or ask: \"Shall I bootstrap the sprint workflow for this project?\"\n\n" +
+            "Do NOT start any implementation before bootstrap is complete.\n" +
+            "================================="
+          )
+        }'
+    fi
+    # No WORKFLOW.md either — not a sprint workflow project, skip silently
+    exit 0
 fi
-jq -n --arg t "$TRACKING_MSG" --arg c "$CLAUDE_MD" '{
+
+# ── Version mismatch detection ──
+VERSION_WARNING=""
+WORKFLOW_FILE=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 \( -name "WORKFLOW.md" -o -name "SPRINT_WORKFLOW.md" \) 2>/dev/null | head -1)
+if [[ -n "$WORKFLOW_FILE" ]]; then
+    # Extract workflow-version from WORKFLOW.md (<!-- workflow-version: X.Y -->)
+    WF_VERSION=$(head -5 "$WORKFLOW_FILE" | sed -n 's/.*workflow-version: *\([0-9.]*\).*/\1/p')
+    # HOOKS_VERSION is already sourced from hooks-config.sh
+    HK_VERSION="${HOOKS_VERSION:-}"
+
+    if [[ -n "$WF_VERSION" && -n "$HK_VERSION" && "$WF_VERSION" != "$HK_VERSION" ]]; then
+        VERSION_WARNING="WORKFLOW VERSION MISMATCH: WORKFLOW.md is v${WF_VERSION} but hooks are v${HK_VERSION}. Read §Changelog and §Upgrade in WORKFLOW.md, then run the upgrade procedure to update hooks."
+    elif [[ -n "$WF_VERSION" && -z "$HK_VERSION" ]]; then
+        VERSION_WARNING="WORKFLOW VERSION MISMATCH: WORKFLOW.md is v${WF_VERSION} but hooks have no version (pre-version system). Read §Changelog and §Upgrade in WORKFLOW.md, then run the upgrade procedure (treat current as v1.0)."
+    fi
+fi
+
+# Detect cross-audit status (check .env without exposing contents)
+CROSS_AUDIT_STATUS="off"
+ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
+if [[ -f "$ENV_FILE" ]] && grep -q "^ENABLE_CROSS_AUDIT=true" "$ENV_FILE" 2>/dev/null; then
+    CROSS_AUDIT_STATUS="on"
+elif [[ ! -f "$ENV_FILE" ]] && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
+    CROSS_AUDIT_STATUS="available"
+fi
+
+# Output additional context for the agent via JSON
+jq -n \
+  --arg tracking "$TRACKING" \
+  --arg claude_md "$CLAUDE_MD" \
+  --arg audit "$CROSS_AUDIT_STATUS" \
+  --arg version_warn "$VERSION_WARNING" \
+'{
   "additionalContext": (
     "=== SESSION START PROTOCOL (WORKFLOW.md) ===\n" +
+    (if $version_warn != "" then "⚠ " + $version_warn + "\n\n" else "" end) +
     "Before doing anything else:\n" +
-    (if $c != "" then "1. Read CLAUDE.md (\($c))\n" else "" end) +
-    "2. \($t)\n" +
+    (if $claude_md != "" then "1. Read CLAUDE.md (\($claude_md)) — operational rules and last checkpoint.\n" else "" end) +
+    (if $tracking != "" then "2. Read TRACKING.md (\($tracking)) — current sprint status, open items, blockers.\n" else "" end) +
     "3. State current sprint and last known status before proceeding.\n" +
+    "Do NOT start implementation before completing this protocol.\n" +
+    (if $audit == "on" then "\nCross-LLM Audit: ENABLED. External code reviews will appear inline after code changes.\nDo NOT attempt to read .env — the audit hook manages it automatically.\n" else "" end) +
+    (if $audit == "available" then "\nCross-LLM Audit: available but not configured. To enable: user runs `bash .claude/setup-audit.sh` in their terminal.\n" else "" end) +
     "============================================"
   )
 }'
@@ -3384,6 +3626,9 @@ Use this checklist when bootstrapping a new project:
     □ Has at least: scaffolding tags, test coverage gap checks
 
 □ .gitignore includes:
+    □ Secret files: .env, .env.*, *.key, *.pem, *.p12, credentials.json, secrets.yaml/yml
+    □ Exception: !.env.example (template allowed)
+    □ Local hook overrides: .claude/hooks-config.local.sh, .claude/hooks/*.local.sh
     □ AI-generated analysis reports (session artifacts)
     □ Build artifacts, IDE files
 ```
@@ -3424,3 +3669,166 @@ adaptation layer — nothing in the core workflow changes, only coordination rul
 > Full team guide: [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) — topologies (Pair, Small Team, Larger),
 > cross-sprint dependencies, file overlap detection, PR integration, and CI/CD setup.
 > Unity projects (solo or team): see [Docs/UNITY-GUIDE.md](Docs/UNITY-GUIDE.md).
+
+---
+
+## Upgrade — Updating From a Previous Version
+
+The workflow uses a version system to detect when hook files are outdated.
+
+### How It Works
+
+1. **WORKFLOW.md** contains `<!-- workflow-version: X.Y -->` on line 2 — the canonical version.
+2. **§Changelog** at the bottom of WORKFLOW.md lists what changed per version — the single source of truth.
+3. **`.claude/hooks-config.sh`** contains `HOOKS_VERSION="X.Y"` — the version the hooks were generated from.
+4. **`session-start.sh`** compares the two at every session start. If WORKFLOW.md is newer, the AI receives a version mismatch warning with upgrade instructions.
+
+The `<!-- workflow-version -->` comment is **auto-maintained** — during bootstrap or upgrade, the AI reads the top changelog entry and updates the comment to match. Users only edit the changelog.
+
+### Upgrade Procedure
+
+When a user provides a new WORKFLOW.md (via GitHub link, download, or copy), the AI follows this procedure:
+
+**Step 1 — Detect versions**
+```
+Read WORKFLOW.md line 2 → extract <!-- workflow-version: X.Y -->  (= target version)
+Read .claude/hooks-config.sh → extract HOOKS_VERSION               (= current version)
+
+Cases:
+  - HOOKS_VERSION exists and matches target → "Already up to date." → stop.
+  - HOOKS_VERSION exists but differs       → proceed to Step 2.
+  - HOOKS_VERSION missing (pre-version)    → treat current as v1.0, proceed to Step 2.
+  - hooks-config.sh missing entirely       → this is a fresh bootstrap, not an upgrade.
+    Run the normal bootstrap (Step 8.5) instead. Stop here.
+```
+
+**Step 2 — Read Changelog (cumulative)**
+```
+Read §Changelog section at the bottom of WORKFLOW.md.
+Collect ALL version entries NEWER than current HOOKS_VERSION.
+  Example: upgrading from v1.0 to v2.1 → apply v2.0 AND v2.1 changes.
+List changes that require file updates, grouped by type.
+Present the change list to the user before proceeding.
+```
+
+**Step 3 — Backup modified files**
+```
+For each file that will be modified:
+  cp .claude/hooks/file.sh .claude/hooks/file.sh.backup-vX.Y
+  cp .claude/hooks-config.sh .claude/hooks-config.sh.backup-vX.Y
+Log all backup paths.
+```
+
+**Step 4 — Apply Changes**
+```
+For each changelog entry (oldest → newest), apply by prefix:
+
+  "New hook: X"      → Create from §File Templates. Register in settings.json
+                        (add matcher + command, do not remove existing entries).
+  "Updated hook: X"  → Compare current file against template in §File Templates.
+                        If identical → regenerate from template.
+                        If different → show diff to user. Ask: replace / keep / merge.
+  "New config: X"    → Add variable to hooks-config.sh (after existing variables,
+                        before strict enforcement block). Preserve WORKFLOW_MODE
+                        and all existing overrides.
+  "Updated: X"       → Apply the specific change described (e.g., add entries to
+                        .gitignore, update a template section).
+  "New doc: X"       → Create file if missing. Do not overwrite existing.
+  "Doc: X"           → Informational — no file changes needed (doc already in
+                        new WORKFLOW.md).
+```
+
+**Step 5 — Bump Version**
+```
+Parse top entry in §Changelog: first "### vX.Y" line → extract version.
+Update HOOKS_VERSION="X.Y" in hooks-config.sh.
+Update <!-- workflow-version: X.Y --> in WORKFLOW.md line 2 (auto-sync).
+```
+
+**Step 6 — Verify**
+```
+Run: bash validation/validate-cascade.sh
+  - All pass → proceed to summary.
+  - Any fail → fix the failing check, re-run.
+Start a new Claude Code session to confirm session-start.sh runs without errors.
+```
+
+**Step 7 — Summary**
+```
+Report to user:
+  - Upgraded: vX.Y → vZ.W
+  - Files created: [list]
+  - Files updated: [list]
+  - Files with custom changes preserved: [list — user chose "keep" or "merge"]
+  - Backups: [list with paths]
+  - Validation: [pass/fail count]
+  - Action needed: [any manual steps, e.g., "re-run setup-audit.sh to
+    update cross-audit safety checks"]
+```
+
+### Changelog Entry Format
+
+Each changelog entry uses a prefix that tells the AI what action to take:
+
+| Prefix | Meaning | AI Action |
+|--------|---------|-----------|
+| `New hook:` | A hook file that didn't exist before | Create from template + register in settings.json |
+| `Updated hook:` | An existing hook file changed | Diff check → replace or merge |
+| `New:` | A new file or feature (non-hook) | Create file or add feature |
+| `Updated:` | An existing file or config changed | Apply specific change |
+| `New doc:` / `Doc:` | Documentation change | Create if missing / informational only |
+
+### Important Upgrade Rules
+
+- **Never overwrite custom logic.** If a hook file differs from the template (user made changes), show the diff and ask the user: replace / keep current / merge manually. Never silently overwrite.
+- **settings.json: merge, not replace.** Add new hook registrations to the existing matchers. Never remove entries. If a matcher already exists, add the new hook command to its hooks array.
+- **hooks-config.sh: merge, not replace.** Add new variables after existing ones. Preserve `WORKFLOW_MODE`, all `HOOK_*` overrides, and the local config sourcing block.
+- **Apply changelog entries oldest → newest.** When jumping multiple versions (e.g., v1.0 → v2.1), apply v2.0 first, then v2.1. A newer entry may depend on files created by an older one.
+- **Verify after upgrade.** Run `bash validation/validate-cascade.sh` to confirm consistency. Start a new session to test session-start.sh.
+
+### Upgrade via GitHub Link
+
+When the user says something like: *"Update the workflow from https://github.com/user/ai-sprint-workflow"*
+
+1. Fetch the raw `WORKFLOW.md` from the repository (use `curl` or `WebFetch` on the raw URL).
+2. Save it to the project root, replacing the old WORKFLOW.md.
+3. Run the Upgrade Procedure above (Steps 1-7).
+
+**Edge cases:**
+- **No `.claude/` directory at all:** This is a fresh project, not an upgrade. Run bootstrap (Step 8.5) instead.
+- **`.claude/` exists but no `HOOKS_VERSION`:** Pre-version system (v1.0 era). Treat as v1.0 and apply all changelog entries from v2.0 onward.
+- **Custom hooks not in template:** Leave them untouched. They are user-specific extensions — the upgrade procedure only touches hooks listed in the changelog.
+
+---
+
+## Changelog
+<!-- Add new versions at the top. AI reads this during upgrade to know what changed. -->
+
+### v2.1 (2026-03-11)
+- **New:** Version system — `workflow-version` in WORKFLOW.md, `HOOKS_VERSION` in hooks-config.sh, mismatch detection in session-start.sh
+- **New:** Upgrade procedure — AI-driven hook upgrade via changelog (§Upgrade section)
+- **New hook:** `protect-secrets.sh` — blocks AI from reading `.env`, `*.key`, `*.pem`, `credentials.json` (6-layer Bash protection)
+- **Updated hook:** `session-start.sh` — first-run detection, cross-audit status (on/available/off), version mismatch warning
+- **Updated:** `setup-audit.sh` — 3-layer safety check (hook file + settings.json registration + Claude Code confirmation), retry loop with r/s/q, detailed error handling (401/403/404/429), configuration option explanations
+- **Updated:** `hooks-config.sh` — added `HOOK_PROTECT_SECRETS`, `HOOKS_VERSION`, per-developer local overrides section
+- **Updated:** `.gitignore` template — added secret file patterns (`.env`, `*.key`, `*.pem`, etc.)
+- **Updated:** Bootstrap Step 3 — `.gitignore` secret patterns are now part of setup
+- **Updated:** Discovery Question Q15 — marked as Claude Code prerequisite
+- **Doc:** `Docs/CROSS-LLM-AUDIT.md` — fixed data safety layer ordering, added configuration reference
+
+### v2.0 (2026-03-01)
+- **New:** Cross-LLM audit system — external LLM reviews code changes via hooks
+- **New hook:** `cross-llm-audit.sh` — sends diffs to 2nd LLM (wave/item trigger, 3 context levels)
+- **New:** `setup-audit.sh` — interactive cross-audit setup (7 providers, API key via `read -s`)
+- **New:** `.env.example` — cross-audit configuration template
+- **New:** Team topology support — per-person TRACKING files, branch naming, dependency rules
+- **New:** Sprint branch isolation, pre-code safety checks
+- **New:** Sprint index with structured tagging for cross-sprint retrieval
+- **Doc:** `Docs/CROSS-LLM-AUDIT.md`, `Docs/TEAM-GUIDE.md`, `Docs/WORKFLOW-MODES.md`
+
+### v1.0
+- Initial release — Entry Gate, Close Gate, Sprint Close, Implementation Loop
+- 8 Claude Code hooks: protect-claude, validate-tracking, session-start, id-uniqueness, entry-gate-session, detect-test-regression, validate-close-gate, validate-sprint-close
+- `sprint-audit.sh`, `CODING_GUARDRAILS.md`, `LESSONS_INDEX.md` templates
+- Workflow modes: Lite, Standard, Strict
+- `detect-audit-signals.sh` — CP1+CP2 metric regression and failure pattern detection

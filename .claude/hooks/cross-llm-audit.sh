@@ -399,15 +399,21 @@ if [[ "$PROVIDER" == "anthropic" ]]; then
       "temperature": 0.1
     }')
 
-  RESPONSE=$(curl -s --max-time "$TIMEOUT" \
+  RESPONSE=$(curl -s --max-time "$TIMEOUT" -w "\n%{http_code}" \
     -H "Content-Type: application/json" \
     -H "x-api-key: ${CROSS_AUDIT_API_KEY}" \
     -H "anthropic-version: 2023-06-01" \
     "${API_BASE}/v1/messages" \
     -d "$REQUEST_BODY" 2>/dev/null) || {
-    echo "Cross-audit: API call failed (timeout or network error)" >&2
+    if [[ "${API_BASE}" == *"localhost"* ]]; then
+      echo "Cross-audit: Cannot reach ${API_BASE} — is your local model server running?" >&2
+    else
+      echo "Cross-audit: API call failed (timeout or network error). Check your connection." >&2
+    fi
     exit 0
   }
+  _HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+  RESPONSE=$(echo "$RESPONSE" | sed '$d')
 else
   REQUEST_BODY=$(jq -n \
     --arg model "$MODEL" \
@@ -419,14 +425,20 @@ else
       "max_tokens": 2000
     }')
 
-  RESPONSE=$(curl -s --max-time "$TIMEOUT" \
+  RESPONSE=$(curl -s --max-time "$TIMEOUT" -w "\n%{http_code}" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${CROSS_AUDIT_API_KEY}" \
     "${API_BASE}/chat/completions" \
     -d "$REQUEST_BODY" 2>/dev/null) || {
-    echo "Cross-audit: API call failed (timeout or network error)" >&2
+    if [[ "${API_BASE}" == *"localhost"* ]]; then
+      echo "Cross-audit: Cannot reach ${API_BASE} — is your local model server running?" >&2
+    else
+      echo "Cross-audit: API call failed (timeout or network error). Check your connection." >&2
+    fi
     exit 0
   }
+  _HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+  RESPONSE=$(echo "$RESPONSE" | sed '$d')
 fi
 
 # ── Parse response (provider-specific) ──
@@ -444,7 +456,13 @@ else
 fi
 
 if [[ -n "$API_ERROR" ]]; then
-  echo "Cross-audit: API error — $API_ERROR" >&2
+  if [[ "${_HTTP_CODE:-}" == "401" || "${_HTTP_CODE:-}" == "403" ]]; then
+    echo "Cross-audit: Authentication failed ($API_ERROR). Check your API key — run 'bash .claude/setup-audit.sh' to reconfigure." >&2
+  elif [[ "${_HTTP_CODE:-}" == "404" || "${_HTTP_CODE:-}" == "400" ]]; then
+    echo "Cross-audit: Model '$MODEL' not found or invalid ($API_ERROR). Run 'bash .claude/setup-audit.sh' to reconfigure." >&2
+  else
+    echo "Cross-audit: API error — $API_ERROR (HTTP ${_HTTP_CODE:-unknown})" >&2
+  fi
   exit 0
 fi
 if [[ -z "$CONTENT" ]]; then

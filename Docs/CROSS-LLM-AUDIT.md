@@ -36,7 +36,29 @@ Gate reviews (Close/Entry) fire immediately regardless of wave/item trigger mode
 
 ## Setup
 
-### 1. Choose a Provider
+### Guided Setup (Recommended)
+
+Run the interactive setup script in your terminal:
+
+```bash
+bash .claude/setup-audit.sh
+```
+
+The script walks you through provider selection, API key entry, and optional settings.
+Your API key is collected via hidden terminal input (`read -s`) and written directly to `.env`.
+**The key never enters the AI conversation.**
+
+After the script completes, make a code change with 10+ lines to verify.
+
+> **Why not paste the key into the AI chat?** Most LLMs reject or flag API keys in
+> conversation. Even if accepted, the key would appear in session logs and context.
+> The setup script keeps it out of the AI's context entirely.
+
+### Manual Setup
+
+If you prefer manual configuration, follow these steps:
+
+#### 1. Choose a Provider
 
 Two provider modes are supported: **OpenAI-compatible** (default) and **Anthropic** (native).
 
@@ -50,7 +72,7 @@ Two provider modes are supported: **OpenAI-compatible** (default) and **Anthropi
 | Ollama (local) | `openai` | `http://localhost:11434/v1` | No key needed (set dummy) |
 | LM Studio | `openai` | `http://localhost:1234/v1` | No key needed (set dummy) |
 
-### 2. Set Environment Variables
+#### 2. Set Environment Variables
 
 **Option A: Project `.env` file (recommended)**
 
@@ -85,7 +107,7 @@ Shell profile vars take precedence — `.env` only fills in values not already s
 
 Either way: `.env` is git-ignored, shell profile is outside the repo. Neither enters git.
 
-### 3. Verify
+#### 3. Verify
 
 Make a code change with 10+ lines. Check stderr for "Cross-audit:" messages. If the API key is valid, Claude will receive the external review as additionalContext.
 
@@ -267,14 +289,14 @@ Before sending any diff to the external LLM, the hook scrubs known secret patter
 
 Scrubbing replaces values with `[REDACTED]` while preserving the key name for review context.
 
+### Layer 4: .gitignore
+The project `.gitignore` includes `.env`, `*.key`, `*.pem`, `credentials.json`, `secrets.yaml` to prevent accidental commits. Bootstrap step 3 ensures these entries are created.
+
 ### Layer 5: Safe Variable Expansion
 The `.env` parser uses `printenv` for indirect variable lookup instead of `eval`, preventing command injection via crafted `.env` values. Keys are validated against a strict regex (`^[A-Z][A-Z0-9_]*$`) before import.
 
 ### Layer 6: Payload Handling
 Large prompts (up to 48KB for holistic sprint reviews) are written to a temporary file and passed to `jq` via `--rawfile` instead of shell arguments, avoiding `ARG_MAX` limits and shell escaping issues. The temp file is cleaned up via `trap EXIT`.
-
-### Layer 4: .gitignore
-The project `.gitignore` includes `.env`, `*.key`, `*.pem`, `credentials.json`, `secrets.yaml` to prevent accidental commits.
 
 ### Recommendations
 - **Never hardcode API keys in source files.** Use environment variables.

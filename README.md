@@ -1,6 +1,6 @@
 # AI Sprint Workflow
 
-A sprint workflow template (methodology, not a tool) for human + AI coding agent collaboration.
+A sprint workflow framework (methodology + tooling) for human + AI coding agent collaboration.
 
 Drop `WORKFLOW.md` into any project and the AI agent bootstraps the full structure:
 tracking, guardrails, audit scripts, and sprint gates — all adapted to your stack.
@@ -11,7 +11,7 @@ Works with existing projects and greenfield (empty) projects alike.
 
 | Agent | Status | Notes |
 |-------|--------|-------|
-| **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) |
+| **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) (10 hooks, secret protection, cross-LLM audit) |
 | Cursor | Playbook available | [Adaptation guide](examples/cursor-playbook/) with `.cursor/rules/` |
 | GitHub Copilot | Playbook available | [Adaptation guide](examples/copilot-playbook/) with `copilot-instructions.md` |
 | Windsurf | Playbook available | [Adaptation guide](examples/windsurf-playbook/) with `.windsurf/rules/` |
@@ -119,8 +119,8 @@ Then tell the agent: `"Read WORKFLOW.md and bootstrap this project."`
 **Either way, the agent will:**
 - Detect whether this is a greenfield or existing project (Step 0)
 - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
-- Ask 15 discovery questions (skipping ones it can infer from project files)
-- Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/LESSONS_INDEX.md`, `Docs/SPRINT-INDEX.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`
+- Ask 16 discovery questions (skipping ones it can infer from project files)
+- Create `CLAUDE.md`, `TRACKING.md`, `Docs/CODING_GUARDRAILS.md`, `Docs/LESSONS_INDEX.md`, `Docs/SPRINT-INDEX.md`, `Docs/Planning/Roadmap.md`, `Tools/sprint-audit.sh`, `.claude/setup-audit.sh` (Claude Code only)
   - Existing project: skips files that already exist; asks before touching `TRACKING.md`, `Roadmap.md`, `CODING_GUARDRAILS.md`
 - If no sprint plan exists: run Initial Planning (decompose goal into phases, detail Sprint 1 only)
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
@@ -157,7 +157,7 @@ lessons to capture), design the roadmap in a separate focused session before boo
 0. Detect state    → source code or workflow files? → Greenfield or Migration mode
                      Migration: read conflict rules before touching any file
 1. Scan project    → detect language, framework, build system, test framework
-2. Discovery Q's   → 15 questions (batch, skip inferrable ones)
+2. Discovery Q's   → 16 questions (batch, skip inferrable ones)
 3. Create structure→ CLAUDE.md, TRACKING.md, CODING_GUARDRAILS.md, LESSONS_INDEX.md, Roadmap.md, Tools/
                      Migration: skip files that already exist; ask before touching
 4. Initial Planning→ if no sprint plan exists: goal → phases → detail S1 → contracts
@@ -182,6 +182,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | Hook | Trigger | What it enforces |
 |------|---------|-----------------|
 | `protect-claude.sh` | Before any `Write` | Hard-blocks overwriting `CLAUDE.md` |
+| `protect-secrets.sh` | Before any `Read`/`Bash` | Hard-blocks reading `.env`, `*.key`, `*.pem`, `credentials.json`, `secrets.yaml` — 6-layer bypass prevention |
 | `validate-tracking.sh` | After `TRACKING.md` edit | Illegal status values, missing evidence on `verified`, missing reason on `deferred` |
 | `validate-id-uniqueness.sh` | After `TRACKING.md` edit | Duplicate `CORE-###` IDs |
 | `session-start.sh` | Every session start | Injects "read TRACKING.md first" protocol into agent context |
@@ -194,13 +195,13 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
-**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Three audit modes: per-edit (source changes), Close Gate (holistic sprint review), Entry Gate (plan review). Disabled by default — enable with `ENABLE_CROSS_AUDIT=true` + API key in `.env` or shell profile. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Three audit modes: per-edit (source changes), Close Gate (holistic sprint review), Entry Gate (plan review). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
 Empty project? Step 1 is skipped — Discovery Questions cover language/framework.
 
-### Discovery Questions (15)
+### Discovery Questions (16)
 
 Questions are asked in a single batch. Answers inferrable from project files
 (e.g., `package.json` → TypeScript + Jest) are stated as inferred and confirmed.
@@ -209,7 +210,7 @@ Questions are asked in a single batch. Answers inferrable from project files
 |----------|-----------|
 | **Project Shape** | Q0: Language/framework, Q1: Solo or team, Q2: Sprint scope size, Q3: Existing roadmap, Q4: Performance-sensitive, Q5: Target platforms |
 | **Infrastructure** | Q6: CI/CD pipeline, Q7: Test framework, Q8: Existing linter/standards, Q9: Known tech debt |
-| **Workflow Preferences** | Q10: Docs language, Q11: Commit style (skipped if VCS=none), Q12: Immutable contracts, Q13: Anything else the AI should know, Q14: Critical Axis |
+| **Workflow Preferences** | Q10: Docs language, Q11: Commit style (skipped if VCS=none), Q12: Immutable contracts, Q13: Anything else the AI should know, Q14: Critical Axis, Q15: Enable Cross-LLM Audit *(Claude Code only)* |
 
 Q0 auto-detects from project files; asks explicitly if the project is empty. If user is undecided, AI proposes options with trade-offs.
 VCS is auto-detected (`.git`, `.svn`, `.hg`). Result recorded in `CLAUDE.md`. If VCS=none: Q11 skipped, Close Gate Phase 1b uses Entry Gate implementation notes instead of `git diff`, TRACKING.md recovery falls back to user verification.
@@ -254,29 +255,25 @@ your-project/
 │       └── S<N>_ENTRY_GATE.md    # Entry Gate report (lives during sprint, deleted at close)
 ├── Tools/
 │   └── sprint-audit.sh           # Automated close gate checks
-└── dashboard/                    # Sprint dashboard (optional, standalone)
-    ├── sprint-status             # Bash wrapper (symlink target for ~/.local/bin/)
-    └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
-```
-
-If using Claude Code (step 8.5 — optional):
-
-```
-.claude/                          # Claude Code hook enforcement layer
-├── hooks-config.sh               # Feature flags + WORKFLOW_MODE preset (lite/standard/strict)
-├── settings.json                 # Hook registrations
-└── hooks/
-    ├── protect-claude.sh         # Hard-blocks Write to CLAUDE.md
-    ├── validate-tracking.sh      # Validates TRACKING.md status values
-    ├── validate-id-uniqueness.sh # Detects duplicate CORE-### IDs
-    ├── session-start.sh          # Injects session start protocol
-    ├── entry-gate-session.sh     # Injects session boundary after Entry Gate
-    ├── detect-audit-signals.sh   # CP1-CP2: metric regression + failure pattern detection
-    ├── detect-test-regression.sh # CP3: surfaces test failures from bash output
-    ├── validate-close-gate.sh    # CP4: unverified items + pre-verdict checklist
-    ├── validate-sprint-close.sh  # Retrospective + baseline + handoff presence
-    ├── cross-llm-audit.sh       # Optional: external LLM review (disabled by default)
-    └── test-cross-audit.sh      # Test suite for cross-llm-audit.sh (not a hook)
+├── dashboard/                    # Sprint dashboard (optional, standalone)
+│   ├── sprint-status             # Bash wrapper (symlink target for ~/.local/bin/)
+│   └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
+└── .claude/                      # Claude Code hooks (Step 8.5, skip for other agents)
+    ├── hooks-config.sh           # Feature flags (lite/standard/strict mode)
+    ├── settings.json             # Hook registrations
+    ├── setup-audit.sh            # Interactive cross-LLM audit setup (always create)
+    └── hooks/
+        ├── session-start.sh           # Session start protocol injection
+        ├── protect-claude.sh          # Block Write to CLAUDE.md
+        ├── protect-secrets.sh         # Block Read/Bash on .env, *.key, *.pem
+        ├── validate-tracking.sh       # Validate TRACKING.md status values
+        ├── validate-id-uniqueness.sh  # Detect duplicate CORE-### IDs
+        ├── entry-gate-session.sh      # Mandatory session boundary after Entry Gate
+        ├── detect-audit-signals.sh    # CP1+CP2: metric regression detection
+        ├── detect-test-regression.sh  # CP3: test failure surfacing
+        ├── validate-close-gate.sh     # CP4: Close Gate validation
+        ├── validate-sprint-close.sh   # Sprint Close report validation
+        └── cross-llm-audit.sh        # External LLM code review (optional)
 ```
 
 ### Why Separate Files?
@@ -315,25 +312,26 @@ A 24-sprint project stays at ~200-300 lines per session. Files grow on disk; con
 
 > These scripts validate the workflow template itself. Skip this section unless you're contributing to or modifying `WORKFLOW.md`.
 
-The workflow validates itself at five levels. All scripts live in `validation/`.
+The workflow validates itself at six levels. All scripts live in `validation/`.
 
 | Level | Script | What it catches | When to run |
 |-------|--------|----------------|-------------|
 | **Structural** | `bash validation/validate-workflow.sh` | Cross-file references, numeric claims, status values, content parity, ROADMAP-DESIGN-PROMPT.md integrity, audit script content, modular adapters, workflow modes (29 checks) | After any edit to WORKFLOW.md, README.md, sprint-audit-template.sh, or ROADMAP-DESIGN-PROMPT.md |
 | **Path simulation** | `bash validation/validate-paths.sh` | Decision paths exist, gap fixes intact, state transitions complete, design-first path (62 checks) | Same as above |
 | **Formal model** | `bash validation/validate-model.sh` | FSM reachability/traps, decision point locations, loop termination, guard blocking (58 checks) | After adding/changing a decision point, loop, or guard in WORKFLOW.md — also update `validation/workflow-model.yaml` |
+| **Cascade** | `bash validation/validate-cascade.sh` | Version consistency (workflow-version, HOOKS_VERSION, changelog), hook count parity across docs, template sync (session-start.sh, hooks-config.sh), cross-file references (18 checks) | After any edit to hooks, hook configs, README.md, DESIGN.md, or WORKFLOW-MODES.md |
 | **Scenario mutation** | `bash validation/scenarios/validate-scenarios.sh` | Critical text removal detection — mutates WORKFLOW.md and verifies evidence patterns break (46 mutation tests) | After changing scenario-related WORKFLOW.md text |
 | **Negative tests** | `bash validation/validate-paths.sh --self-test` and `bash validation/validate-model.sh --self-test` | Gap detection still works — intentionally breaks each fix, verifies scripts catch it (30+8 tests) | After changing validation scripts or gap-related WORKFLOW.md text |
 | **Semantic** | Copy `validation/verify-workflow-semantic.md` into an AI session | Intent correctness, dead ends, user gate enforcement, data provenance (~27 questions; C and F automated, skip those) | After major workflow changes or periodically |
 
-CI runs structural + path + model + scenario checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
+CI runs structural + path + model + cascade + scenario checks on every push/PR to `master`. Exit code 2 (FAIL) blocks merge; exit code 1 (WARN) is non-blocking.
 
 ```bash
 # Quick local check (< 5 seconds)
-bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-model.sh && bash validation/scenarios/validate-scenarios.sh
+bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-model.sh && bash validation/validate-cascade.sh && bash validation/scenarios/validate-scenarios.sh
 
 # Full local check including negative tests
-bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-paths.sh --self-test && bash validation/validate-model.sh && bash validation/validate-model.sh --self-test && bash validation/scenarios/validate-scenarios.sh
+bash validation/validate-workflow.sh && bash validation/validate-paths.sh && bash validation/validate-paths.sh --self-test && bash validation/validate-model.sh && bash validation/validate-model.sh --self-test && bash validation/validate-cascade.sh && bash validation/scenarios/validate-scenarios.sh
 ```
 
 ## Supported Languages
@@ -380,13 +378,25 @@ The same template supports three rigor levels:
 
 | Mode | Target | Entry Gate | Hooks | Overhead |
 |------|--------|-----------|-------|----------|
-| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (4/9) | ~5 min/gate |
-| **Standard** | Most projects (default) | Full or abbreviated | All hooks (9/9) | ~15 min/gate |
+| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (5/10) | ~5 min/gate |
+| **Standard** | Most projects (default) | Full or abbreviated | All hooks (10/10) | ~15 min/gate |
 | **Strict** | Teams, critical systems | Full always | All, overrides disabled | ~25 min/gate |
 
 Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state the mode at session start.
 
 > Full details: [Docs/WORKFLOW-MODES.md](Docs/WORKFLOW-MODES.md)
+
+### Upgrading
+
+The workflow uses a version system (v2.1+) to detect when hooks are outdated.
+
+- **WORKFLOW.md** has `<!-- workflow-version: X.Y -->` — the canonical version.
+- **`.claude/hooks-config.sh`** has `HOOKS_VERSION="X.Y"` — the installed version.
+- **`session-start.sh`** compares the two at session start and warns the AI if they differ.
+
+**To upgrade:** replace `WORKFLOW.md` with the latest version (or tell the AI: *"Update the workflow from [GitHub link]"*). The AI reads the §Changelog, backs up modified files, applies changes, and bumps `HOOKS_VERSION`. Pre-version-system projects are treated as v1.0.
+
+> Full procedure: [WORKFLOW.md §Upgrade](WORKFLOW.md#upgrade--updating-from-a-previous-version)
 
 ### Parallel Execution (Optional)
 

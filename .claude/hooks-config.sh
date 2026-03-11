@@ -5,6 +5,12 @@
 # These hooks enforce WORKFLOW.md rules for Claude Code users only.
 # Other AI agents (GPT, Gemini, etc.) do not read this directory.
 #
+# ── Version ──
+# Tracks which WORKFLOW.md version these hooks were generated from.
+# session-start.sh compares this against WORKFLOW.md's workflow-version.
+# Updated automatically during bootstrap and upgrade — do not edit manually.
+HOOKS_VERSION="2.1"
+#
 # ── Per-Developer Overrides (Team Use) ──
 # This file is git-tracked (shared by all team members).
 # To override settings locally without affecting the team, create:
@@ -39,6 +45,7 @@ WORKFLOW_MODE="standard"  # ← "lite", "standard", or "strict"
 case "${WORKFLOW_MODE}" in
   lite)
     _PROTECT_CLAUDE_MD=true
+    _PROTECT_SECRETS=true
     _VALIDATE_TRACKING=true
     _SESSION_START_PROTOCOL=true
     _VALIDATE_ID_UNIQUENESS=true
@@ -50,6 +57,7 @@ case "${WORKFLOW_MODE}" in
     ;;
   strict)
     _PROTECT_CLAUDE_MD=true
+    _PROTECT_SECRETS=true
     _VALIDATE_TRACKING=true
     _SESSION_START_PROTOCOL=true
     _VALIDATE_ID_UNIQUENESS=true
@@ -61,6 +69,7 @@ case "${WORKFLOW_MODE}" in
     ;;
   *)  # standard (default)
     _PROTECT_CLAUDE_MD=true
+    _PROTECT_SECRETS=true
     _VALIDATE_TRACKING=true
     _SESSION_START_PROTOCOL=true
     _VALIDATE_ID_UNIQUENESS=true
@@ -78,6 +87,9 @@ esac
 
 # Prevent CLAUDE.md from being overwritten (highest priority rule)
 HOOK_PROTECT_CLAUDE_MD="${HOOK_PROTECT_CLAUDE_MD:-$_PROTECT_CLAUDE_MD}"
+
+# Prevent AI from reading .env, .key, .pem, credentials — secrets stay in hooks only
+HOOK_PROTECT_SECRETS="${HOOK_PROTECT_SECRETS:-$_PROTECT_SECRETS}"
 
 # Validate TRACKING.md status values are legal after every edit
 HOOK_VALIDATE_TRACKING="${HOOK_VALIDATE_TRACKING:-$_VALIDATE_TRACKING}"
@@ -110,8 +122,12 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 # Sends code changes to an external LLM for independent review.
 # Disabled by default. All config lives in .env (git-ignored).
 #
-# Quick start:  cp .env.example .env  → fill in API key → done.
-# Full guide:   Docs/CROSS-LLM-AUDIT.md
+# Guided setup:  bash .claude/setup-audit.sh   ← interactive, API key never touches the AI
+# Manual setup:  cp .env.example .env  → fill in API key → done.
+# Full guide:    Docs/CROSS-LLM-AUDIT.md
+#
+# IMPORTANT: Never paste API keys into an AI conversation.
+# The setup script collects keys via hidden terminal input (read -s).
 #
 # Master switch only — all other CROSS_AUDIT_* settings go in .env
 ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
@@ -126,6 +142,7 @@ _LOCAL_CONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hooks-config.local.
 # Applied AFTER local overrides — strict mode is team-wide and cannot be bypassed.
 if [[ "${WORKFLOW_MODE}" == "strict" ]]; then
   HOOK_PROTECT_CLAUDE_MD=true
+  HOOK_PROTECT_SECRETS=true
   HOOK_VALIDATE_TRACKING=true
   HOOK_SESSION_START_PROTOCOL=true
   HOOK_VALIDATE_ID_UNIQUENESS=true

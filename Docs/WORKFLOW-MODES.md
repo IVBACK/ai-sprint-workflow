@@ -13,7 +13,7 @@ project size, team structure, and risk tolerance.
 | **Sprint Close** | Steps 1-3, 14 (checkmarks, status, checkpoint, handoff) | Full (steps 1-15) | Full + team review |
 | **Failure mode analysis** | Skipped | Per item (3 categories) | Per item + Critical Axis depth |
 | **Metric sufficiency** | Basic (9b-lite) | Full (9c) | Full + threshold review |
-| **Hooks (Claude Code)** | Core safety only (4/9) | All hooks (9/9) | All hooks, overrides disabled |
+| **Hooks (Claude Code)** | Core safety only (5/10) | All hooks (10/10) | All hooks, overrides disabled |
 | **sprint-audit.sh** | Optional | Recommended | Mandatory (exit code 1 blocks gate) |
 | **Checkpoints (CP1-4)** | Disabled | Enabled | Enabled + no signal suppression |
 | **Parallel execution** | Not recommended | Optional (if agent supports) | Recommended (if agent supports) |
@@ -25,6 +25,7 @@ Best for: solo developers, prototypes past throwaway stage, projects with < 5 fi
 
 **What's active:**
 - CLAUDE.md protection (never overwrite)
+- Secret file protection (blocks AI from reading `.env`, `*.key`, `*.pem`, `credentials.json`)
 - TRACKING.md validation (legal status values)
 - Session start protocol (read TRACKING.md first)
 - ID uniqueness (no duplicate CORE-### IDs)

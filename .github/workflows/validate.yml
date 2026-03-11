@@ -15,9 +15,12 @@ on:
       - validation/validate-workflow.sh
       - validation/validate-paths.sh
       - validation/validate-model.sh
+      - validation/validate-cascade.sh
       - validation/workflow-model.yaml
       - validation/scenarios/check-prompt.md
       - validation/scenarios/validate-scenarios.sh
+      - '.claude/hooks/**'
+      - '.claude/settings.json'
   pull_request:
     branches: [master]
     paths:
@@ -32,9 +35,12 @@ on:
       - validation/validate-workflow.sh
       - validation/validate-paths.sh
       - validation/validate-model.sh
+      - validation/validate-cascade.sh
       - validation/workflow-model.yaml
       - validation/scenarios/check-prompt.md
       - validation/scenarios/validate-scenarios.sh
+      - '.claude/hooks/**'
+      - '.claude/settings.json'
 
 # Helper: run a script, block on exit 2, pass on 0 or 1 (WARN is non-blocking)
 # Each step uses the same pattern below.
@@ -42,7 +48,7 @@ on:
 jobs:
   # ── Main validation job (blocking) ──────────────────────────────────────────
   validate:
-    name: Structural + Path + Model checks
+    name: Structural + Path + Model + Cascade checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +76,14 @@ jobs:
         run: |
           set +e
           bash validation/validate-model.sh
+          code=$?
+          set -e
+          [ "$code" -eq 2 ] && exit 1 || exit 0
+
+      - name: Cascade consistency (validate-cascade.sh)
+        run: |
+          set +e
+          bash validation/validate-cascade.sh
           code=$?
           set -e
           [ "$code" -eq 2 ] && exit 1 || exit 0
