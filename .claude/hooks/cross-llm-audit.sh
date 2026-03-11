@@ -174,13 +174,22 @@ fi
 # ── Gather diff (strategy depends on audit mode) ──
 cd "$PROJECT_DIR" 2>/dev/null || exit 0
 
+# HEAD fallback: if no commits yet, use empty tree as base
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  _DIFF_BASE="HEAD"
+  _DIFF_BASE_PREV="HEAD~1"
+else
+  _DIFF_BASE="$(git hash-object -t tree /dev/null)"  # empty tree
+  _DIFF_BASE_PREV="$_DIFF_BASE"
+fi
+
 if [[ "$AUDIT_MODE" == "close-gate" ]]; then
   # Holistic: full sprint diff against main branch
   MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
   # Try common main branch names
   for branch in "$MAIN_BRANCH" main master; do
     if git rev-parse --verify "$branch" >/dev/null 2>&1; then
-      COMBINED_DIFF=$(git diff "$branch"...HEAD -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
+      COMBINED_DIFF=$(git diff "$branch"..."$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
       break
     fi
   done
@@ -190,10 +199,10 @@ elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
   # Wave boundary: coordinator just merged sub-agent work and updated TRACKING.md
   # Review the recent uncommitted + last commit changes (wave merge typically just committed)
   # Use diff of HEAD~1..HEAD (last commit = wave merge) + any uncommitted changes
-  COMBINED_DIFF=$(git diff HEAD~1 -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' ':!*.json' ':!*.yaml' ':!*.yml' 2>/dev/null || true)
+  COMBINED_DIFF=$(git diff "$_DIFF_BASE_PREV" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' ':!*.json' ':!*.yaml' ':!*.yml' 2>/dev/null || true)
   # Fallback: if no previous commit or diff is empty, use uncommitted changes
   if [[ -z "$COMBINED_DIFF" ]]; then
-    COMBINED_DIFF=$(git diff HEAD -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' 2>/dev/null || true)
+    COMBINED_DIFF=$(git diff "$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' 2>/dev/null || true)
   fi
   MAX_DIFF_CHARS=32000
 elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
@@ -204,7 +213,7 @@ elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
 else
   # Per-edit: current uncommitted changes (staged + unstaged vs HEAD)
   # Exclude sensitive files from diff sent to external LLM
-  COMBINED_DIFF=$(git diff HEAD -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
+  COMBINED_DIFF=$(git diff "$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
   MAX_DIFF_CHARS=24000
 fi
 
