@@ -120,6 +120,11 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    - `.claude/hooks/validate-id-uniqueness.sh` — detects duplicate `CORE-###` IDs
    - `.claude/hooks/session-start.sh` — injects session start protocol context
    - `.claude/hooks/entry-gate-session.sh` — injects mandatory session boundary after Entry Gate
+   - `.claude/hooks/detect-audit-signals.sh` — CP1+CP2: metric regression and recurring failure detection at session start
+   - `.claude/hooks/detect-test-regression.sh` — CP3: surfaces test failures from Bash output
+   - `.claude/hooks/validate-close-gate.sh` — CP4: validates Close Gate report, checks for unverified must items
+   - `.claude/hooks/validate-sprint-close.sh` — validates Sprint Close report sections (retrospective, baseline, handoff)
+   - `.claude/hooks/cross-llm-audit.sh` — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — requires `ENABLE_CROSS_AUDIT=true` + API key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
    Make all hook scripts executable (`chmod +x .claude/hooks/*.sh`).
    File contents: see §File Templates → "Claude Code Hook Templates".
    These hooks enforce WORKFLOW.md rules mechanically. Other agents are unaffected — `.claude/` is Claude Code-specific.
@@ -1138,6 +1143,16 @@ Run ALL tests written so far — current item + all previous items in this sprin
 
 Test needs infrastructure not available locally?
 → Mark "pending" in TRACKING.md → it will run at Close Gate Phase 3.
+
+**D.6b Cross-LLM audit (optional — only if `ENABLE_CROSS_AUDIT=true`)**
+If the cross-LLM audit hook is enabled, external review findings are automatically injected
+as `additionalContext` after source file changes. When findings arrive:
+- **BLOCK verdict:** Present findings to the user. Do not proceed until the user reviews and decides.
+- **WARN verdict:** Present findings alongside your own assessment. Let the user decide.
+- **PASS verdict:** Mention as additional confidence signal, then continue.
+- **Conflicting opinions:** If your assessment disagrees with the external audit, present both perspectives and let the user decide. Do not silently override either opinion.
+This step is fully automated via the hook — no manual action needed. If the hook is not enabled, skip.
+See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for setup.
 
 **D.7 Acceptance criteria exit check**
 Before marking the item done, read the item's acceptance criteria from the Entry Gate report
@@ -2391,11 +2406,31 @@ Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
 
 ```bash
 # Claude Code Hooks — Feature Flags
-HOOK_PROTECT_CLAUDE_MD=true
-HOOK_VALIDATE_TRACKING=true
-HOOK_SESSION_START_PROTOCOL=true
-HOOK_VALIDATE_ID_UNIQUENESS=true
-HOOK_ENTRY_GATE_SESSION=true
+# Toggle individual hooks on/off without touching settings.json
+# Set WORKFLOW_MODE to auto-configure: "lite", "standard" (default), or "strict"
+
+WORKFLOW_MODE="standard"
+
+# Mode-based defaults are set automatically (see actual file for case block).
+# Individual overrides — uncomment to override the mode preset:
+
+HOOK_PROTECT_CLAUDE_MD="${HOOK_PROTECT_CLAUDE_MD:-true}"
+HOOK_VALIDATE_TRACKING="${HOOK_VALIDATE_TRACKING:-true}"
+HOOK_SESSION_START_PROTOCOL="${HOOK_SESSION_START_PROTOCOL:-true}"
+HOOK_VALIDATE_ID_UNIQUENESS="${HOOK_VALIDATE_ID_UNIQUENESS:-true}"
+HOOK_ENTRY_GATE_SESSION="${HOOK_ENTRY_GATE_SESSION:-true}"
+HOOK_DETECT_TEST_REGRESSION="${HOOK_DETECT_TEST_REGRESSION:-true}"
+HOOK_VALIDATE_CLOSE_GATE="${HOOK_VALIDATE_CLOSE_GATE:-true}"
+HOOK_VALIDATE_SPRINT_CLOSE="${HOOK_VALIDATE_SPRINT_CLOSE:-true}"
+HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-true}"
+
+# Cross-LLM Audit (optional, independent of workflow mode)
+# Disabled by default. Requires CROSS_AUDIT_API_KEY env var.
+# See Docs/CROSS-LLM-AUDIT.md for setup.
+ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
+# CROSS_AUDIT_PROVIDER="openai"    # "openai" (default) or "anthropic"
+
+# Strict mode enforcement (overrides all individual flags to true)
 ```
 
 **`.claude/settings.json`** — hook registrations:
@@ -2406,7 +2441,10 @@ HOOK_ENTRY_GATE_SESSION=true
     "SessionStart": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh" }]
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/detect-audit-signals.sh" }
+        ]
       }
     ],
     "PreToolUse": [
@@ -2420,12 +2458,21 @@ HOOK_ENTRY_GATE_SESSION=true
         "matcher": "Edit|Write",
         "hooks": [
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-tracking.sh" },
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-id-uniqueness.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-id-uniqueness.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/cross-llm-audit.sh" }
         ]
       },
       {
         "matcher": "Write",
-        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/entry-gate-session.sh" }]
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/entry-gate-session.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-close-gate.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-sprint-close.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/detect-test-regression.sh" }]
       }
     ]
   }
@@ -2557,6 +2604,110 @@ jq -n --arg s "$SPRINT" '{
   )
 }'
 ```
+
+> **⚠ Template snippets below are ABBREVIATED.** They show only the header, config loading, and
+> feature-gate logic. The authoritative full scripts live in `.claude/hooks/*.sh`. Do NOT copy
+> these snippets as-is — use the actual files created by the bootstrap (Step 8.5).
+
+**`.claude/hooks/detect-audit-signals.sh`** — CP1+CP2 self-activating detector at session start:
+
+```bash
+#!/bin/bash
+# Hook: detect-audit-signals.sh
+# Event: SessionStart
+# CP1: Metric regression ≥20% between consecutive sprints (§Performance Baseline Log)
+# CP2: Same failure category in 2+ sprints (§Failure History)
+# Silent if sections missing or data insufficient — zero false positives.
+# Exit: 0 always. Injects additionalContext on findings.
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_DETECT_AUDIT_SIGNALS" != "true" ]] && exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
+[[ -z "$TRACKING" || ! -f "$TRACKING" ]] && exit 0
+
+# Full script: .claude/hooks/detect-audit-signals.sh (authoritative source)
+# Parses §Performance Baseline Log for ≥20% regression (CP1)
+# Parses §Failure Mode History for recurring categories across sprints (CP2)
+# Sanitizes all output. Uses jq --arg for JSON-safe injection.
+# Emits additionalContext with ⚠ AUDIT SIGNAL directives.
+```
+
+**`.claude/hooks/detect-test-regression.sh`** — CP3: surfaces test failures from Bash output:
+
+```bash
+#!/bin/bash
+# Hook: detect-test-regression.sh
+# Event: PostToolUse — Bash
+# Only triggers on known test runner commands (pytest, jest, go test, cargo test, etc.)
+# Scans output for failure patterns. Injects CP3 AUDIT SIGNAL.
+# Exit: 0 always. Injects additionalContext on findings.
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_DETECT_TEST_REGRESSION" != "true" ]] && exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+# Full script: .claude/hooks/detect-test-regression.sh (authoritative source)
+# Gate 1: Checks command against 25+ test runner patterns
+# Gate 2: Scans output for framework-specific failure patterns
+# Emits CP3 AUDIT SIGNAL with matched failure lines
+```
+
+**`.claude/hooks/validate-close-gate.sh`** — CP4: validates Close Gate report:
+
+```bash
+#!/bin/bash
+# Hook: validate-close-gate.sh
+# Event: PostToolUse — Write (S*_CLOSE_GATE.md)
+# Checks TRACKING.md for must items without evidence (CP4)
+# Blocks if ALL items are DEFERRED (blocking guard)
+# Exit: 1 (warning) on issues, 0 otherwise.
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_VALIDATE_CLOSE_GATE" != "true" ]] && exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+# Full script: .claude/hooks/validate-close-gate.sh (authoritative source)
+# Scans TRACKING.md for unverified must items → CP4 AUDIT SIGNAL
+# Guards against all-DEFERRED verdict (at least one item must be verified)
+```
+
+**`.claude/hooks/validate-sprint-close.sh`** — validates Sprint Close report sections:
+
+```bash
+#!/bin/bash
+# Hook: validate-sprint-close.sh
+# Event: PostToolUse — Write (S*_SPRINT_CLOSE.md)
+# Validates required sections: failure mode retrospective (Step 7),
+# performance baseline (Step 5), user handoff (Step 14).
+# Also checks Roadmap.md checkmarks and deferred item acknowledgment.
+# Exit: 1 (warning) on missing sections, 0 otherwise.
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$HOOKS_DIR/../hooks-config.sh"
+[[ "$HOOK_VALIDATE_SPRINT_CLOSE" != "true" ]] && exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+# Full script: .claude/hooks/validate-sprint-close.sh (authoritative source)
+# Checks for: retrospective, baseline log, handoff summary
+# Checks Roadmap.md for completed checkmarks
+# Checks TRACKING.md for unacknowledged deferred items
+```
+
+**`.claude/hooks/cross-llm-audit.sh`** — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — enable with `ENABLE_CROSS_AUDIT=true` + API key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for full setup and configuration.
+
+The full script lives in `.claude/hooks/cross-llm-audit.sh` (authoritative source). Key design points:
+
+- **Three audit modes:** per-edit (source changes → `git diff HEAD`), close-gate (holistic → `git diff main...HEAD`), entry-gate (plan review → gate file content)
+- **Two provider modes:** OpenAI-compatible (default) and native Anthropic API
+- **Wave batching:** In `wave` trigger mode, fires every ~5 source edits. Gate reviews bypass wave counting
+- **Context layers:** minimal (diff + active items), standard (+ guardrails + failure modes), full (+ changed file content)
+- **Always exit 0:** Never blocks the workflow at infrastructure level. Only findings can be blocking (via BLOCK verdict)
+- **Config:** `ENABLE_CROSS_AUDIT`, `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_TRIGGER`, `CROSS_AUDIT_CONTEXT`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_MIN_CHANGES`, `CROSS_AUDIT_TIMEOUT`
 
 ---
 

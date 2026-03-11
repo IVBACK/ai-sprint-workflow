@@ -5,6 +5,16 @@
 # These hooks enforce WORKFLOW.md rules for Claude Code users only.
 # Other AI agents (GPT, Gemini, etc.) do not read this directory.
 #
+# ── Per-Developer Overrides (Team Use) ──
+# This file is git-tracked (shared by all team members).
+# To override settings locally without affecting the team, create:
+#   .claude/hooks-config.local.sh
+# This file is git-ignored and sourced AFTER this file + strict enforcement.
+# Example: override workflow mode for your own sessions:
+#   echo 'WORKFLOW_MODE="lite"' > .claude/hooks-config.local.sh
+# Or disable a specific hook:
+#   echo 'HOOK_ENTRY_GATE_SESSION=false' >> .claude/hooks-config.local.sh
+#
 # ── Workflow Mode Presets ──
 # Set WORKFLOW_MODE to auto-configure hooks for your project's needs.
 # Individual overrides below still take precedence over the mode preset.
@@ -96,7 +106,24 @@ HOOK_VALIDATE_SPRINT_CLOSE="${HOOK_VALIDATE_SPRINT_CLOSE:-$_VALIDATE_SPRINT_CLOS
 # Silent if sections missing or data insufficient — zero false positives without structured data
 HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 
+# ── Cross-LLM Audit (optional, independent of workflow mode) ──
+# Sends code changes to an external LLM for independent review.
+# Disabled by default. All config lives in .env (git-ignored).
+#
+# Quick start:  cp .env.example .env  → fill in API key → done.
+# Full guide:   Docs/CROSS-LLM-AUDIT.md
+#
+# Master switch only — all other CROSS_AUDIT_* settings go in .env
+ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
+
+# ── Per-developer local overrides (git-ignored) ──
+# Sourced here so local settings override mode defaults above,
+# but BEFORE strict enforcement (strict cannot be overridden locally).
+_LOCAL_CONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hooks-config.local.sh"
+[[ -f "$_LOCAL_CONFIG" ]] && source "$_LOCAL_CONFIG"
+
 # ── Strict mode enforcement ──
+# Applied AFTER local overrides — strict mode is team-wide and cannot be bypassed.
 if [[ "${WORKFLOW_MODE}" == "strict" ]]; then
   HOOK_PROTECT_CLAUDE_MD=true
   HOOK_VALIDATE_TRACKING=true

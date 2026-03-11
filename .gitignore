@@ -8,3 +8,18 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Per-developer local config overrides (team use)
+.claude/hooks-config.local.sh
+.claude/hooks/*.local.sh
+
+# Secrets — never commit API keys, credentials, or environment files
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.yaml
+secrets.yml

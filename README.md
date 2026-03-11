@@ -190,8 +190,11 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
 | `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
+| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Three modes: per-edit, Close Gate holistic, Entry Gate plan review |
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
+
+**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Three audit modes: per-edit (source changes), Close Gate (holistic sprint review), Entry Gate (plan review). Disabled by default — enable with `ENABLE_CROSS_AUDIT=true` + API key in `.env` or shell profile. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
@@ -266,7 +269,9 @@ If using Claude Code (step 8.5 — optional):
     ├── detect-audit-signals.sh   # CP1-CP2: metric regression + failure pattern detection
     ├── detect-test-regression.sh # CP3: surfaces test failures from bash output
     ├── validate-close-gate.sh    # CP4: unverified items + pre-verdict checklist
-    └── validate-sprint-close.sh  # Retrospective + baseline + handoff presence
+    ├── validate-sprint-close.sh  # Retrospective + baseline + handoff presence
+    ├── cross-llm-audit.sh       # Optional: external LLM review (disabled by default)
+    └── test-cross-audit.sh      # Test suite for cross-llm-audit.sh (not a hook)
 ```
 
 ### Why Separate Files?
