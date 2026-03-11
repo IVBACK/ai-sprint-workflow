@@ -274,6 +274,96 @@ assert_exit "wave-review skips when no code diff" 0 $?
 assert_empty "no output for empty wave diff" "$OUT"
 rm -rf "$TEMP_REPO"
 
+# ── Test 14: Audit log is created on skip ──
+bold "Test 14: Audit log is created (P0)"
+TEMP_REPO=$(mktemp -d)
+git -C "$TEMP_REPO" init -q 2>/dev/null
+git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
+TEST_STATE_DIR="$TEMP_REPO/.claude/.state"
+mkdir -p "$TEST_STATE_DIR"
+TEST_LOG="$TEST_STATE_DIR/cross-audit-log.jsonl"
+OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
+  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
+    CLAUDE_PROJECT_DIR="$TEMP_REPO" \
+    bash "$HOOK" 2>&1)
+if [[ -f "$TEST_LOG" ]]; then
+  LAST_STATUS=$(tail -1 "$TEST_LOG" | jq -r '.status' 2>/dev/null)
+  if [[ "$LAST_STATUS" == "skip" ]]; then
+    green "  PASS: audit log records skip events"
+    PASSED=$((PASSED + 1))
+  else
+    red "  FAIL: log status is '$LAST_STATUS', expected 'skip'"
+    FAILED=$((FAILED + 1))
+  fi
+else
+  red "  FAIL: audit log not created at $TEST_LOG"
+  FAILED=$((FAILED + 1))
+fi
+rm -rf "$TEMP_REPO"
+
+# ── Test 15: Disabled hook logs 'disabled' reason ──
+bold "Test 15: Disabled hook logs reason (P0)"
+TEMP_REPO=$(mktemp -d)
+git -C "$TEMP_REPO" init -q 2>/dev/null
+git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
+TEST_STATE_DIR="$TEMP_REPO/.claude/.state"
+mkdir -p "$TEST_STATE_DIR"
+TEST_LOG="$TEST_STATE_DIR/cross-audit-log.jsonl"
+OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
+  | ENABLE_CROSS_AUDIT=false \
+    CLAUDE_PROJECT_DIR="$TEMP_REPO" \
+    bash "$HOOK" 2>&1)
+if [[ -f "$TEST_LOG" ]]; then
+  LAST_REASON=$(tail -1 "$TEST_LOG" | jq -r '.reason' 2>/dev/null)
+  if [[ "$LAST_REASON" == "disabled" ]]; then
+    green "  PASS: disabled hook logs 'disabled' reason"
+    PASSED=$((PASSED + 1))
+  else
+    red "  FAIL: log reason is '$LAST_REASON', expected 'disabled'"
+    FAILED=$((FAILED + 1))
+  fi
+else
+  red "  FAIL: audit log not created"
+  FAILED=$((FAILED + 1))
+fi
+rm -rf "$TEMP_REPO"
+
+# ── Test 16: verify-evidence.sh validates file:line refs ──
+bold "Test 16: Evidence verification script (P3)"
+TEMP_REPO=$(mktemp -d)
+mkdir -p "$TEMP_REPO/src"
+# Create a 50-line file
+for i in $(seq 1 50); do echo "line $i content" >> "$TEMP_REPO/src/app.ts"; done
+# Create a mock agent report with valid and invalid refs
+REPORT="## Agent Report
+AC1: src/app.ts:10 — implemented feature
+AC2: src/nonexistent.ts:5 — missing file
+AC3: src/app.ts:999 — out of range"
+EXIT_CODE=0
+OUT=$(echo "$REPORT" | CLAUDE_PROJECT_DIR="$TEMP_REPO" bash "$SCRIPT_DIR/verify-evidence.sh" 2>&1) || EXIT_CODE=$?
+if [[ $EXIT_CODE -eq 1 ]]; then
+  green "  PASS: verify-evidence detects invalid references (exit=1)"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: verify-evidence should exit 1 for invalid refs (got exit=$EXIT_CODE)"
+  FAILED=$((FAILED + 1))
+fi
+# Test with only valid refs
+REPORT2="## Agent Report
+AC1: src/app.ts:10 — implemented feature
+AC2: src/app.ts:25 — another feature"
+OUT=$(echo "$REPORT2" | CLAUDE_PROJECT_DIR="$TEMP_REPO" bash "$SCRIPT_DIR/verify-evidence.sh" 2>&1)
+EXIT_CODE=$?
+if [[ $EXIT_CODE -eq 0 ]]; then
+  green "  PASS: verify-evidence accepts valid references (exit=0)"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: verify-evidence should exit 0 for valid refs (got exit=$EXIT_CODE)"
+  FAILED=$((FAILED + 1))
+fi
+rm -rf "$TEMP_REPO"
+
 # ══════════════════════════════════════════
 # Live test (optional)
 # ══════════════════════════════════════════

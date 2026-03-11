@@ -24,42 +24,28 @@
 #   CROSS_AUDIT_TIMEOUT                — API timeout in seconds (default: 60)
 #   CROSS_AUDIT_SKIP_SUBAGENT          — Skip in worktree sub-agents (default: true)
 #
-# Exit: 0 always (non-blocking). Injects additionalContext on findings.
+# Exit: 0 normally. If CROSS_AUDIT_ENFORCE_BLOCK=true and verdict=BLOCK, exits 1.
+# Injects additionalContext on findings. All invocations are logged to .claude/.state/cross-audit-log.jsonl.
 
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ── Load .env BEFORE hooks-config.sh ──
-# Order: shell env (highest) > .env > hooks-config.sh (lowest)
-# .env only fills in values not already set in shell environment.
-# hooks-config.sh uses ${VAR:-default} so it respects both shell env and .env.
-_ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
-if [[ -f "$_ENV_FILE" ]]; then
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    # Skip comments and empty lines
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    # Split on first '=' only (values may contain '=')
-    key="${line%%=*}"
-    value="${line#*=}"
-    # Strip "export " prefix and whitespace from key
-    key=$(echo "$key" | sed 's/^[[:space:]]*export[[:space:]]*//' | tr -d '[:space:]')
-    # Strip surrounding quotes, whitespace, and inline comments from value
-    value=$(echo "$value" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
-    # Only import CROSS_AUDIT_* and ENABLE_CROSS_AUDIT — don't pollute env
-    # Shell env vars take precedence over .env (don't override already-set values)
-    if [[ "$key" == CROSS_AUDIT_* || "$key" == "ENABLE_CROSS_AUDIT" ]]; then
-      # Strict key validation: only alphanumeric + underscore, must start with letter
-      [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
-      # Safe indirect expansion without eval (bash 3.2+ compatible via printenv)
-      _cur_val=$(printenv "$key" 2>/dev/null || true)
-      [[ -z "$_cur_val" ]] && export "$key=$value"
-    fi
-  done < "$_ENV_FILE"
+# ── Load shared audit library (logging, secret scrubbing, API helpers) ──
+if [[ ! -f "$HOOKS_DIR/_audit-lib.sh" ]]; then
+  echo "Cross-audit: _audit-lib.sh not found — hook cannot run." >&2
+  exit 0
 fi
+source "$HOOKS_DIR/_audit-lib.sh"
+
+# ── Load .env BEFORE hooks-config.sh ──
+_load_audit_env "${CLAUDE_PROJECT_DIR:-.}/.env"
 
 source "$HOOKS_DIR/../hooks-config.sh"
 
 # ── Master switch ──
-[[ "${ENABLE_CROSS_AUDIT:-false}" != "true" ]] && exit 0
+if [[ "${ENABLE_CROSS_AUDIT:-false}" != "true" ]]; then
+  _log_audit "skip" "disabled"
+  exit 0
+fi
 
 # ── Sub-agent detection: skip cross-audit in worktree-based sub-agents ──
 # Sub-agents run in isolated worktrees (CLAUDE_PROJECT_DIR differs from git toplevel).
@@ -72,17 +58,18 @@ if [[ "${CROSS_AUDIT_SKIP_SUBAGENT:-true}" == "true" ]]; then
     _REAL_TOPLEVEL=$(cd "$_GIT_TOPLEVEL" && pwd -P 2>/dev/null || true)
     if [[ "$_REAL_PROJECT" != "$_REAL_TOPLEVEL" ]]; then
       # Worktree detected — this is a sub-agent, skip cross-audit
+      _log_audit "skip" "sub-agent"
       exit 0
     fi
   fi
 fi
 
 # ── Dependencies ──
-command -v jq >/dev/null 2>&1 || exit 0
-command -v curl >/dev/null 2>&1 || exit 0
+if ! command -v jq >/dev/null 2>&1; then _log_audit "skip" "missing-jq"; exit 0; fi
+if ! command -v curl >/dev/null 2>&1; then _log_audit "skip" "missing-curl"; exit 0; fi
 
 # ── API key required ──
-[[ -z "${CROSS_AUDIT_API_KEY:-}" ]] && exit 0
+if [[ -z "${CROSS_AUDIT_API_KEY:-}" ]]; then _log_audit "skip" "no-api-key"; exit 0; fi
 
 # ── Safety: reject keys that look like they were hardcoded (not from env) ──
 # If the key is found verbatim in hooks-config.sh, someone pasted it into a git-tracked file.
@@ -92,6 +79,7 @@ if [[ ${#CROSS_AUDIT_API_KEY} -ge 20 && -f "$_CONFIG_FILE" ]] \
    && grep -qF "${CROSS_AUDIT_API_KEY}" "$_CONFIG_FILE" 2>/dev/null; then
   echo "Cross-audit: BLOCKED — your API key is in hooks-config.sh (git-tracked!)." >&2
   echo "  Move it to your shell profile (~/.bashrc or ~/.config/fish/config.fish) instead." >&2
+  _log_audit "skip" "key-in-config"
   exit 0
 fi
 
@@ -101,7 +89,7 @@ TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 # Only trigger on Edit or Write
-[[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]] && exit 0
+if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]]; then _log_audit "skip" "wrong-tool"; exit 0; fi
 
 # ── Detect audit mode ──
 # Close Gate file → holistic sprint review (full sprint diff against main)
@@ -113,7 +101,7 @@ case "$FILE" in
   *_ENTRY_GATE*.md) AUDIT_MODE="entry-gate" ;;
   *TRACKING*.md)    AUDIT_MODE="wave-review" ;;
   *CLAUDE.md|*WORKFLOW*.md|*[Rr]oadmap*.md|*ROADMAP*.md|*SPRINT_CLOSE*|\
-  *GUARDRAILS*|*LESSONS*|*.json|*.yaml|*.yml|*.toml|*.lock|*.env*) exit 0 ;;
+  *GUARDRAILS*|*LESSONS*|*.json|*.yaml|*.yml|*.toml|*.lock|*.env*) _log_audit "skip" "excluded-file"; exit 0 ;;
 esac
 
 # ── Configuration defaults ──
@@ -177,9 +165,9 @@ if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
     ) 200>"${COUNTER_FILE}.lock"
     _wave_result=$?
     # 7 = below threshold (skip audit), 1 = flock failed (skip safely), 0 = fire
-    [[ $_wave_result -ne 0 ]] && exit 0
+    if [[ $_wave_result -ne 0 ]]; then _log_audit "skip" "wave-below-threshold"; exit 0; fi
   else
-    _do_wave_count || exit 0
+    _do_wave_count || { _log_audit "skip" "wave-below-threshold"; exit 0; }
   fi
 fi
 
@@ -222,12 +210,14 @@ fi
 
 # Check minimum change threshold (skip for entry-gate — always review the plan)
 if [[ -z "$COMBINED_DIFF" ]]; then
+  _log_audit "skip" "empty-diff"
   exit 0
 fi
 if [[ "$AUDIT_MODE" == "per-edit" || "$AUDIT_MODE" == "wave-review" ]]; then
   CHANGED_LINES=$(echo "$COMBINED_DIFF" | grep -cE '^\+[^+]|^-[^-]' 2>/dev/null || echo 0)
   # Wave-review needs at least MIN_CHANGES of actual code changes (skip trivial merges)
   if [[ "$CHANGED_LINES" -lt "$MIN_CHANGES" ]]; then
+    _log_audit "skip" "below-min-changes"
     exit 0
   fi
 else
@@ -241,29 +231,8 @@ if [[ ${#COMBINED_DIFF} -gt $MAX_DIFF_CHARS ]]; then
 ... [TRUNCATED — diff exceeded ${MAX_DIFF_CHARS} chars] ..."
 fi
 
-# ── Secret scrubbing ──
-# Strip lines that look like they contain secrets before sending to external LLM.
-# Matches: API keys, tokens, passwords, private keys, connection strings.
-# Conservative: replaces the value portion only, preserves the key name for context.
-# Well-known token prefixes (any context — bare, quoted, assigned)
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/sk-ant-[a-zA-Z0-9_-]{20,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/sk-[a-zA-Z0-9_-]{20,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ghp_[a-zA-Z0-9]{36,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/gho_[a-zA-Z0-9]{36,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ghu_[a-zA-Z0-9]{36,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/xox[bpsar]-[a-zA-Z0-9-]{10,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-# AWS access keys (AKIA...) and secret keys
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ASIA[A-Z0-9]{16}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-# Key=value assignments (API_KEY="...", password: "...", secret = '...', token: "...")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E "s/(api[_-]?key|secret[_-]?key|secret_?|password|passwd|token|credential|auth[_-]?token|access[_-]?key)(['\"]?[[:space:]]*[:=][[:space:]]*['\"]?)([^'\" ]{8,})/\1\2[REDACTED]/gi" 2>/dev/null || echo "$COMBINED_DIFF")
-# Bearer tokens
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/(Bearer )[a-zA-Z0-9_.=-]{20,}/\1[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-# Private key blocks (redact BEGIN marker and all base64 lines until END marker)
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/-----BEGIN [A-Z ]* PRIVATE KEY-----/[PRIVATE KEY REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/-----END [A-Z ]* PRIVATE KEY-----/[END KEY REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-# Connection strings with embedded passwords
-COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's#(mysql|postgres|postgresql|mongodb|redis|amqp)(://[^:]+:)[^@]+(@)#\1\2[REDACTED]\3#g' 2>/dev/null || echo "$COMBINED_DIFF")
+# ── Secret scrubbing (via shared library) ──
+COMBINED_DIFF=$(echo "$COMBINED_DIFF" | _scrub_secrets)
 
 # ── Build context layers ──
 
@@ -350,6 +319,7 @@ This is a holistic review of the ENTIRE sprint, not a single edit. Focus on:
 5. Missing integration points — do new components connect properly?
 6. Security issues across the full change set
 7. Coding rules violations (if guardrails provided)
+8. Failure mode coverage — were predicted failure modes (listed above, if any) actually mitigated in the implementation? Flag any predicted risk that appears unaddressed.
 
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
 Focus on cross-cutting concerns that per-edit reviews would miss. Be concise."
@@ -371,22 +341,31 @@ ${COMBINED_DIFF}
 \`\`\`
 
 ## Instructions
-This is code from parallel sub-agents merged by the coordinator. Sub-agents work in isolation, so focus on:
+This is code from parallel sub-agents merged by the coordinator. Sub-agents work in isolation, so review BOTH integration AND code quality:
+
+### A. Integration (primary focus)
 1. Integration conflicts — do merged changes from different sub-agents work together correctly?
 2. API contract consistency — do producer/consumer interfaces match across merged items?
 3. Shared state conflicts — are there race conditions or conflicting writes to the same resources?
 4. Import/dependency coherence — are all needed imports present? Any duplicate or conflicting dependencies?
 5. Naming consistency — do newly added functions/variables follow the same conventions?
-6. Critical axis violations (if specified above)
-7. Security issues introduced by the merge
 
-Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
-Focus on cross-item integration issues that individual sub-agents couldn't detect. Be concise."
+### B. Code quality (secondary — catch what per-edit reviews may have missed)
+6. Bugs, edge cases, or missed error handling in the merged code
+7. Security issues (injection, auth bypass, data exposure)
+8. Critical axis violations (if specified above)
+
+Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\",\"axis\":\"integration|quality\"}]}
+Use the 'axis' field to indicate whether a finding is an integration or quality issue. Focus on cross-item problems but don't ignore obvious code bugs. Be concise."
 
 elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
   MODE_INSTRUCTIONS="You are reviewing a SPRINT PLAN (Entry Gate report) for completeness and risks. ${LANG_DIRECTIVE}
 
 ${CRITICAL_AXIS}
+
+${ITEM_CONTEXT}
+
+${GUARDRAILS_CONTEXT}
 
 ## Entry Gate Report
 ${COMBINED_DIFF}
@@ -429,6 +408,7 @@ Review the changes for:
 4. Bugs, edge cases, missed error handling
 5. Predicted risks — are failure modes addressed?
 6. Security issues (injection, auth bypass, data exposure)
+7. Integration risk — could this change conflict with other active items listed above? Flag potential API mismatches, shared state mutations, or import conflicts that would surface when parallel work is merged.
 
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
 Only use BLOCK for critical bugs or security issues. Be concise."
@@ -465,6 +445,7 @@ if [[ "$PROVIDER" == "anthropic" ]]; then
     else
       echo "Cross-audit: API call failed (timeout or network error). Check your connection." >&2
     fi
+    _log_audit "error" "api-network-error"
     exit 0
   }
   _HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -490,6 +471,7 @@ else
     else
       echo "Cross-audit: API call failed (timeout or network error). Check your connection." >&2
     fi
+    _log_audit "error" "api-network-error"
     exit 0
   }
   _HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -518,10 +500,12 @@ if [[ -n "$API_ERROR" ]]; then
   else
     echo "Cross-audit: API error — $API_ERROR (HTTP ${_HTTP_CODE:-unknown})" >&2
   fi
+  _log_audit "error" "api-error-${_HTTP_CODE:-unknown}"
   exit 0
 fi
 if [[ -z "$CONTENT" ]]; then
   echo "Cross-audit: Empty response from API" >&2
+  _log_audit "error" "empty-response"
   exit 0
 fi
 
@@ -570,5 +554,15 @@ jq -n \
     "================================"
   )
 }'
+
+# ── P0: Log success ──
+_log_audit "success" "" "$VERDICT"
+
+# ── P1: Mechanical BLOCK enforcement ──
+# When enabled, BLOCK verdict causes non-zero exit → Claude Code treats as hook failure.
+# Opt-in via CROSS_AUDIT_ENFORCE_BLOCK=true (default: false, advisory only).
+if [[ "$VERDICT" == "BLOCK" && "${CROSS_AUDIT_ENFORCE_BLOCK:-false}" == "true" ]]; then
+  exit 1
+fi
 
 exit 0

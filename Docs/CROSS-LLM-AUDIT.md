@@ -28,10 +28,10 @@ The hook fires on `PostToolUse(Edit|Write)` and supports three audit modes:
 
 | Mode | Trigger | What's Reviewed | Focus |
 |------|---------|-----------------|-------|
-| **Per-edit** | Source file change | Uncommitted `git diff` | Bugs, security, AC coverage |
-| **Wave Review** | `TRACKING.md` edited | Last commit diff (`HEAD~1..HEAD`) | Cross-item integration after parallel merge |
-| **Close Gate** | `S*_CLOSE_GATE.md` written | Full sprint diff (`git diff main...HEAD`) | Cross-item consistency, architecture |
-| **Entry Gate** | `S*_ENTRY_GATE.md` written | Gate report content | Plan quality, missing risks |
+| **Per-edit** | Source file change | Uncommitted `git diff` | Bugs, security, AC coverage + integration risk |
+| **Wave Review** | `TRACKING.md` edited | Last commit diff (`HEAD~1..HEAD`) | Cross-item integration + code quality (dual-axis) |
+| **Close Gate** | `S*_CLOSE_GATE.md` written | Full sprint diff (`git diff main...HEAD`) | Cross-item consistency, architecture, failure mode verification |
+| **Entry Gate** | `S*_ENTRY_GATE.md` written | Gate report content | Plan quality, missing risks, AC vs guardrails |
 
 Gate reviews (Close/Entry) fire immediately regardless of wave/item trigger mode.
 
@@ -116,6 +116,15 @@ Make a code change with 3+ lines. Check stderr for "Cross-audit:" messages. If t
 
 ## Configuration Reference
 
+### CROSS_AUDIT_ENFORCE_BLOCK
+
+| Value | Behavior |
+|-------|----------|
+| `false` (default) | BLOCK verdict is advisory — injected as additionalContext, Claude decides |
+| `true` | BLOCK verdict causes hook to exit non-zero — Claude Code treats as hook failure |
+
+When enabled, a BLOCK verdict mechanically prevents the agent from continuing without user intervention. The additionalContext with findings is still emitted.
+
 ### CROSS_AUDIT_TRIGGER
 
 | Value | Behavior | Best For |
@@ -150,6 +159,7 @@ These are not typically set by users but are available for testing and advanced 
 | `CROSS_AUDIT_COUNTER_FILE` | Override wave counter file path | `.claude/.state/cross-audit-counter-<user>` |
 | `CROSS_AUDIT_FIRE` | Force immediate audit in wave mode | unset |
 | `CROSS_AUDIT_SKIP_SUBAGENT` | Skip audit in worktree sub-agents (parallel execution) | `true` |
+| `CROSS_AUDIT_ENFORCE_BLOCK` | Exit non-zero on BLOCK verdict (mechanical enforcement) | `false` |
 
 ---
 
@@ -157,7 +167,7 @@ These are not typically set by users but are available for testing and advanced 
 
 ### Per-Edit (default)
 
-Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at ~24k chars). Reviews for bugs, security issues, AC coverage, and coding rule violations.
+Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at ~24k chars). Reviews for bugs, security issues, AC coverage, coding rule violations, and **integration risk** (could this change conflict with other active items?).
 
 Subject to wave/item trigger mode and `MIN_CHANGES` threshold.
 
@@ -165,12 +175,19 @@ Subject to wave/item trigger mode and `MIN_CHANGES` threshold.
 
 Fires automatically when `TRACKING*.md` is edited — this happens when the coordinator updates item statuses after merging a parallel wave. Sends the last commit diff (`git diff HEAD~1`, falling back to uncommitted changes), excluding TRACKING.md itself and config files.
 
-Reviews for:
+Reviews two axes (dual-axis):
+
+**A. Integration (primary):**
 - Integration conflicts between merged sub-agent work
 - API contract mismatches (producer/consumer interfaces)
 - Shared state conflicts and race conditions
 - Import/dependency coherence
 - Naming consistency across merged items
+
+**B. Code quality (secondary — catches what per-edit may have missed):**
+- Bugs, edge cases, missed error handling
+- Security issues
+- Critical axis violations
 
 Bypasses wave counting — always fires immediately. Subject to `MIN_CHANGES` threshold (skips trivial merges).
 
@@ -182,6 +199,7 @@ Fires automatically when `S*_CLOSE_GATE.md` is written. Sends the full sprint di
 - Architectural coherence
 - Missing integration points
 - Security issues across the full change set
+- Failure mode coverage — were predicted risks (from Entry Gate) actually mitigated?
 
 Bypasses wave counting — always fires immediately.
 
@@ -219,6 +237,8 @@ Bypasses wave counting — always fires immediately.
 ### Entry Gate Mode
 - The gate report content (~32k chars max)
 - Critical axis from CLAUDE.md
+- Active items from TRACKING.md (items with status `in_progress` or `fixed`)
+- In `standard`/`full`: CODING_GUARDRAILS.md (AC quality evaluated against project standards)
 
 ### Skipped Files (never trigger the hook)
 
@@ -245,6 +265,7 @@ The external audit result arrives as `additionalContext` with a verdict:
 | **PASS** | Mentions it as additional confidence signal |
 | **WARN** | Presents warnings alongside own assessment; user decides |
 | **BLOCK** | Presents blocking issues; does not proceed until user reviews |
+| **BLOCK** (enforced) | When `CROSS_AUDIT_ENFORCE_BLOCK=true`: hook exits non-zero, Claude Code treats as hook failure |
 
 ### Conflicting Opinions
 
@@ -281,7 +302,7 @@ This helps you monitor API costs. To reduce costs:
 | Empty response | Skipped. Warning in stderr |
 | Response not valid JSON | Displayed as-is. Claude interprets best-effort |
 
-The cross-audit is **never blocking** at the infrastructure level. Only the *findings* can be blocking (via BLOCK verdict that Claude respects).
+By default, the cross-audit is non-blocking at the infrastructure level. When `CROSS_AUDIT_ENFORCE_BLOCK=true`, BLOCK verdicts cause the hook to exit non-zero, mechanically blocking the edit.
 
 ---
 
@@ -368,6 +389,86 @@ To use a specific Claude model:
 ```bash
 export CROSS_AUDIT_MODEL="claude-haiku-4-5-20251001"  # faster, cheaper
 ```
+
+---
+
+## Audit Log & Health Check
+
+Every hook invocation (skip, success, or error) is logged to `.claude/.state/cross-audit-log.jsonl` in JSONL format:
+
+```json
+{"ts":"2026-03-12T10:30:00Z","status":"success","reason":"","verdict":"PASS","file":"src/app.ts","mode":"per-edit"}
+{"ts":"2026-03-12T10:31:00Z","status":"skip","reason":"wave-below-threshold","verdict":"","file":"src/utils.ts","mode":"per-edit"}
+{"ts":"2026-03-12T10:35:00Z","status":"error","reason":"api-network-error","verdict":"","file":"src/api.ts","mode":"per-edit"}
+```
+
+**Log rotation:** When the log exceeds 1MB, it's automatically truncated to the last 500 entries.
+
+### Health Check
+
+Run the health check script to verify the audit system is working:
+
+```bash
+bash .claude/hooks/audit-health-check.sh           # Default: 1 hour staleness threshold
+bash .claude/hooks/audit-health-check.sh 1800       # Custom: 30 minutes
+```
+
+Reports: last successful audit, status breakdown, recent errors, and overall health verdict (exit 0 = healthy, exit 1 = unhealthy).
+
+---
+
+## Pre-Merge Audit
+
+Audit sub-agent work **before** merging it into the sprint branch. This catches issues proactively instead of reactively (the default wave-review fires after merge).
+
+```bash
+bash .claude/hooks/pre-merge-audit.sh /tmp/worktree-agent-1     # Worktree path
+bash .claude/hooks/pre-merge-audit.sh sprint-1-agent-branch      # Branch name
+```
+
+- Generates a diff between HEAD and the sub-agent's changes
+- Sends to the audit LLM with a pre-merge focused prompt
+- Outputs structured JSON to stdout (for coordinator consumption)
+- Exit 0 = PASS/WARN (safe to merge), exit 1 = BLOCK (do not merge)
+- Uses the same API configuration as the main hook
+
+### Integration with Coordinator Workflow
+
+Add between steps 1 and 2 of the coordinator's between-wave review (see PARALLEL-EXECUTION.md):
+
+```
+1. Review all agent outputs (watchdog)
+1b. Pre-merge audit: bash .claude/hooks/pre-merge-audit.sh <worktree>
+    BLOCK → do not merge. Fix or re-run agent.
+    PASS/WARN → proceed with merge.
+2. Resolve file conflicts...
+```
+
+---
+
+## Evidence Verification
+
+Verify sub-agent D.7 AC exit check evidence by checking `file:line` references:
+
+```bash
+bash .claude/hooks/verify-evidence.sh < agent-report.txt
+bash .claude/hooks/verify-evidence.sh report.txt
+```
+
+- Extracts `file:line` references from the report
+- Checks each file exists and line number is in range
+- Shows context snippets around valid references
+- Exit 0 = all evidence valid, exit 1 = invalid evidence found
+
+### What It Checks
+
+| Check | Result |
+|-------|--------|
+| File exists | VALID / INVALID (file not found) |
+| Line in range | VALID / INVALID (line N out of range, file has M lines) |
+| Context snippet | Displayed for coordinator to visually confirm relevance |
+
+**Note:** Semantic verification (does the code at that line actually satisfy the AC?) is left to the coordinator's judgment. The script only validates structural correctness of the references.
 
 ---
 

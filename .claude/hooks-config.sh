@@ -132,6 +132,11 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 # Master switch only — all other CROSS_AUDIT_* settings go in .env
 ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
 
+# Mechanical enforcement: exit non-zero on BLOCK verdict (makes Claude reject the edit)
+# Requires ENABLE_CROSS_AUDIT=true. Default: false (advisory only).
+# Set to true for strict enforcement where BLOCK verdicts halt work.
+# CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-false}"
+
 # ── Per-developer local overrides (git-ignored) ──
 # Sourced here so local settings override mode defaults above,
 # but BEFORE strict enforcement (strict cannot be overridden locally).

@@ -377,18 +377,26 @@ obvious breakage early (cheap to fix now) rather than letting it propagate to
 the next wave (expensive to fix at Close Gate).
 
 1. Review all agent outputs (watchdog)
-2. Resolve any file conflicts discovered (expect merge overhead: 30-45% of wave time
+2. **Evidence verification** — for each agent's D.7 AC exit check, verify file:line
+   references: `bash .claude/hooks/verify-evidence.sh < agent-report.txt`
+   Invalid references (file missing, line out of range) → send agent back to fix.
+   Valid references with unrelated code → coordinator flags, user decides.
+3. **Pre-merge audit (if cross-audit enabled)** — for each sub-agent's work, run:
+   `bash .claude/hooks/pre-merge-audit.sh <worktree-path>`
+   If BLOCK → do not merge that agent's work. Fix or re-run the agent.
+   If PASS/WARN → proceed with merge.
+4. Resolve any file conflicts discovered (expect merge overhead: 30-45% of wave time
    when file overlap exists — budget for this)
-3. **API signature audit** — for each agent that changed a public API: did the agent
+5. **API signature audit** — for each agent that changed a public API: did the agent
    update all callers? Grep for the old signature across the full codebase (including
    test files). Missing updates → fix before proceeding.
-4. Run full test suite (catch cross-item regressions)
-5. **Quick sanity scan** — skim diffs for obvious issues: broken imports, removed
+6. Run full test suite (catch cross-item regressions)
+7. **Quick sanity scan** — skim diffs for obvious issues: broken imports, removed
    code that other items depend on, test files that reference deleted functions.
    This is NOT a deep review — that's the cross-cut agent's job at Close Gate.
-6. Update TRACKING.md with all items from this wave
-7. **Commit** — mandatory before launching next wave (see §Inter-Wave Commit)
-8. Launch next wave with updated context (agents fork from committed state)
+8. Update TRACKING.md with all items from this wave
+9. **Commit** — mandatory before launching next wave (see §Inter-Wave Commit)
+10. Launch next wave with updated context (agents fork from committed state)
 
 **Two-layer review model:**
 - **Here (between waves):** coordinator catches surface-level breakage fast. If
@@ -405,6 +413,8 @@ reviews start doing the same thing, one should be removed.
 
 | Layer | When | What it checks | Depth | Who |
 |-------|------|----------------|-------|-----|
+| Evidence verification | Between waves (step 2) | Sub-agent file:line refs exist and are in range | Automated, structural | `verify-evidence.sh` |
+| Pre-merge audit | Between waves (step 3) | Sub-agent code quality, guardrails, failure modes before merge | Medium, per-agent scope | External LLM (`pre-merge-audit.sh`) |
 | Coordinator between-wave | After each impl wave | Tests pass, imports resolve, no obvious breakage | Surface — seconds, not minutes | Coordinator |
 | Per-item audit | Close Gate Wave 2 | Failure modes handled? Fitness questions pass? | Deep, per-item scope | Sub-agent (1-2 items each) |
 | Cross-cut review | Close Gate Wave 2 | API consistency, type alignment, style, inter-item interactions | Deep, cross-item scope | Sub-agent (full sprint diff) |
@@ -706,7 +716,8 @@ IMPLEMENTATION (on sprint-N-impl branch)
   Wave N ─┬─ Agent/item: full A-E loop (max 2-3 items/agent)
            ├─ Agent/item: ...
            └─ (optional: dedicated test agent)
-  Coordinator ──── merge, resolve conflicts, test suite, TRACKING.md update
+  Coordinator ──── verify-evidence → pre-merge-audit → merge, resolve conflicts,
+                   test suite, TRACKING.md update
                    COMMIT to sprint branch (mandatory before next wave)
   Wave N+1 ──── PRE-LAUNCH CHECKLIST → launch (forks from committed state)
 
