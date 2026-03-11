@@ -7,7 +7,7 @@ project size, team structure, and risk tolerance.
 
 | Aspect | Lite | Standard | Strict |
 |--------|------|----------|--------|
-| **Target** | Solo dev, small projects | Default for most projects | Teams, critical systems |
+| **Target** | Solo dev, small projects | Default for most projects | High-risk projects (any team size) |
 | **Entry Gate** | Abbreviated only | Full or abbreviated (AI recommends) | Full always (abbreviated disabled) |
 | **Close Gate** | sprint-audit.sh + verdict | Full 6-phase | Full 6-phase + peer sign-off |
 | **Sprint Close** | Steps 1-3, 14 (checkmarks, status, checkpoint, handoff) | Full (steps 1-15) | Full + team review |
@@ -77,7 +77,7 @@ WORKFLOW_MODE="standard"
 
 ## Strict Mode
 
-Best for: teams, production systems, regulated domains (finance, medical, security-critical).
+Best for: high-risk projects regardless of team size — production systems, regulated domains (finance, medical, security-critical).
 
 **Parallel execution:** Recommended when agent supports it. Full gate with per-item
 failure mode analysis and fitness review benefits most from parallel waves (~2-3x tokens,
@@ -104,8 +104,9 @@ For non-Claude agents: tell the agent at session start:
 **Additional strict mode conventions (team):**
 - Atomic commits required (not monolithic)
 - Entry Gate report reviewed by second team member before approval
-- Close Gate verdict requires team lead sign-off
+- Close Gate verdict requires team lead sign-off (or peer sign-off for Pair topology)
 - Sprint Close retrospective presented to team
+- See [TEAM-GUIDE.md](TEAM-GUIDE.md) for per-person TRACKING files, branch naming, and dependency rules
 
 ## Switching Modes
 
@@ -134,7 +135,28 @@ Solo developer, < 5 files, low risk?
   YES → Lite
   NO  ↓
 
-Team project or production system?
-  YES → Strict
-  NO  → Standard
+Team project?
+  YES ↓                          NO ↓
+  Any high-risk factor?          Any high-risk factor?
+  (see list below)               (see list below)
+  YES → Strict                   YES → Strict
+  NO  → Standard                 NO  → Standard
+
+High-risk factors:
+  • Regulated domain (finance, medical, legal, security-critical)
+  • Production system with real users
+  • Deployment frequency > 1x/week
+  • Data loss or security breach would cause significant harm
 ```
+
+**Risk assessment guidance:**
+- **Low risk:** Internal tools, personal projects, learning exercises, pre-launch products
+  with no real user data. Lite is sufficient.
+- **Medium risk:** Products with users but non-critical domain, open-source libraries,
+  internal services with fallback. Standard provides adequate safety nets.
+- **High risk:** Financial transactions, medical/health data, authentication/authorization,
+  infrastructure, multi-tenant SaaS, anything with regulatory compliance requirements.
+  Strict is strongly recommended — the overhead pays for itself in prevented incidents.
+
+When in doubt, start with Standard. Upgrade to Strict when a high-risk factor emerges
+(first production incident, regulatory requirement, real user data at stake).

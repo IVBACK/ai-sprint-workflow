@@ -4,6 +4,12 @@ A project-agnostic sprint workflow designed for human + AI agent collaboration.
 Copy this file into any project and follow the setup instructions.
 The AI agent reads this document and bootstraps the project structure automatically.
 
+> **Team convention:** All references to `TRACKING.md` throughout this document
+> also apply to per-person tracking files (`TRACKING-[name].md`) when using
+> team topology. Read your own tracking file unless stated otherwise.
+> Similarly, `sprint-N-impl` branch references become `sprint-N-name-impl` in team mode.
+> See [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) for details.
+
 ---
 
 ## Quick Start — AI Agent Bootstrap
@@ -23,7 +29,7 @@ If a file does not exist, create it per step 3 — no confirmation needed.
 | File | If it already exists |
 |------|---------------------|
 | `CLAUDE.md` | **Never overwrite.** Read it first. Warn if apparent secrets found (API keys, IPs) and confirm it is gitignored. Append only sprint sections not already present. Preserve all existing content. |
-| `TRACKING.md` | Skip creation. Ask user before touching. |
+| `TRACKING.md` | Skip creation. Ask user before touching. If Q1 = team and only `TRACKING.md` exists (solo → team migration): ask user how to split existing items among team members, then create per-person files and migrate items accordingly. Keep original `TRACKING.md` as backup until first sprint completes. |
 | `Docs/Planning/Roadmap.md` | Skip creation. Ask user before touching. |
 | `Docs/CODING_GUARDRAILS.md` | Skip creation. Ask user before touching. |
 | `Tools/sprint-audit.sh` | Skip creation. Ask user before replacing. |
@@ -45,25 +51,32 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    *(Empty project? Skip to step 2 — Discovery Questions will cover language/framework.)*
    *(Large project (100+ files)? Limit scan to root configs, top-level directories, and up to 50 source files. Infer stack from config files (`package.json`, `Cargo.toml`, `pom.xml`, etc.) — do not read every file.)*
 2. Ask the Discovery Questions below (skip any already answered by project files)
-3. Create the file structure listed in §Setup below (skip files that already exist)
+3. Create the file structure listed in §Setup below (skip files that already exist).
+   If Q1 = team: see [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) §Bootstrap adjustment for per-person
+   TRACKING files and branch naming. Solo: create a single `TRACKING.md`.
 4. If Roadmap.md is empty or has no sprint items, run Initial Planning:
    *(Design-first alternative: if the user ran a `ROADMAP-DESIGN-PROMPT.md` session beforehand,
    Roadmap.md already exists — skip this step entirely and proceed to step 5.)*
    **Exception — existing project (migration):** If the project has existing source code but no
    Roadmap.md, it was not using this workflow before. The workflow starts now — do not reconstruct
    past work. Whatever the user is currently working on becomes **Sprint 1**.
-   - Ask: "What are you working on right now?" → Sprint 1 Must/Should/Could items
-   - Ask: "What's next after that?" → one-line sketches for Sprint 2+
-   - Assign CORE-### IDs. If TRACKING.md already exists with CORE-### IDs, continue from the
-     highest existing ID. Never reuse an existing ID.
-   - Roadmap.md covers Sprint 1 forward only — never backward.
    a. Ask user to describe project goal
-   b. Propose high-level phases (titles only)
-   c. Detail Sprint 1 only: Must/Should/Could items with CORE-### IDs
+   b. Ask: "What are you working on right now?" and "What's next after that?"
+   c. Propose high-level phases (titles only)
+   d. Detail Sprint 1 only: Must/Should/Could items with CORE-### IDs
       (later sprints stay as one-line sketches — they will be detailed when reached)
-   d. Identify immutable contracts → feed into CLAUDE.md §Immutable Contracts
-   e. Present plan to user for approval before proceeding
-5. Populate CLAUDE.md with project-specific context discovered during scan + answers
+      Team: mark items with assignee (`@name`).
+   e. Assign CORE-### IDs. If TRACKING files already exist with CORE-### IDs, continue from the
+      highest existing ID. Never reuse an existing ID.
+      Roadmap.md covers Sprint 1 forward only — never backward.
+   f. Identify immutable contracts → feed into CLAUDE.md §Immutable Contracts
+   g. Present plan to user for approval before proceeding
+   h. After approval: populate TRACKING file(s) with Sprint 1 items (status: `open`).
+      Team: populate each person's TRACKING file with their assigned items only.
+5. Populate CLAUDE.md with project-specific context discovered during scan + answers.
+   §Project Summary `Team:` field: if Q1 = solo → `Team: solo`. If Q1 = team → `Team: [names]`
+   (e.g., `Team: Dev-A, Dev-B`). The AI will ask which team member it's working with at each
+   session start (see §Quick Start).
    *(Design-first path: if step 4 was skipped, read Roadmap.md §Non-Negotiable Contracts → populate CLAUDE.md §Immutable Contracts.)*
 6. Populate CODING_GUARDRAILS.md — project-aware guardrail seeding:
    a. Scan existing source code for concrete risk patterns in three layers:
@@ -122,7 +135,7 @@ existing project files (e.g., `package.json` reveals language + test framework).
 | # | Question | Why it matters | Default if unanswered |
 |---|----------|---------------|----------------------|
 | 0 | Language and framework? ¹ | Audit script, guardrails, test conventions | Auto-detect; empty project → ask explicitly ¹ |
-| 1 | Solo developer or team? | Commit policy, review gate | Solo |
+| 1 | Solo developer or team? If team: how many people and their names? | Commit policy, review gate, TRACKING file naming | Solo |
 | 2 | Sprint scope size? (small: 3-5 / medium: 5-8 / large: 8-12) — an item = one deliverable behavior (a feature, a fix, a refactor), not a subtask ² | Entry gate scope threshold | Medium (5-8) |
 | 3 | Existing roadmap or task list? (No / Yes / Scattered) ³ | Avoid duplicate planning docs | No → create Roadmap.md; Yes → validate IDs only ³ |
 | 4 | Performance-sensitive? (game, real-time, HFT) | Profiling rules, hot path checks | No |
@@ -163,6 +176,13 @@ existing project files (e.g., `package.json` reveals language + test framework).
 > Record result as `VCS: git | svn | none` in CLAUDE.md §Project Summary.
 > If VCS=none: skip Q11 (commit style); Phase 1b uses Entry Gate notes
 > instead of `git diff`; TRACKING.md recovery falls back to user verification.
+>
+> **VCS scope note:** All branch, commit, merge, and tag commands in this workflow are
+> written for **git**. SVN and Hg are detected so VCS presence is recorded, but
+> the workflow does not provide equivalent command sequences for them. SVN/Hg users
+> should adapt the git commands to their VCS semantics (e.g., SVN branches as directory
+> copies, Hg bookmarks for branch equivalents). Community contributions for SVN/Hg
+> command mappings are welcome — see CONTRIBUTING.md.
 
 **Workflow Preferences:**
 
@@ -194,12 +214,15 @@ Do NOT merge them — separation enables focused reads and smaller context loads
 ```
 project-root/
 ├── CLAUDE.md                          # AI session context (auto-loaded)
-├── TRACKING.md                        # Single source of truth for status
+├── TRACKING.md                        # Single source of truth for status (solo)
+├── TRACKING-[name].md                 # Per-person tracking (team — see Docs/TEAM-GUIDE.md)
 ├── Docs/
 │   ├── CODING_GUARDRAILS.md           # Engineering rules (never-again list)
 │   ├── SPRINT_WORKFLOW.md             # This file (or project-specific copy)
 │   ├── LESSONS_INDEX.md               # Bug → rule traceability
 │   ├── PARALLEL-EXECUTION.md         # Parallel wave patterns (optional, user-triggered)
+│   ├── TEAM-GUIDE.md                 # Team topologies, dependencies, PR/CI (team only)
+│   ├── UNITY-GUIDE.md                # Unity-specific git/LFS/scene rules (optional)
 │   ├── SPRINT-INDEX.md               # Topic-first cross-sprint retrieval index
 │   ├── Planning/
 │   │   ├── Roadmap.md                 # Sprint plan with Must/Should/Could
@@ -241,12 +264,15 @@ This file provides quick context for every AI session.
 
 ## Document Contract
 
-- `TRACKING.md`: single source of truth for item status (ID-###, open/in_progress/fixed/verified; special: deferred, blocked).
+- `TRACKING.md` (or `TRACKING-[name].md` if team — see [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md)): single source of truth for item status (ID-###, open/in_progress/fixed/verified; special: deferred, blocked).
 - `Docs/Planning/Roadmap.md`: sprint plan (Must/Should/Could per sprint).
 - `Docs/CODING_GUARDRAILS.md`: engineering rules (check before writing code).
 - `Docs/SPRINT_WORKFLOW.md`: sprint lifecycle (Entry Gate, Close Gate, Sprint Close) — read at sprint boundaries.
 - `Docs/LESSONS_INDEX.md`: RuleID → root cause → target file mapping.
 - `Docs/SPRINT-INDEX.md`: cross-sprint topic-first lookup (read at Entry Gate step 9a, updated at Sprint Close step 7h).
+- `Docs/PARALLEL-EXECUTION.md`: parallel wave execution patterns (optional — loaded when user triggers parallel mode at Entry Gate step 11).
+- `Docs/TEAM-GUIDE.md`: team topologies, cross-sprint dependencies, PR integration, CI/CD (team only — skip if solo).
+- `Docs/UNITY-GUIDE.md`: Unity-specific git, LFS, scene ownership rules (Unity projects only — skip otherwise).
 - `CLAUDE.md` (this file): operational rules + checkpoint summary.
 
 Rule: Bug and sprint status is NOT duplicated here; only short references.
@@ -256,6 +282,7 @@ Rule: Bug and sprint status is NOT duplicated here; only short references.
 [One paragraph: language, framework, architecture, target platform, key goals]
 VCS: [git | svn | none]
 Critical Axis: [security | performance | reliability | correctness | other: ...]
+Team: [solo | names — e.g., "Dev-A, Dev-B"]
 
 ## Immutable Contracts
 
@@ -267,7 +294,7 @@ Critical Axis: [security | performance | reliability | correctness | other: ...]
 
 ## Operational Rules
 
-- Update `TRACKING.md` after every significant fix/decision.
+- Update `TRACKING.md` (or your `TRACKING-[name].md` if team) after every significant fix/decision.
 - `fixed → verified` transition requires evidence (test output or pass confirmation). Full flow: open → in_progress → fixed → verified.
 - Check `Docs/CODING_GUARDRAILS.md` before writing new code.
 - Sprint `Must` items must be complete before sprint is "done".
@@ -281,7 +308,7 @@ Critical Axis: [security | performance | reliability | correctness | other: ...]
   AI MUST explicitly recommend starting a new session. AI cannot assess its own context usage —
   this recommendation is mandatory, not optional. User decides whether to follow it.
 - All code, comments in [English/language].
-- Commit policy (if VCS in use): atomic commits preferred (one logical change per commit); commit messages in [English/language]. If VCS=none: skip.
+- Commit policy (if VCS in use): sprint branch (`sprint-N-impl` solo / `sprint-N-name-impl` team), commit after each item's D.7, squash merge to main after Close Gate (solo: local merge, team: PR-based merge — see [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) §Pull Request Integration). Commit style: [conventional/free-form]. Commit messages in [English/language]. If VCS=none: skip.
 
 ## Last Checkpoint
 
@@ -293,8 +320,10 @@ Critical Axis: [security | performance | reliability | correctness | other: ...]
 ## Quick Start
 
 New session sequence:
-1. `TRACKING.md` → Current Focus + Sprint Board + Blockers
-2. `Docs/Planning/Roadmap.md` → active sprint section
+1. If `Team:` lists multiple names → ask: "Which team member are you?" to determine which
+   `TRACKING-[name].md` to read. Solo → read `TRACKING.md` directly.
+2. Read your TRACKING file → Current Focus + Sprint Board + Blockers
+3. `Docs/Planning/Roadmap.md` → active sprint section
 → Then tell the AI: **"Continue sprint N"** or **"Resume"** — AI runs Session Start Protocol automatically.
 
 Sprint start (new sprint transition):
@@ -329,6 +358,9 @@ Status values: `open` → `in_progress` → `fixed` → `verified`
 Special statuses:
 - `deferred`: item intentionally skipped (maps to roadmap `[~]`). Requires reason + target sprint.
 - `blocked`: item cannot proceed due to external dependency. Requires linked blocker in §Open Risks.
+  Format: `blocked by [CORE-### | external description]`. Log block reason in Change Log:
+  `[date] CORE-###: blocked — depends on [CORE-### / description]. Expected resolution: [date/sprint].`
+  When unblocked: `[date] CORE-###: unblocked — [dependency resolved / reason].` Transition to `open`.
 Reverse transition: `verified` → `open` is allowed ONLY when a regression is discovered.
   Log reason in Change Log: "[date] CORE-###: reopened — regression found in [context]"
 
@@ -487,6 +519,13 @@ Review relevant sections BEFORE writing code.
 *(Bootstrap step 6 populates this file. Sections below are created per-project —
 not copied from a generic template. Each rule comes from scanning this specific codebase.)*
 
+**Format rules (keep file scannable — target ≤800 lines):**
+- Each rule: max 20 lines (title + one WRONG/CORRECT pair + root cause + scope + reference)
+- Root cause: one sentence. Full story lives in sprint archive, not here.
+- Code examples: one WRONG + one CORRECT per rule. Extra edge cases → inline comment, not extra blocks.
+- No design justification in guardrails. "Why we keep this despite over-engineering" → DESIGN.md.
+- Sprint Close step 7i checks file size and flags if >800 lines.
+
 ---
 
 ## 1. [Section Title — generated by bootstrap scan]
@@ -501,7 +540,7 @@ not copied from a generic template. Each rule comes from scanning this specific 
 [fix]
 ```
 
-- **Root cause:** [why this rule exists]
+- **Root cause:** [one sentence — why this rule exists]
 - **Scope:** [which files/modules in this project]
 - **Reference:** bootstrap scan / [sprint/bug ID]
 
@@ -653,7 +692,11 @@ If items exceed scope limit → apply §Scope Negotiation.
    b. Goal alignment? (does it serve core project goals?)
    c. Approach still valid? (has new info invalidated the method?)
    d. Metrics still appropriate? (measuring the right thing?)
-   If any fails → flag to user with evidence + options (keep/modify/defer/remove).
+   e. Rough impact scope? (which major areas/modules will this touch — ballpark, not file list)
+   f. Redundancy risk? (does framework/engine/previous sprint already provide this?)
+   If any of a-d fails → flag to user with evidence + options (keep/modify/defer/remove).
+   If e reveals unexpectedly wide blast radius → flag before proceeding.
+   If f reveals overlap → flag: "CORE-### may overlap with [existing]. Confirm scope or narrow to delta."
    User response mechanics:
    - keep → item unchanged, continue gate.
    - modify → update item description/scope/metrics in Roadmap, re-run steps 9a-9c for that item.
@@ -805,17 +848,189 @@ so Implementation Loop step A.5 knows research is already complete.
 > (inter-wave commits mandatory, merge to main after Close Gate) —
 > see [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md) §Implementation Loop. Do not load that document automatically.
 
+**Sprint branch (VCS=git only):**
+Before writing any code, create a sprint branch from the current main branch:
+```
+git tag sprint-N-start    # tag on main before branching
+git checkout -b sprint-N-impl
+```
+All implementation commits go to `sprint-N-impl` — main stays clean until Close Gate passes.
+This applies to both sequential and parallel execution. Benefits:
+- Sprint abort → delete branch, main untouched
+- Close Gate fail → fixes stay on branch, main never sees broken code
+- Clean history → squash merge gives main one summary commit per sprint
+
+**Commit timing:** commit after each item completes D.7 (AC exit check):
+```
+git commit -m "CORE-###: [one-line summary]"
+```
+This ensures each item is an atomic, revertable unit. If D.7 reveals an issue and the item
+needs rework, the commit has not happened yet. After D.7 passes → commit → next item.
+
+**Commit message format (if Q11 = conventional):**
+```
+type(scope): subject
+
+type:  feat | fix | refactor | test | docs | perf | chore
+scope: CORE-### or module name
+subject: imperative, lowercase, no period, max 72 chars
+
+Examples:
+  feat(CORE-045): add terrain LOD hysteresis
+  fix(CORE-112): correct depth comparison in ocean pass
+  refactor(CORE-080): extract grid mapping to shared include
+```
+If Q11 = free-form: no enforced format, but commit message must reference the CORE-ID.
+
+**Merge ceremony (after Close Gate verdict, before Sprint Close step 1):**
+
+Before merging, preserve per-item commit history for future regression analysis:
+```bash
+# Verify start tag exists (created during sprint branch creation)
+if ! git rev-parse sprint-N-start >/dev/null 2>&1; then
+  echo "WARNING: sprint-N-start tag missing. Using merge-base as fallback."
+  git tag sprint-N-start "$(git merge-base main sprint-N-impl)"
+fi
+# Save per-item commit log before branch is deleted
+git log --oneline sprint-N-start..sprint-N-impl > /tmp/sprint-N-commits.txt
+```
+Include this log in the squash merge commit message (see below).
+
+Solo — local squash merge:
+```bash
+git checkout main
+git merge --squash sprint-N-impl
+# Include per-item commit history in merge message for regression traceability
+git commit -m "$(cat <<EOF
+Sprint N: [summary of sprint goal and completed items]
+
+Items merged:
+$(git log --oneline sprint-N-start..sprint-N-impl)
+EOF
+)"
+git tag sprint-N-close
+git branch -D sprint-N-impl   # -D required: squash merge is not tracked as a real merge, so -d refuses
+```
+Team — use PR-based flow instead (see [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) §Pull Request Integration).
+Sprint Close runs on main with all sprint code merged.
+If VCS=none: skip all branch/commit/merge steps — traceability via TRACKING.md only.
+
+**Why preserve per-item commits in the merge message?**
+Squash merge creates a clean main history (one commit per sprint) but destroys per-item
+granularity. When a regression is found later, `git log` on main shows only "Sprint 7"
+but not which item changed the affected file. Including the item commit list in the merge
+message lets `git show <merge-commit>` reveal the full per-item breakdown without keeping
+the branch alive.
+
+**Push policy (VCS=git, remote configured):**
+- **Solo:** Push sprint branch to remote as backup after first commit (`git push -u origin sprint-N-impl`).
+  Subsequent pushes: after every 2-3 item commits or at session end — whichever comes first.
+  Also push before context-heavy transitions (Entry Gate → implementation, implementation → Close Gate).
+  No force push — if history diverges, investigate before resolving.
+- **Team:** Push sprint branch to remote immediately after creation so teammates can see work in progress.
+  Push after every item commit (post-D.7). Force push is **never allowed** on sprint branches
+  that others may have pulled — rebase locally before pushing, or coordinate with team.
+- **Main branch protection:** Never push directly to main. All code reaches main via squash merge
+  after Close Gate. If remote supports branch protection rules, enable them.
+- **Tag push:** Push all sprint tags to remote (both start and close) so regression analysis
+  works from any machine:
+  ```bash
+  git push origin sprint-N-start sprint-N-close
+  ```
+- **Post-merge push:** After merge ceremony, push main and tags together:
+  ```bash
+  git push origin main
+  git push origin sprint-N-start sprint-N-close
+  ```
+- **Branch cleanup (remote):** Delete remote sprint branch after successful merge:
+  ```bash
+  git push origin --delete sprint-N-impl
+  ```
+- **Tag cleanup:** Tags accumulate over time (~3 per sprint). To keep the tag list manageable:
+  - Keep `sprint-N-close` tags permanently (needed for regression analysis).
+  - `sprint-N-start` tags can be deleted after 10+ sprints since their info is in the merge message:
+    ```bash
+    git tag -d sprint-1-start sprint-2-start  # local
+    git push origin --delete sprint-1-start sprint-2-start  # remote
+    ```
+  - `sprint-N-abort` and `sprint-N-pre-cherry-pick` tags: delete after the next successful sprint closes.
+  - Never delete tags for the last 5 sprints — they may be needed for active regression analysis.
+
+**Merge conflict resolution:**
+- **Squash merge conflict (sprint branch → main):** If `git merge --squash` fails:
+  1. Do NOT force or discard changes. Inspect conflicts file by file.
+  2. Conflicts likely mean main was modified outside the sprint (hotfix, parallel sprint).
+  3. Resolve conflicts preserving both sets of changes. Run full test suite after resolution.
+  4. If resolution is non-trivial, log in TRACKING.md Change Log:
+     `[date] Merge conflict resolved: sprint-N-impl → main. Files: [list]. Cause: [reason].`
+  5. Re-run sprint-audit.sh after conflict resolution to catch regressions.
+- **Team — concurrent sprints:** If multiple sprint branches target main:
+  1. Merge in completion order (first to pass Close Gate merges first).
+  2. Later sprints rebase onto updated main before their merge ceremony.
+     **⚠ This is a destructive operation (rewrite + force-push). Before proceeding:**
+     - Confirm with the other team member that they have no unpushed work on this branch.
+     - Verify no open PRs reference the old commit hashes (they will become invalid).
+     - Create a local backup tag: `git tag sprint-M-pre-rebase sprint-M-impl`
+     ```bash
+     git checkout main
+     git pull origin main          # get the first sprint's merge commit
+     git checkout sprint-M-impl
+     git rebase main
+     # If rebase succeeds — verify before force-pushing:
+     git log --oneline sprint-M-impl   # sanity check: commits look correct?
+     git diff main...sprint-M-impl --stat  # sanity check: changed files match expectations?
+     # Update start tag to new base (old tag points to pre-rebase commit)
+     git tag -f sprint-M-start main
+     # Force-push rebased branch + updated tag (rebase rewrites history, regular push fails)
+     git push --force-with-lease origin sprint-M-impl
+     git push origin -f sprint-M-start
+     # If something went wrong — restore from backup:
+     #   git reset --hard sprint-M-pre-rebase
+     #   git push --force-with-lease origin sprint-M-impl
+     # Clean up backup tag after successful merge:
+     git tag -d sprint-M-pre-rebase
+     ```
+     The tag update is critical: after rebase, `sprint-M-start` must point to the
+     current main tip so that `git log sprint-M-start..sprint-M-impl` accurately
+     reflects only the rebased sprint's commits.
+  3. If rebase conflicts arise, resolve and re-run D.7 verification for affected items.
+- **Parallel sub-agents (same sprint branch):** Inter-wave commits are sequential by design
+  (wave N completes before wave N+1 starts). No merge conflicts within a sprint's parallel execution.
+
 For each Must item (in dependency order from Entry Gate step 11):
 
 **A. Pre-code check**
 - Mark item `in_progress` in TRACKING.md
 - Read the GUARDRAILS sections identified in Entry Gate Phase 1 step 4 (relevant to this task type)
-- Impact analysis (3 questions — answer before writing any code):
+- Observable evidence gate (bug/quality/fix items only):
+  Before writing any fix code, confirm the problem exists at runtime — not just in theory.
+  Accepted evidence: runtime visual (screenshot/video), profiler output, test failure output,
+  GPU/API readback data, user report, or reproducible error log.
+  Pure code analysis ("this could theoretically drift") is NOT sufficient evidence.
+  If evidence cannot be produced → narrow scope to "investigate & reproduce" first. Do not write
+  a fix for an unconfirmed problem. Log: "Evidence gate: CORE-### — [evidence type]: [summary]"
+  Skip when: item is a new feature (not a fix), or Entry Gate already documented the evidence.
+- Impact analysis (3+2 questions — answer before writing any code):
   1. Which files will this change touch? (list explicitly)
   2. Which existing behaviors could be affected? (side effects, shared state, callers)
   3. How will you verify nothing broke? (existing tests, new tests, manual check)
   If Q1 reveals >5 files or Q2 reveals cross-system effects not predicted at Entry Gate 9a:
   → flag to user before proceeding. Do not silently expand scope.
+  +2 depth questions (run after Q1-Q3, skip if item is trivial):
+  *Trivial* = meets ALL of: (a) touches ≤2 files, (b) no new state/parameters/API surface,
+  (c) no behavioral change to existing code (e.g., config value tweak, comment fix, doc update,
+  dependency version bump, renaming without logic change). If any condition fails → not trivial, run Q4-Q5.
+  4. Redundancy check — does the framework, engine built-in, or a previous sprint item
+     already provide this functionality? Search project code and dependencies before writing
+     new logic. If overlap found → skip (already solved) or narrow to delta (only the gap).
+  5. Lifecycle check — for every new parameter, state variable, or API method introduced:
+     a. Persistence parity: if the value is recorded, does store→load round-trip produce
+        the same result? (serialize/deserialize, save/replay, undo/redo)
+     b. Async safety: if state is reset or disposed, are in-flight callbacks/promises
+        guarded against accessing stale or destroyed references?
+     c. API convention: do sibling methods in the same class/module follow a shared pattern
+        (naming, flush/sync calls, error handling)? New method must follow the same pattern.
+     If any sub-check reveals a gap → fix before proceeding to B, not after.
 
 **A.5 Domain Research (conditional)**
 Trigger: item was flagged `research: done` at Entry Gate (findings already documented),
@@ -857,6 +1072,14 @@ test addition), or Entry Gate already specified the approach.
   immediately log it in TRACKING.md §Change Log:
   "Side fix: [system] — [what was wrong] — [what was changed] — not a sprint item."
   This ensures Sprint Close Step 7 can include it in the retrospective.
+
+**B.1 Fix parity check (after writing code)**
+When the change fixes a pattern (bug, anti-pattern, convention violation, missing guard):
+1. Re-run the Q1 search (grep/find) that identified the affected files.
+2. Verify every matching site received the same fix — not just the first match.
+3. If remaining matches exist → apply fix to all before proceeding to C.
+   Partial fix (one site fixed, others left) is a BLOCKER — item cannot pass Close Gate.
+Skip when: change is a new feature with no existing pattern to match, or Q1 found only one site.
 
 **C. Self-verify (5-point checklist)**
 Run before writing any tests:
@@ -1265,6 +1488,15 @@ Skip this phase for abbreviated-gate sprints (fitness metrics were not set at En
       **Topic naming consistency:** before creating a new topic heading, scan existing headings
       for synonyms (e.g. `auth` vs `authentication` vs `login`). Reuse the existing name.
       If genuinely distinct, create new. When in doubt, use the shorter, more general term.
+   i. **Guardrail hygiene** — check `Docs/CODING_GUARDRAILS.md` size:
+      If file exceeds 800 lines: flag to user "Guardrails file is [N] lines — consider pruning."
+      Pruning actions (user decides which, if any):
+      - Root cause descriptions → one sentence max (full story lives in sprint archive)
+      - Code examples → one WRONG + one CORRECT pair per rule (remove extras)
+      - Over-engineering notes / design justification → move to DESIGN.md or remove
+      - Anti-patterns duplicated between §Anti-Pattern Quick Reference and domain sections → deduplicate
+      Do not prune automatically — present the size and options, user decides.
+      Skip if file is ≤800 lines or project has no guardrails file.
 8. Failure Mode History maintenance:
    - If §Failure Mode History exceeds 30 rows: archive rows older than 5 sprints
      to Docs/Archive/failure-history-S1-S[N].md. Keep last 5 sprints in TRACKING.md.
@@ -1410,14 +1642,32 @@ When the user decides to abandon a sprint mid-way (wrong direction, requirements
 1. User requests abort (AI never initiates abort)
 2. Mark all non-verified items as `deferred` with reason: "sprint aborted — [reason]"
 3. Verified items keep their status (work is not lost)
-4. Skip Close Gate (no items to audit)
-5. Run abbreviated Sprint Close: steps 1-4 + step 6 + step 13 (checkmarks, TRACKING update,
+4. Sprint branch cleanup (VCS=git only):
+   - If verified items exist → cherry-pick their commits to main, then delete branch:
+     git checkout main
+     git tag sprint-N-pre-cherry-pick   # safety bookmark before cherry-picks
+     git cherry-pick <verified-item-commits>
+     # Post-cherry-pick verification: run test suite to catch broken cross-item dependencies
+     # If tests fail → revert to safety bookmark (exact, no counting):
+     #   git reset --hard sprint-N-pre-cherry-pick
+     #   git tag -d sprint-N-pre-cherry-pick
+     # Then investigate: retry selectively or defer all items to next sprint.
+     git tag sprint-N-abort
+     git branch -D sprint-N-impl
+   - If no verified items → delete branch directly:
+     git checkout main
+     git tag sprint-N-abort
+     git branch -D sprint-N-impl
+   - main stays clean — only verified work lands.
+   - Remote cleanup (if branch was pushed): `git push origin --delete sprint-N-impl`
+5. Skip Close Gate (no items to audit)
+6. Run abbreviated Sprint Close: steps 1-4 + step 6 + step 13 (checkmarks, TRACKING update,
    checkpoint, changelog archive, workflow integrity check, Entry Gate report cleanup).
    Skip steps 5, 7-12, 14, and 15 (no baselines, no FM retrospective, no archive maintenance
-   for an aborted sprint). Abort step 6 below replaces the Sprint Close step 15 done log.
-6. Log in TRACKING.md Change Log:
+   for an aborted sprint). Abort step 7 below replaces the Sprint Close step 15 done log.
+7. Log in TRACKING.md Change Log:
    "Sprint aborted: [date] — Reason: [why]. Verified: [list]. Deferred: [list]."
-7. Next sprint Entry Gate runs normally — deferred items are reviewed at step 3
+8. Next sprint Entry Gate runs normally — deferred items are reviewed at step 3
 ```
 
 Rule: abort ≠ failure. Verified work persists, unfinished work is deferred, not deleted.
@@ -1716,6 +1966,8 @@ Note secondary category in evidence column: "Primary: REGRESSION. Contributing f
    → git log --oneline <sprint-N-tag>..HEAD -- [affected files]
    → Did any commit after Sprint N modify the affected system?
    → If yes → candidate for REGRESSION. Identify the responsible commit.
+   → Squash merge? Run `git show <merge-commit>` to read the per-item commit list
+     embedded in the merge message. This reveals which CORE-### item changed the file.
 
 2. INTEGRATION_GAP check:
    → Trace the call chain from the game loop entry point to the system.
@@ -2207,7 +2459,9 @@ source "$HOOKS_DIR/../hooks-config.sh"
 [[ "$HOOK_VALIDATE_TRACKING" != "true" ]] && exit 0
 INPUT=$(cat)
 FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-[[ "$FILE" != *"TRACKING.md"* ]] && exit 0
+# Match TRACKING.md and TRACKING-[name].md (team per-person files)
+BASENAME=$(basename "$FILE")
+[[ "$BASENAME" != TRACKING*.md ]] && exit 0
 [[ ! -f "$FILE" ]] && exit 0
 ERRORS=()
 LEGAL="open|in_progress|fixed|verified|deferred|blocked"
@@ -2234,7 +2488,9 @@ source "$HOOKS_DIR/../hooks-config.sh"
 [[ "$HOOK_VALIDATE_ID_UNIQUENESS" != "true" ]] && exit 0
 INPUT=$(cat)
 FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-[[ "$FILE" != *"TRACKING.md"* ]] && exit 0
+# Match TRACKING.md and TRACKING-[name].md (team per-person files)
+BASENAME=$(basename "$FILE")
+[[ "$BASENAME" != TRACKING*.md ]] && exit 0
 [[ ! -f "$FILE" ]] && exit 0
 DUPES=$(grep -oE 'CORE-[0-9]+' "$FILE" | sort | uniq -d)
 if [[ -n "$DUPES" ]]; then
@@ -2254,15 +2510,24 @@ exit 0
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOKS_DIR/../hooks-config.sh"
 [[ "$HOOK_SESSION_START_PROTOCOL" != "true" ]] && exit 0
-TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
+# Find TRACKING file(s): solo = TRACKING.md, team = TRACKING-*.md
+TRACKING_FILES=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING*.md" 2>/dev/null | sort)
 CLAUDE_MD=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 1 -name "CLAUDE.md" 2>/dev/null | head -1)
-[[ -z "$TRACKING" && -z "$CLAUDE_MD" ]] && exit 0
-jq -n --arg t "$TRACKING" --arg c "$CLAUDE_MD" '{
+[[ -z "$TRACKING_FILES" && -z "$CLAUDE_MD" ]] && exit 0
+# Build tracking file list for context message
+TRACKING_LIST=$(echo "$TRACKING_FILES" | tr '\n' ', ' | sed 's/,$//')
+TRACKING_COUNT=$(echo "$TRACKING_FILES" | wc -l)
+if [[ "$TRACKING_COUNT" -gt 1 ]]; then
+  TRACKING_MSG="Team mode detected. TRACKING files: $TRACKING_LIST\nAsk: \"Which team member are you?\" to determine which file to read."
+else
+  TRACKING_MSG="Read TRACKING file ($TRACKING_LIST)"
+fi
+jq -n --arg t "$TRACKING_MSG" --arg c "$CLAUDE_MD" '{
   "additionalContext": (
     "=== SESSION START PROTOCOL (WORKFLOW.md) ===\n" +
     "Before doing anything else:\n" +
     (if $c != "" then "1. Read CLAUDE.md (\($c))\n" else "" end) +
-    (if $t != "" then "2. Read TRACKING.md (\($t))\n" else "" end) +
+    "2. \($t)\n" +
     "3. State current sprint and last known status before proceeding.\n" +
     "============================================"
   )
@@ -2415,7 +2680,8 @@ total=$((total + missing))
 # 11. Roadmap ↔ TRACKING.md sync
 echo ""
 echo "ROADMAP SYNC:"
-TRACKING_FILE="$ROOT/TRACKING.md"
+# Team: pass TRACKING_FILE as env var or arg; solo: defaults to TRACKING.md
+TRACKING_FILE="${TRACKING_FILE:-$ROOT/TRACKING.md}"
 ROADMAP_FILE="$ROOT/Docs/Planning/Roadmap.md"  # ← adjust path
 ID_PATTERN="CORE-[0-9]+"                        # ← adjust to your item ID format
 sync=0
@@ -2481,11 +2747,20 @@ if [[ -f "$TRACKING_FILE" ]] && [[ -f "$ROADMAP_FILE" ]]; then
   done < <(grep -E "$ID_PATTERN" "$TRACKING_FILE" 2>/dev/null | head -200 || true)
 
   # Items in Roadmap but not in TRACKING
+  # Team: check all TRACKING-*.md files to avoid false positive orphans
+  _all_tracking="$TRACKING_FILE"
+  for _tf in "$ROOT"/TRACKING-*.md; do
+    [[ -f "$_tf" ]] && _all_tracking="$_all_tracking $_tf"
+  done
   while IFS= read -r line; do
     item_id=$(echo "$line" | grep -oE "$ID_PATTERN" | head -1)
     [[ -z "$item_id" ]] && continue
-    if ! grep -q "$item_id" "$TRACKING_FILE" 2>/dev/null; then
-      echo "  ORPHAN $item_id: exists in Roadmap but not in TRACKING"
+    _found=false
+    for _tf in $_all_tracking; do
+      grep -q "$item_id" "$_tf" 2>/dev/null && _found=true && break
+    done
+    if ! $_found; then
+      echo "  ORPHAN $item_id: exists in Roadmap but not in any TRACKING file"
       orphans=$((orphans + 1))
     fi
   done < <(grep -E "$ID_PATTERN" "$ROADMAP_FILE" 2>/dev/null | head -200 || true)
@@ -2790,7 +3065,7 @@ Dismissed signal (user says NO):
 │   Read CLAUDE.md (always, it's the system prompt)       │
 │   Read TRACKING.md (once, at session start)             │
 │   Read Guardrails §Index → only relevant sections       │
-│   Run sprint-audit.sh → read ~40-line report             │
+│   Run sprint-audit.sh → read ~40-line report            │
 │   Read only flagged files for deep review               │
 │                                                         │
 │ DON'T:                                                  │
@@ -2798,7 +3073,7 @@ Dismissed signal (user says NO):
 │   Read every source file for mechanical checks          │
 │   Duplicate information across documents                │
 │   Store detailed tech notes in CLAUDE.md                │
-│   Load all of S<N>_ENTRY_GATE.md at once — read        │
+│   Load all of S<N>_ENTRY_GATE.md at once — read         │
 │   only the relevant item's section per task             │
 └─────────────────────────────────────────────────────────┘
 
@@ -2984,15 +3259,15 @@ Guardrails will naturally grow to 10-20 rules.
 
 ### Large Project (50+ files, multiple contributors)
 
-Add: strict atomic commits (no monolithic allowed), code review gate,
+Add: strict atomic commits (no monolithic allowed), code review gate on sprint branch before merge,
 CI integration for sprint-audit.sh and ci-guardrail-check.sh.
 Consider: separate guardrails per subsystem (linked from main index).
 
 ### Solo vs Team
 
-| Aspect | Solo | Team |
-|--------|------|------|
-| Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
-| Review | Self-verify + AI agent | Peer review + AI agent |
-| Entry Gate | Abbreviated (Phase 0 + 1 + 3) | Full (phases 0-3) |
-| Close Gate | Full (quality is non-negotiable) | Full + peer sign-off |
+The workflow defaults to **solo** (one developer + one AI agent). Team use is an optional
+adaptation layer — nothing in the core workflow changes, only coordination rules are added.
+
+> Full team guide: [Docs/TEAM-GUIDE.md](Docs/TEAM-GUIDE.md) — topologies (Pair, Small Team, Larger),
+> cross-sprint dependencies, file overlap detection, PR integration, and CI/CD setup.
+> Unity projects (solo or team): see [Docs/UNITY-GUIDE.md](Docs/UNITY-GUIDE.md).

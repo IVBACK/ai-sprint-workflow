@@ -57,6 +57,19 @@ extract_section() {
   sed -n "/${start}/,/${stop}/p" "$file" 2>/dev/null | sed '$d'
 }
 
+# Write section to a temp file and return the path.
+# Usage: section_file=$(extract_section_file FILE START STOP)
+# Caller must NOT delete — cleanup is automatic via _SECTION_TMPDIR.
+_SECTION_TMPDIR=$(mktemp -d)
+trap 'rm -rf "$_SECTION_TMPDIR"' EXIT
+extract_section_file() {
+  local file="$1" start="$2" stop="$3"
+  local tmpf
+  tmpf=$(mktemp "$_SECTION_TMPDIR/section_XXXXXX")
+  sed -n "/${start}/,/${stop}/p" "$file" 2>/dev/null | sed '$d' > "$tmpf"
+  echo "$tmpf"
+}
+
 # ── Pre-flight ──────────────────────────────────────────────
 echo "Validating workflow consistency..."
 preflight_ok=true
@@ -214,17 +227,18 @@ echo "  CATEGORY 2: Cross-File Reference Integrity"
 echo "══════════════════════════════════════════════════════"
 
 # 2.1 Entry Gate step references in README exist in WORKFLOW.md
-readme_kdd=$(extract_section "$DESIGN" "^## Key Design Decisions" "^## ")
-eg_section=$(extract_section "$WORKFLOW" "^## Entry Gate" "^---")
+# Use temp files for large sections to avoid nondeterministic pipe failures
+kdd_file=$(extract_section_file "$DESIGN" "^## Key Design Decisions" "^## ")
+eg_file=$(extract_section_file "$WORKFLOW" "^## Entry Gate" "^---")
 missing_eg_refs=""
-if [[ -n "$readme_kdd" ]] && [[ -n "$eg_section" ]]; then
+if [[ -s "$kdd_file" ]] && [[ -s "$eg_file" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-e]*}"
-    if ! echo "$eg_section" | grep -qE "^${step_num}\. |[[:space:]]${ref}[.):,[:space:]]"; then
+    if ! grep -qE "^${step_num}\. |[[:space:]]${ref}[.):,[:space:]]" "$eg_file"; then
       missing_eg_refs="$missing_eg_refs $ref"
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Entry Gate step [0-9]+[a-e]?' | grep -oE '[0-9]+[a-e]?' | sort -u)
+  done < <(grep -oE 'Entry Gate step [0-9]+[a-e]?' "$kdd_file" | grep -oE '[0-9]+[a-e]?' | sort -u)
 fi
 
 if [[ -z "$missing_eg_refs" ]]; then
@@ -234,26 +248,26 @@ else
 fi
 
 # 2.2 Close Gate Phase references in README exist in WORKFLOW.md
-cg_section=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
+cg_file=$(extract_section_file "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
 missing_cg_refs=""
-if [[ -n "$readme_kdd" ]] && [[ -n "$cg_section" ]]; then
+if [[ -s "$kdd_file" ]] && [[ -s "$cg_file" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     phase_num="${ref%%[a-b]*}"
     phase_letter="${ref#"$phase_num"}"
     if [[ -z "$phase_letter" ]]; then
       # Phase N — check for "Phase N" header
-      if ! echo "$cg_section" | grep -qE "Phase ${phase_num}"; then
+      if ! grep -qE "Phase ${phase_num}" "$cg_file"; then
         missing_cg_refs="$missing_cg_refs $ref"
       fi
     else
       # Phase Nx (e.g., 4b) — check for "Phase N" header AND "Nx." or "Nx)" sub-item
-      if ! echo "$cg_section" | grep -qE "Phase ${phase_num}" || \
-         ! echo "$cg_section" | grep -qE "${ref}[.):,[:space:]]"; then
+      if ! grep -qE "Phase ${phase_num}" "$cg_file" || \
+         ! grep -qE "${ref}[.):,[:space:]]" "$cg_file"; then
         missing_cg_refs="$missing_cg_refs $ref"
       fi
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Close Gate Phase [0-9]+[a-b]?' | grep -oE '[0-9]+[a-b]?' | sort -u)
+  done < <(grep -oE 'Close Gate Phase [0-9]+[a-b]?' "$kdd_file" | grep -oE '[0-9]+[a-b]?' | sort -u)
 fi
 
 if [[ -z "$missing_cg_refs" ]]; then
@@ -263,16 +277,16 @@ else
 fi
 
 # 2.3 Sprint Close step references in README exist in WORKFLOW.md
-sc_section=$(extract_section "$WORKFLOW" "^## Sprint Close" "^---")
+sc_file=$(extract_section_file "$WORKFLOW" "^## Sprint Close" "^---")
 missing_sc_refs=""
-if [[ -n "$readme_kdd" ]] && [[ -n "$sc_section" ]]; then
+if [[ -s "$kdd_file" ]] && [[ -s "$sc_file" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-g]*}"
-    if ! echo "$sc_section" | grep -qE "^${step_num}\. "; then
+    if ! grep -qE "^${step_num}\. " "$sc_file"; then
       missing_sc_refs="$missing_sc_refs $ref"
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Sprint Close step [0-9]+[a-g]?' | grep -oE '[0-9]+[a-g]?' | sort -u)
+  done < <(grep -oE 'Sprint Close step [0-9]+[a-g]?' "$kdd_file" | grep -oE '[0-9]+[a-g]?' | sort -u)
 fi
 
 if [[ -z "$missing_sc_refs" ]]; then
@@ -299,8 +313,8 @@ fi
 
 # 2.5 File structure tree parity (README vs WORKFLOW.md)
 # Extract only filenames from tree lines (├── or └── prefixed lines, before # comments)
-readme_tree_files=$(extract_section "$README" "^your-project" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>]+\.(md|sh)' | sort -u)
-template_tree_files=$(extract_section "$WORKFLOW" "^project-root" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>]+\.(md|sh)' | sort -u)
+readme_tree_files=$(extract_section "$README" "^your-project" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>-]+\.(md|sh)' | sort -u)
+template_tree_files=$(extract_section "$WORKFLOW" "^project-root" "^\`\`\`" | grep -E '[├└│]' | sed 's/#.*//' | grep -oE '[A-Za-z_<>-]+\.(md|sh)' | sort -u)
 
 if [[ -z "$readme_tree_files" ]] || [[ -z "$template_tree_files" ]]; then
   warn "FILE_TREE" "Could not extract file trees (format changed?)"
@@ -316,10 +330,10 @@ else
 fi
 
 # 2.6 Sprint Close log "steps 1-N" matches actual step count
-log_step_max=$(echo "$sc_section" | grep -oE 'steps 1-[0-9]+' | grep -oE '[0-9]+$' | tail -1)
+log_step_max=$(grep -oE 'steps 1-[0-9]+' "$sc_file" | grep -oE '[0-9]+$' | tail -1)
 sc_step_count=0
-if [[ -n "$sc_section" ]]; then
-  sc_step_count=$(echo "$sc_section" | grep -cE '^[0-9]+\. ' || true)
+if [[ -s "$sc_file" ]]; then
+  sc_step_count=$(grep -cE '^[0-9]+\. ' "$sc_file" || true)
 fi
 
 if [[ -z "$log_step_max" ]]; then
@@ -360,13 +374,12 @@ $status_ok && pass "ITEM_STATUS_VALUES"
 # 3.2 Metric status values (PASS, DEFERRED, FAIL, MISSING)
 metric_statuses="PASS DEFERRED FAIL MISSING"
 metric_ok=true
-cg_full=$(extract_section "$WORKFLOW" "^## Close Gate" "^## Sprint Close")
-if [[ -z "$cg_full" ]]; then
+if [[ ! -s "$cg_file" ]]; then
   warn "METRIC_STATUS" "Could not extract Close Gate section"
   metric_ok=false
 else
   for ms in $metric_statuses; do
-    if ! echo "$cg_full" | grep -qw "$ms"; then
+    if ! grep -qw "$ms" "$cg_file"; then
       fail "METRIC_STATUS" "Close Gate section missing metric status: $ms"
       metric_ok=false
     fi
@@ -409,42 +422,42 @@ fi
 
 # 4.2 Key Design Decisions step/phase references exist in WORKFLOW.md
 kdd_bad_refs=""
-if [[ -n "$readme_kdd" ]]; then
-  # Check Entry Gate step refs (exclude "Sprint Close step" and "Implementation loop step" matches)
+if [[ -s "$kdd_file" ]]; then
+  # Check Entry Gate step refs
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-e]*}"
-    if [[ -n "$eg_section" ]] && ! echo "$eg_section" | grep -qE "^${step_num}\. |[[:space:]]${ref}[.):,[:space:]]"; then
+    if [[ -s "$eg_file" ]] && ! grep -qE "^${step_num}\. |[[:space:]]${ref}[.):,[:space:]]" "$eg_file"; then
       kdd_bad_refs="$kdd_bad_refs EG-$ref"
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Entry Gate step [0-9]+[a-e]?' | grep -oE '[0-9]+[a-e]?' | sort -u)
+  done < <(grep -oE 'Entry Gate step [0-9]+[a-e]?' "$kdd_file" | grep -oE '[0-9]+[a-e]?' | sort -u)
 
   # Check Close Gate phase refs (Phase N or sub-item Nx like 4b)
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     phase_num="${ref%%[a-b]*}"
     phase_letter="${ref#"$phase_num"}"
-    if [[ -n "$cg_section" ]]; then
+    if [[ -s "$cg_file" ]]; then
       if [[ -z "$phase_letter" ]]; then
-        echo "$cg_section" | grep -qE "Phase ${phase_num}" || kdd_bad_refs="$kdd_bad_refs CG-Phase-$ref"
+        grep -qE "Phase ${phase_num}" "$cg_file" || kdd_bad_refs="$kdd_bad_refs CG-Phase-$ref"
       else
         # Sub-item: verify both the Phase header and the sub-item reference
-        if ! echo "$cg_section" | grep -qE "Phase ${phase_num}" || \
-           ! echo "$cg_section" | grep -qE "${ref}[.):,[:space:]]"; then
+        if ! grep -qE "Phase ${phase_num}" "$cg_file" || \
+           ! grep -qE "${ref}[.):,[:space:]]" "$cg_file"; then
           kdd_bad_refs="$kdd_bad_refs CG-Phase-$ref"
         fi
       fi
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Phase [0-9]+[a-b]?' | grep -oE '[0-9]+[a-b]?' | sort -u)
+  done < <(grep -oE 'Phase [0-9]+[a-b]?' "$kdd_file" | grep -oE '[0-9]+[a-b]?' | sort -u)
 
   # Check Sprint Close step refs
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-g]*}"
-    if [[ -n "$sc_section" ]] && ! echo "$sc_section" | grep -qE "^${step_num}\. "; then
+    if [[ -s "$sc_file" ]] && ! grep -qE "^${step_num}\. " "$sc_file"; then
       kdd_bad_refs="$kdd_bad_refs SC-$ref"
     fi
-  done < <(echo "$readme_kdd" | grep -oE 'Sprint Close step [0-9]+[a-g]?' | grep -oE '[0-9]+[a-g]?' | sort -u)
+  done < <(grep -oE 'Sprint Close step [0-9]+[a-g]?' "$kdd_file" | grep -oE '[0-9]+[a-g]?' | sort -u)
 fi
 
 if [[ -z "$kdd_bad_refs" ]]; then
@@ -457,11 +470,11 @@ fi
 roadmap_section=$(extract_section "$WORKFLOW" "^### Roadmap.md Template" "^###")
 cb_ok=true
 for cb in '\[x\]' '\[~\]' '\[ \]'; do
-  if [[ -n "$roadmap_section" ]] && ! echo "$roadmap_section" | grep -qE "$cb"; then
+  if [[ -n "$roadmap_section" ]] && ! printf '%s\n' "$roadmap_section" | grep -qE "$cb"; then
     fail "CHECKBOX" "WORKFLOW.md Roadmap section missing checkbox notation: $cb"
     cb_ok=false
   fi
-  if [[ -n "$sc_section" ]] && ! echo "$sc_section" | grep -qE "$cb"; then
+  if [[ -s "$sc_file" ]] && ! grep -qE "$cb" "$sc_file"; then
     fail "CHECKBOX_SC" "Sprint Close section missing checkbox notation: $cb"
     cb_ok=false
   fi
@@ -517,22 +530,22 @@ fi
 cross_bad=""
 
 # Entry Gate step refs used elsewhere in WORKFLOW.md
-if [[ -n "$eg_section" ]]; then
+if [[ -s "$eg_file" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-e]*}"
-    if ! echo "$eg_section" | grep -qE "^${step_num}\. "; then
+    if ! grep -qE "^${step_num}\. " "$eg_file"; then
       cross_bad="$cross_bad EG-step-$ref"
     fi
   done < <(grep -oE 'Entry Gate step [0-9]+[a-e]?' "$WORKFLOW" | grep -oE '[0-9]+[a-e]?' | sort -u)
 fi
 
 # Sprint Close step refs used elsewhere in WORKFLOW.md
-if [[ -n "$sc_section" ]]; then
+if [[ -s "$sc_file" ]]; then
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     step_num="${ref%%[a-g]*}"
-    if ! echo "$sc_section" | grep -qE "^${step_num}\. "; then
+    if ! grep -qE "^${step_num}\. " "$sc_file"; then
       cross_bad="$cross_bad SC-step-$ref"
     fi
   done < <(grep -oE 'Sprint Close step [0-9]+[a-g]?' "$WORKFLOW" | grep -oE '[0-9]+[a-g]?' | sort -u)
@@ -714,6 +727,8 @@ if [[ -n "$readme_bootstrap_line" ]] && [[ -n "$tree_docs_files" ]]; then
     # Skip files that are optional/user-triggered (not created at bootstrap)
     case "$f" in
       PARALLEL-EXECUTION.md) continue ;;  # optional, user-triggered
+      TEAM-GUIDE.md) continue ;;          # optional, team-only
+      UNITY-GUIDE.md) continue ;;         # optional, Unity projects only
     esac
     if ! echo "$readme_bootstrap_line" | grep -qF "$f"; then
       bootstrap_missing="$bootstrap_missing $f"
@@ -725,6 +740,62 @@ if [[ -z "$bootstrap_missing" ]]; then
   pass "BOOTSTRAP_LIST_PARITY"
 else
   fail "BOOTSTRAP_LIST_PARITY" "Files in file tree but missing from README bootstrap list:$bootstrap_missing"
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  CATEGORY 8: Team Mode Consistency
+# ═══════════════════════════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════════════════════"
+echo "  CATEGORY 8: Team Mode Consistency"
+echo "══════════════════════════════════════════════════════"
+
+TEAM_GUIDE="$REPO_ROOT/Docs/TEAM-GUIDE.md"
+
+# 8.1 TEAM-GUIDE.md exists and is referenced from WORKFLOW.md file tree
+if [[ -f "$TEAM_GUIDE" ]]; then
+  if grep -qF 'TEAM-GUIDE.md' "$WORKFLOW"; then
+    pass "TEAM_GUIDE_REF"
+  else
+    fail "TEAM_GUIDE_REF" "WORKFLOW.md does not reference Docs/TEAM-GUIDE.md"
+  fi
+else
+  warn "TEAM_GUIDE_REF" "Docs/TEAM-GUIDE.md not found"
+fi
+
+# 8.2 TRACKING-[name].md pattern mentioned in WORKFLOW.md (team convention note)
+if grep -qE 'TRACKING-\[name\]\.md' "$WORKFLOW"; then
+  pass "TEAM_TRACKING_PATTERN"
+else
+  fail "TEAM_TRACKING_PATTERN" "WORKFLOW.md missing TRACKING-[name].md team pattern"
+fi
+
+# 8.3 sprint-N-name-impl branch pattern mentioned in WORKFLOW.md
+if grep -qE 'sprint-N-name-impl' "$WORKFLOW"; then
+  pass "TEAM_BRANCH_PATTERN"
+else
+  fail "TEAM_BRANCH_PATTERN" "WORKFLOW.md missing sprint-N-name-impl team branch pattern"
+fi
+
+# 8.4 TEAM-GUIDE.md covers key team sections (if file exists)
+if [[ -f "$TEAM_GUIDE" ]]; then
+  team_sections_ok=true
+  for section in "Team Topologies" "Cross-Sprint Item Dependencies" "Pull Request Integration"; do
+    if ! grep -qF "$section" "$TEAM_GUIDE"; then
+      fail "TEAM_GUIDE_SECTION" "TEAM-GUIDE.md missing section: $section"
+      team_sections_ok=false
+    fi
+  done
+  $team_sections_ok && pass "TEAM_GUIDE_SECTIONS"
+fi
+
+# 8.5 WORKFLOW-MODES.md references TEAM-GUIDE.md (not old §Team Topologies in WORKFLOW.md)
+if [[ -f "$MODES_DOC" ]]; then
+  if grep -qF 'TEAM-GUIDE.md' "$MODES_DOC"; then
+    pass "MODES_TEAM_REF"
+  else
+    fail "MODES_TEAM_REF" "WORKFLOW-MODES.md should reference TEAM-GUIDE.md for team conventions"
+  fi
 fi
 
 # ═══════════════════════════════════════════════════════════════

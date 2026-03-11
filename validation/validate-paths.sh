@@ -64,7 +64,7 @@ section_check() {
     fail "$name" "Could not extract section (format changed?)"
     return
   fi
-  if echo "$section" | grep -qE "$pattern"; then
+  if grep -qE "$pattern" <<< "$section"; then
     pass "$name"
   else
     fail "$name" "$desc"

@@ -241,6 +241,8 @@ your-project/
 │   ├── SPRINT_WORKFLOW.md        # Workflow reference (copied from WORKFLOW.md)
 │   ├── PARALLEL-EXECUTION.md    # Parallel wave patterns (optional, for sub-agent capable tools)
 │   ├── SPRINT-INDEX.md          # Topic-first cross-sprint retrieval index
+│   ├── TEAM-GUIDE.md            # Team topologies, dependencies, PR/CI (team only)
+│   ├── UNITY-GUIDE.md           # Unity-specific git/LFS/scene rules (optional)
 │   ├── Archive/                  # Archived sprint changelogs and failure history
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
@@ -350,7 +352,8 @@ Debt detection is two-tier: formalized debt (`TEMP(CORE-NNN)`, `TEMP(S…)`) is 
 
 | Aspect | Solo | Team |
 |---|---|---|
-| Commits | Monolithic OK (with TRACKING traceability) | Atomic required |
+| Branch | Sprint branch (same model) | Sprint branch (same model) |
+| Commits | Per-item after D.7 (monolithic OK with TRACKING traceability) | Atomic required (per-item after D.7) |
 | Review | Self-verify + AI agent | Peer review + AI agent |
 | Entry Gate | Abbreviated if ≤3 Must + no deps; full otherwise | Full (phases 0-3) |
 | Close Gate | Full | Full + peer sign-off |
@@ -392,8 +395,8 @@ agents, then merges results.
 The AI suggests parallel execution at Entry Gate step 11 when 4+ independent items are detected — no need to remember to ask.
 Sub-agents also keep implementation noise out of the coordinator's context, letting it stay focused on sprint rules, scope, and quality control.
 
-Implementation runs on a sprint branch (`sprint-N-impl`) with mandatory commits between waves.
-Main stays clean until Close Gate passes. Merge overhead: 30-45% of wave time when files overlap — budget explicitly.
+All sprints (sequential and parallel) run on a sprint branch (`sprint-N-impl`) — main stays clean until Close Gate passes.
+Parallel adds mandatory inter-wave commits. Merge overhead: 30-45% of wave time when files overlap — budget explicitly.
 
 > Full guide: [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md)
 

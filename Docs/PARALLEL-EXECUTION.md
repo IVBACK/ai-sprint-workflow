@@ -227,7 +227,9 @@ before launching the next wave. Reason: worktree-based agents fork from the last
 committed state — uncommitted Wave 1 changes are invisible to Wave 2 agents,
 causing silent state loss and duplicate/conflicting edits.
 
-All inter-wave commits happen on a **sprint branch**, not main:
+All inter-wave commits happen on the **sprint branch** (`sprint-N-impl`) — the same
+branch used by sequential execution (see WORKFLOW.md §Implementation Loop for branch
+creation, commit timing, merge ceremony, and tag strategy). Parallel adds one rule:
 
 ```
 main:              ──A──B──────────────────────────────────── merge ←
@@ -238,27 +240,12 @@ Wave 1 agents complete → coordinator merges + tests pass
   → coordinator commits on sprint-N-impl branch
   → Wave 2 agents fork from committed state → see Wave 1's work
   → ...
-  → Close Gate passes → merge sprint branch to main
+  → Close Gate passes → squash merge sprint branch to main
 ```
 
-**Why a branch:**
-- main stays clean — no half-sprint commits pollute history
-- Sprint abort → delete branch, main untouched
-- Close Gate is the merge gate — nothing reaches main without passing audit
-- **Squash merge to main** — wave commits are implementation detail, not history.
-  Wave-by-wave history stays on the branch if needed for forensics.
-
-**Merge ceremony (after Close Gate verdict, before Sprint Close step 1):**
-```bash
-# Close Gate Phase 2 fixes are committed to sprint-N-impl (not main)
-git checkout main
-git merge --squash sprint-N-impl
-git commit -m "Sprint N: [summary]"
-git branch -d sprint-N-impl          # cleanup — forensic history in reflog if needed
-```
-All Close Gate Phase 2 fixes must be committed to sprint-N-impl before the squash merge.
-The merge happens **between Close Gate approval and Sprint Close step 1** — Sprint Close
-runs on main with all sprint code already merged.
+**Parallel-specific commit rule:** coordinator must commit after each wave — not just
+after each item (as in sequential). Worktree-based agents fork from committed state;
+uncommitted changes are invisible to the next wave's agents.
 
 **Claude Code worktree integration:** The `isolation: "worktree"` parameter on the
 Agent tool maps directly to this model. Coordinator works on `sprint-N-impl` branch →
@@ -267,16 +254,15 @@ current committed state → agent works in isolation → coordinator merges resu
 commits to sprint branch → next wave's worktrees see the previous wave's work.
 No manual branch management needed — the tool handles worktree creation and cleanup.
 
-The coordinator creates the sprint branch at the start of the first implementation
-wave (not at Entry Gate — the branch contains only implementation commits).
-The coordinator announces each commit but does not wait for approval — inter-wave
-commits are a structural necessity, not a discretionary action.
+The coordinator announces each inter-wave commit but does not wait for approval —
+inter-wave commits are a structural necessity, not a discretionary action.
 
 Skipping the inter-wave commit is the #1 source of cross-wave bugs.
 
 **Sequential fallback:** If the user declines parallel execution (Entry Gate step 11),
-no sprint branch is created. Sequential implementation commits directly to the current
-branch as items are completed. The sprint branch model applies **only** to parallel execution.
+implementation proceeds sequentially on the same sprint branch (`sprint-N-impl`). The branch
+model is shared — see WORKFLOW.md §Implementation Loop. Parallel adds inter-wave commits;
+sequential commits after each item's D.7 as usual.
 
 ---
 
