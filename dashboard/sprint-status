@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# sprint-status — Quick sprint dashboard for ai-sprint-workflow projects
+#
+# Usage:
+#   sprint-status              # CLI summary (snapshot)
+#   sprint-status -w           # CLI watch mode (live, auto-refreshes)
+#   sprint-status --serve      # Web dashboard (live, http://127.0.0.1:8384)
+#   sprint-status --json       # Machine-readable JSON
+#   sprint-status /path/to/project   # Explicit project root
+#
+# Install:
+#   ln -s "$(pwd)/dashboard/sprint-status" ~/.local/bin/sprint-status
+
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+exec python3 "$SCRIPT_DIR/sprint-status.py" "$@"

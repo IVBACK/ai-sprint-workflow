@@ -46,8 +46,10 @@ if [[ -f "$_ENV_FILE" ]]; then
     # Only import CROSS_AUDIT_* and ENABLE_CROSS_AUDIT — don't pollute env
     # Shell env vars take precedence over .env (don't override already-set values)
     if [[ "$key" == CROSS_AUDIT_* || "$key" == "ENABLE_CROSS_AUDIT" ]]; then
-      # Use eval-free indirect expansion compatible with bash 3.2+
-      eval "_cur_val=\${$key:-}"
+      # Strict key validation: only alphanumeric + underscore, must start with letter
+      [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
+      # Safe indirect expansion without eval (bash 3.2+ compatible via printenv)
+      _cur_val=$(printenv "$key" 2>/dev/null || true)
       [[ -z "$_cur_val" ]] && export "$key=$value"
     fi
   done < "$_ENV_FILE"
@@ -153,12 +155,14 @@ if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
 
   # Use flock for atomic counter access if available; fallback to direct access
   if command -v flock >/dev/null 2>&1; then
-    _wave_skip=false
+    _wave_result=0
     (
       flock -w 5 200 || exit 1
       _do_wave_count
     ) 200>"${COUNTER_FILE}.lock"
-    [[ $? -eq 7 ]] && exit 0
+    _wave_result=$?
+    # 7 = below threshold (skip audit), 1 = flock failed (skip safely), 0 = fire
+    [[ $_wave_result -ne 0 ]] && exit 0
   else
     _do_wave_count || exit 0
   fi
@@ -222,12 +226,16 @@ COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ghp_[a-zA-Z0-9]{36,}/[REDACTED
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/gho_[a-zA-Z0-9]{36,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ghu_[a-zA-Z0-9]{36,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/xox[bpsar]-[a-zA-Z0-9-]{10,}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
+# AWS access keys (AKIA...) and secret keys
+COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
+COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/ASIA[A-Z0-9]{16}/[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
 # Key=value assignments (API_KEY="...", password: "...", secret = '...', token: "...")
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E "s/(api[_-]?key|secret[_-]?key|secret_?|password|passwd|token|credential|auth[_-]?token|access[_-]?key)(['\"]?[[:space:]]*[:=][[:space:]]*['\"]?)([^'\" ]{8,})/\1\2[REDACTED]/gi" 2>/dev/null || echo "$COMBINED_DIFF")
 # Bearer tokens
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/(Bearer )[a-zA-Z0-9_.=-]{20,}/\1[REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
-# Private key blocks
+# Private key blocks (redact BEGIN marker and all base64 lines until END marker)
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/-----BEGIN [A-Z ]* PRIVATE KEY-----/[PRIVATE KEY REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
+COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's/-----END [A-Z ]* PRIVATE KEY-----/[END KEY REDACTED]/g' 2>/dev/null || echo "$COMBINED_DIFF")
 # Connection strings with embedded passwords
 COMBINED_DIFF=$(echo "$COMBINED_DIFF" | sed -E 's#(mysql|postgres|postgresql|mongodb|redis|amqp)(://[^:]+:)[^@]+(@)#\1\2[REDACTED]\3#g' 2>/dev/null || echo "$COMBINED_DIFF")
 
@@ -374,10 +382,16 @@ fi
 REVIEW_PROMPT="$MODE_INSTRUCTIONS"
 
 # ── API call (provider-specific) ──
+# Write prompt to tmpfile to avoid ARG_MAX limits with large diffs (up to 48KB).
+# jq --rawfile reads from file instead of passing as shell argument.
+_PROMPT_TMPFILE=$(mktemp "${TMPDIR:-/tmp}/.cross-audit-prompt-XXXXXX")
+trap 'rm -f "$_PROMPT_TMPFILE"' EXIT
+printf '%s' "$REVIEW_PROMPT" > "$_PROMPT_TMPFILE"
+
 if [[ "$PROVIDER" == "anthropic" ]]; then
   REQUEST_BODY=$(jq -n \
     --arg model "$MODEL" \
-    --arg prompt "$REVIEW_PROMPT" \
+    --rawfile prompt "$_PROMPT_TMPFILE" \
     '{
       "model": $model,
       "messages": [{"role": "user", "content": $prompt}],
@@ -397,7 +411,7 @@ if [[ "$PROVIDER" == "anthropic" ]]; then
 else
   REQUEST_BODY=$(jq -n \
     --arg model "$MODEL" \
-    --arg prompt "$REVIEW_PROMPT" \
+    --rawfile prompt "$_PROMPT_TMPFILE" \
     '{
       "model": $model,
       "messages": [{"role": "user", "content": $prompt}],

@@ -226,6 +226,8 @@ project-root/
 │   ├── SPRINT_WORKFLOW.md             # This file (or project-specific copy)
 │   ├── LESSONS_INDEX.md               # Bug → rule traceability
 │   ├── PARALLEL-EXECUTION.md         # Parallel wave patterns (optional, user-triggered)
+│   ├── CROSS-LLM-AUDIT.md           # Cross-LLM audit setup guide (optional)
+│   ├── WORKFLOW-MODES.md             # Lite/Standard/Strict mode details
 │   ├── TEAM-GUIDE.md                 # Team topologies, dependencies, PR/CI (team only)
 │   ├── UNITY-GUIDE.md                # Unity-specific git/LFS/scene rules (optional)
 │   ├── SPRINT-INDEX.md               # Topic-first cross-sprint retrieval index

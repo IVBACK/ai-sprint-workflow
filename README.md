@@ -244,14 +244,19 @@ your-project/
 │   ├── SPRINT_WORKFLOW.md        # Workflow reference (copied from WORKFLOW.md)
 │   ├── PARALLEL-EXECUTION.md    # Parallel wave patterns (optional, for sub-agent capable tools)
 │   ├── SPRINT-INDEX.md          # Topic-first cross-sprint retrieval index
+│   ├── CROSS-LLM-AUDIT.md      # Cross-LLM audit setup guide (optional)
+│   ├── WORKFLOW-MODES.md        # Lite/Standard/Strict mode details
 │   ├── TEAM-GUIDE.md            # Team topologies, dependencies, PR/CI (team only)
 │   ├── UNITY-GUIDE.md           # Unity-specific git/LFS/scene rules (optional)
 │   ├── Archive/                  # Archived sprint changelogs and failure history
 │   └── Planning/
 │       ├── Roadmap.md            # Sprint plan (Must/Should/Could)
 │       └── S<N>_ENTRY_GATE.md    # Entry Gate report (lives during sprint, deleted at close)
-└── Tools/
-    └── sprint-audit.sh           # Automated close gate checks
+├── Tools/
+│   └── sprint-audit.sh           # Automated close gate checks
+└── dashboard/                    # Sprint dashboard (optional, standalone)
+    ├── sprint-status             # Bash wrapper (symlink target for ~/.local/bin/)
+    └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
 ```
 
 If using Claude Code (step 8.5 — optional):
@@ -404,6 +409,36 @@ All sprints (sequential and parallel) run on a sprint branch (`sprint-N-impl`) �
 Parallel adds mandatory inter-wave commits. Merge overhead: 30-45% of wave time when files overlap — budget explicitly.
 
 > Full guide: [Docs/PARALLEL-EXECUTION.md](Docs/PARALLEL-EXECUTION.md)
+
+## Sprint Dashboard (Optional)
+
+A standalone CLI + web dashboard for visualizing sprint status. Zero external dependencies — pure Python stdlib.
+
+**Install (optional):**
+```bash
+ln -s "$(pwd)/dashboard/sprint-status" ~/.local/bin/sprint-status
+```
+
+**Usage:**
+```bash
+sprint-status              # CLI summary (one-shot snapshot)
+sprint-status -w           # CLI watch mode (live, auto-refreshes on file changes)
+sprint-status --serve      # Web dashboard (live, http://127.0.0.1:8384)
+sprint-status --json       # Machine-readable JSON output
+sprint-status /path/to/project   # Explicit project root
+```
+
+The dashboard reads `TRACKING.md`, `Roadmap.md`, and gate reports — no configuration needed. Works with any project that uses this workflow, regardless of which AI agent produced the files.
+
+**What it shows:**
+- Sprint progress (items, status counts, completion %)
+- Gate status (Entry Gate, Close Gate, Sprint Close)
+- Quality metrics (verification results, test coverage, findings)
+- Failure analysis (predicted vs occurred, guardrail effectiveness)
+- Cross-sprint trends (rework rate, prediction accuracy, performance baselines)
+- Priority distribution from Roadmap (Must/Should/Could)
+
+The web dashboard (`--serve`) auto-refreshes every 2 seconds. CLI watch mode (`-w`) refreshes on file changes.
 
 ## Examples
 

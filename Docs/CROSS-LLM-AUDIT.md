@@ -259,12 +259,19 @@ The hook silently exits for workflow/config files (see [Skipped Files](#skipped-
 ### Layer 3: Secret Scrubbing
 Before sending any diff to the external LLM, the hook scrubs known secret patterns:
 - **Token prefixes:** `sk-*`, `sk-ant-*`, `ghp_*`, `gho_*`, `ghu_*`, `xox[bpsar]-*` (OpenAI, Anthropic, GitHub, Slack)
+- **AWS keys:** `AKIA*` (permanent access keys), `ASIA*` (temporary/STS credentials)
 - **Key-value assignments:** `password=`, `secret=`, `api_key:`, `token=`, `credential=`, `auth_token=` (8+ char values)
 - **Bearer tokens:** `Bearer <token>` in HTTP headers
-- **Private keys:** `-----BEGIN * PRIVATE KEY-----` blocks
+- **Private keys:** `-----BEGIN * PRIVATE KEY-----` and `-----END * PRIVATE KEY-----` blocks
 - **Connection strings:** `postgres://user:password@host`, `mongodb://...`, etc.
 
 Scrubbing replaces values with `[REDACTED]` while preserving the key name for review context.
+
+### Layer 5: Safe Variable Expansion
+The `.env` parser uses `printenv` for indirect variable lookup instead of `eval`, preventing command injection via crafted `.env` values. Keys are validated against a strict regex (`^[A-Z][A-Z0-9_]*$`) before import.
+
+### Layer 6: Payload Handling
+Large prompts (up to 48KB for holistic sprint reviews) are written to a temporary file and passed to `jq` via `--rawfile` instead of shell arguments, avoiding `ARG_MAX` limits and shell escaping issues. The temp file is cleaned up via `trap EXIT`.
 
 ### Layer 4: .gitignore
 The project `.gitignore` includes `.env`, `*.key`, `*.pem`, `credentials.json`, `secrets.yaml` to prevent accidental commits.
