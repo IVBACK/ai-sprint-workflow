@@ -220,6 +220,12 @@ Do not fire-and-forget agents. The coordinator:
 3. Course-corrects early if an agent drifted off-track
 4. Cheaper than discovering errors after full wave completion
 
+### Cross-LLM Audit in Parallel Mode
+
+Cross-LLM audit automatically skips in worktree-based sub-agents (`CROSS_AUDIT_SKIP_SUBAGENT=true` by default). Reason: sub-agents have narrow scope (single item) and audit results don't reach the coordinator. Instead, the coordinator receives the holistic review at wave boundaries and gate files.
+
+To force audit in sub-agents (not recommended): set `CROSS_AUDIT_SKIP_SUBAGENT=false` in `.env`.
+
 ### Inter-Wave Commit (Mandatory)
 
 Sub-agents never commit autonomously. But the coordinator **must commit after each wave**

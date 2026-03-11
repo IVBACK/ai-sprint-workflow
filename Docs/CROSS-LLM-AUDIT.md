@@ -29,6 +29,7 @@ The hook fires on `PostToolUse(Edit|Write)` and supports three audit modes:
 | Mode | Trigger | What's Reviewed | Focus |
 |------|---------|-----------------|-------|
 | **Per-edit** | Source file change | Uncommitted `git diff` | Bugs, security, AC coverage |
+| **Wave Review** | `TRACKING.md` edited | Last commit diff (`HEAD~1..HEAD`) | Cross-item integration after parallel merge |
 | **Close Gate** | `S*_CLOSE_GATE.md` written | Full sprint diff (`git diff main...HEAD`) | Cross-item consistency, architecture |
 | **Entry Gate** | `S*_ENTRY_GATE.md` written | Gate report content | Plan quality, missing risks |
 
@@ -48,7 +49,7 @@ The script walks you through provider selection, API key entry, and optional set
 Your API key is collected via hidden terminal input (`read -s`) and written directly to `.env`.
 **The key never enters the AI conversation.**
 
-After the script completes, make a code change with 10+ lines to verify.
+After the script completes, make a code change with 3+ lines to verify.
 
 > **Why not paste the key into the AI chat?** Most LLMs reject or flag API keys in
 > conversation. Even if accepted, the key would appear in session logs and context.
@@ -88,7 +89,7 @@ CROSS_AUDIT_MODEL=gpt-4o
 CROSS_AUDIT_TRIGGER=wave
 CROSS_AUDIT_CONTEXT=standard
 CROSS_AUDIT_LANG=en
-CROSS_AUDIT_MIN_CHANGES=10
+CROSS_AUDIT_MIN_CHANGES=3
 CROSS_AUDIT_TIMEOUT=60
 ```
 
@@ -109,7 +110,7 @@ Either way: `.env` is git-ignored, shell profile is outside the repo. Neither en
 
 #### 3. Verify
 
-Make a code change with 10+ lines. Check stderr for "Cross-audit:" messages. If the API key is valid, Claude will receive the external review as additionalContext.
+Make a code change with 3+ lines. Check stderr for "Cross-audit:" messages. If the API key is valid, Claude will receive the external review as additionalContext.
 
 ---
 
@@ -146,8 +147,9 @@ These are not typically set by users but are available for testing and advanced 
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `CLAUDE_PROJECT_DIR` | Project root directory | `.` (current dir) |
-| `CROSS_AUDIT_COUNTER_FILE` | Override wave counter file path | `/tmp/.cross-audit-counter-<hash>` |
+| `CROSS_AUDIT_COUNTER_FILE` | Override wave counter file path | `.claude/.state/cross-audit-counter-<user>` |
 | `CROSS_AUDIT_FIRE` | Force immediate audit in wave mode | unset |
+| `CROSS_AUDIT_SKIP_SUBAGENT` | Skip audit in worktree sub-agents (parallel execution) | `true` |
 
 ---
 
@@ -158,6 +160,19 @@ These are not typically set by users but are available for testing and advanced 
 Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at ~24k chars). Reviews for bugs, security issues, AC coverage, and coding rule violations.
 
 Subject to wave/item trigger mode and `MIN_CHANGES` threshold.
+
+### Wave Review (parallel merge checkpoint)
+
+Fires automatically when `TRACKING*.md` is edited — this happens when the coordinator updates item statuses after merging a parallel wave. Sends the last commit diff (`git diff HEAD~1`, falling back to uncommitted changes), excluding TRACKING.md itself and config files.
+
+Reviews for:
+- Integration conflicts between merged sub-agent work
+- API contract mismatches (producer/consumer interfaces)
+- Shared state conflicts and race conditions
+- Import/dependency coherence
+- Naming consistency across merged items
+
+Bypasses wave counting — always fires immediately. Subject to `MIN_CHANGES` threshold (skips trivial merges).
 
 ### Close Gate (holistic sprint review)
 
@@ -192,6 +207,11 @@ Bypasses wave counting — always fires immediately.
 - In `standard`/`full`: CODING_GUARDRAILS.md + Entry Gate failure modes
 - In `full`: Full content of the currently edited file (first 8000 chars). Note: in close-gate mode, `$FILE` is the gate report itself, not source files — so this layer is most useful in per-edit mode
 
+### Wave Review Mode
+- Last commit diff (`git diff HEAD~1`, ~32k chars max), excluding TRACKING.md and config files
+- Falls back to uncommitted changes if no previous commit
+- Active items, critical axis, guardrails, failure modes (same context layers as per-edit)
+
 ### Close Gate Mode
 - Full sprint diff against main branch (`git diff main...HEAD`, auto-detects main/master, ~48k chars max)
 - Active items, critical axis, guardrails, failure modes (same context layers)
@@ -204,7 +224,7 @@ Bypasses wave counting — always fires immediately.
 
 The hook silently exits for these file patterns — they are never sent:
 
-- `TRACKING*.md`, `CLAUDE.md`, `WORKFLOW*.md` — workflow state files
+- `CLAUDE.md`, `WORKFLOW*.md` — workflow state files (note: `TRACKING*.md` triggers wave-review mode instead of being skipped)
 - `*Roadmap*.md`, `*ROADMAP*.md` — planning docs
 - `*SPRINT_CLOSE*`, `*GUARDRAILS*`, `*LESSONS*` — sprint artifacts
 - `*.json`, `*.yaml`, `*.yml`, `*.toml`, `*.lock` — config/lock files

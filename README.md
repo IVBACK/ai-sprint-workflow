@@ -100,21 +100,27 @@ Every session starts from zero. This workflow solves three problems:
 
 **Rewrite or complex project with prior experience?** Design the roadmap first — see [Want a richer roadmap?](#want-a-richer-roadmap-design-it-first) below. Otherwise:
 
-**Already in an AI session (recommended):**
+**Claude Code** — clone the repo to get pre-built hooks:
 
-Copy and paste to your agent:
+```bash
+git clone https://github.com/IVBACK/ai-sprint-workflow.git /tmp/ai-sprint-workflow
+cp /tmp/ai-sprint-workflow/WORKFLOW.md .
+cp -r /tmp/ai-sprint-workflow/.claude .
+cp /tmp/ai-sprint-workflow/.env.example .
+rm -rf /tmp/ai-sprint-workflow
+```
+
+Then tell Claude Code: `"Read WORKFLOW.md and bootstrap this project."`
+
+The agent detects the pre-existing `.claude/` hooks and skips regeneration — you get the exact tested hook implementations (11 hooks including secret protection, cross-LLM audit, validation gates).
+
+**Other agents** (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI) — one line:
 
 ```
 "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
 ```
 
-The agent fetches the file and runs the bootstrap directly — no manual download needed.
-
-**Prefer to download first:**
-```bash
-curl -O https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md
-```
-Then tell the agent: `"Read WORKFLOW.md and bootstrap this project."`
+No clone needed — these agents don't use `.claude/` hooks. The workflow is plain markdown.
 
 **Either way, the agent will:**
 - Detect whether this is a greenfield or existing project (Step 0)
@@ -126,7 +132,7 @@ Then tell the agent: `"Read WORKFLOW.md and bootstrap this project."`
   - Existing project: whatever you're currently working on becomes Sprint 1 — no retrospective reconstruction
 - Adapt audit script patterns to your detected language (multi-language projects supported; modular adapters in `checks/` can be loaded with `--modular` flag)
 - Create `Docs/SPRINT_WORKFLOW.md` from `WORKFLOW.md` (strips bootstrap-only sections; AI reads section-by-section at sprint boundaries, not all at once)
-- **[Claude Code only]** Create `.claude/` hook infrastructure (step 8.5) — enforces workflow rules mechanically; see [Claude Code: Hook Enforcement](#claude-code-hook-enforcement-optional) below
+- **[Claude Code only]** Detect existing `.claude/` hooks or create hook infrastructure (step 8.5) — enforces workflow rules mechanically; see [Claude Code: Hook Enforcement](#claude-code-hook-enforcement-optional) below
 - Confirm the setup with you before writing any feature code
 
 After setup is confirmed, start your first sprint:
@@ -147,8 +153,7 @@ lessons to capture), design the roadmap in a separate focused session before boo
    > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/ROADMAP-DESIGN-PROMPT.md and design the roadmap."
    — Agent asks about goals, prior learnings, locked contracts, performance targets, phases
    — Produces a rich `Docs/Planning/Roadmap.md` through conversation
-2. Then bootstrap:
-   > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
+2. Then bootstrap (follow your agent's setup from [Quick Start](#quick-start) above):
    — Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically
 
 ### Bootstrap Steps (10 total: Step 0 + steps 1–9)
@@ -187,15 +192,15 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `validate-id-uniqueness.sh` | After `TRACKING.md` edit | Duplicate `CORE-###` IDs |
 | `session-start.sh` | Every session start | Injects "read TRACKING.md first" protocol into agent context |
 | `entry-gate-session.sh` | After Entry Gate report written | Injects mandatory session boundary recommendation |
-| `detect-audit-signals.sh` | Session start (CP1-CP2) | Metric regression ≥20% between sprints; repeated failure categories across sprints |
+| `detect-audit-signals.sh` | Session start + TRACKING.md edit (CP1-CP2) | Metric regression ≥20% between sprints; repeated failure categories across sprints; warns when structured tables are missing |
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
 | `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
-| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Three modes: per-edit, Close Gate holistic, Entry Gate plan review |
+| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review |
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
-**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Three audit modes: per-edit (source changes), Close Gate (holistic sprint review), Entry Gate (plan review). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
@@ -234,6 +239,8 @@ The workflow is **user-activated**, not self-executing. The agent reads `CLAUDE.
 - `"Why didn't tests catch this?"` — triggers test gap analysis; regression test added
 
 ## What Gets Created
+
+Core structure (all agents):
 
 ```
 your-project/

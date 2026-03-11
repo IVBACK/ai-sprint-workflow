@@ -132,6 +132,7 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
      • "Generic sprint-audit.sh Template"
      • "Checklist — Is Your Project Set Up?"
 8.5. **[Claude Code only — skip if using a different agent]** Create hook infrastructure:
+   **If `.claude/hooks/` already exists** (user cloned the repo): validate that `settings.json` and `hooks-config.sh` are present, `chmod +x` all scripts, and skip to Step 9. Do NOT regenerate existing hooks.
    - `.claude/hooks-config.sh` — feature flags (enable/disable per hook)
    - `.claude/settings.json` — hook registrations
    - `.claude/hooks/protect-claude.sh` — blocks `Write` to `CLAUDE.md`
@@ -140,7 +141,7 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    - `.claude/hooks/validate-id-uniqueness.sh` — detects duplicate `CORE-###` IDs
    - `.claude/hooks/session-start.sh` — injects session start protocol context
    - `.claude/hooks/entry-gate-session.sh` — injects mandatory session boundary after Entry Gate
-   - `.claude/hooks/detect-audit-signals.sh` — CP1+CP2: metric regression and recurring failure detection at session start
+   - `.claude/hooks/detect-audit-signals.sh` — CP1+CP2: metric regression and recurring failure detection at session start + TRACKING.md edits
    - `.claude/hooks/detect-test-regression.sh` — CP3: surfaces test failures from Bash output
    - `.claude/hooks/validate-close-gate.sh` — CP4: validates Close Gate report, checks for unverified must items
    - `.claude/hooks/validate-sprint-close.sh` — validates Sprint Close report sections (retrospective, baseline, handoff)
@@ -308,7 +309,7 @@ project-root/
         ├── validate-tracking.sh       # Validate TRACKING.md status values
         ├── validate-id-uniqueness.sh  # Detect duplicate CORE-### IDs
         ├── entry-gate-session.sh      # Mandatory session boundary after Entry Gate
-        ├── detect-audit-signals.sh    # CP1+CP2: metric regression detection
+        ├── detect-audit-signals.sh    # CP1+CP2: metric regression detection (session start + TRACKING.md edits)
         ├── detect-test-regression.sh  # CP3: test failure surfacing
         ├── validate-close-gate.sh     # CP4: Close Gate validation
         ├── validate-sprint-close.sh   # Sprint Close report validation
@@ -2545,7 +2546,8 @@ ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
         "hooks": [
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-tracking.sh" },
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-id-uniqueness.sh" },
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/cross-llm-audit.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/cross-llm-audit.sh" },
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/detect-audit-signals.sh" }
         ]
       },
       {
@@ -2853,15 +2855,16 @@ jq -n --arg s "$SPRINT" '{
 > feature-gate logic. The authoritative full scripts live in `.claude/hooks/*.sh`. Do NOT copy
 > these snippets as-is — use the actual files created by the bootstrap (Step 8.5).
 
-**`.claude/hooks/detect-audit-signals.sh`** — CP1+CP2 self-activating detector at session start:
+**`.claude/hooks/detect-audit-signals.sh`** — CP1+CP2 self-activating detector at session start and TRACKING.md edits:
 
 ```bash
 #!/bin/bash
 # Hook: detect-audit-signals.sh
-# Event: SessionStart
+# Event: SessionStart + PostToolUse (Edit|Write on TRACKING.md)
 # CP1: Metric regression ≥20% between consecutive sprints (§Performance Baseline Log)
 # CP2: Same failure category in 2+ sprints (§Failure History)
-# Silent if sections missing or data insufficient — zero false positives.
+# Warns when structured tables are missing (AUDIT DATA GAP).
+# On PostToolUse, only fires for TRACKING.md edits (other files → exit 0).
 # Exit: 0 always. Injects additionalContext on findings.
 
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -2869,12 +2872,23 @@ source "$HOOKS_DIR/../hooks-config.sh"
 [[ "$HOOK_DETECT_AUDIT_SIGNALS" != "true" ]] && exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
+# PostToolUse filter: only re-run when TRACKING.md is edited
+INPUT=$(cat)
+if [[ -n "$INPUT" ]]; then
+  TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+  FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+  if [[ -n "$TOOL" ]]; then
+    case "$FILE" in *TRACKING*.md) ;; *) exit 0 ;; esac
+  fi
+fi
+
 TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
 [[ -z "$TRACKING" || ! -f "$TRACKING" ]] && exit 0
 
 # Full script: .claude/hooks/detect-audit-signals.sh (authoritative source)
 # Parses §Performance Baseline Log for ≥20% regression (CP1)
 # Parses §Failure Mode History for recurring categories across sprints (CP2)
+# Warns when structured tables are missing (AUDIT DATA GAP)
 # Sanitizes all output. Uses jq --arg for JSON-safe injection.
 # Emits additionalContext with ⚠ AUDIT SIGNAL directives.
 ```
@@ -2946,12 +2960,13 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 The full script lives in `.claude/hooks/cross-llm-audit.sh` (authoritative source). Key design points:
 
-- **Three audit modes:** per-edit (source changes → `git diff HEAD`), close-gate (holistic → `git diff main...HEAD`), entry-gate (plan review → gate file content)
+- **Four audit modes:** per-edit (source changes → `git diff HEAD`), wave-review (parallel merge checkpoint → `git diff HEAD~1`, fires when TRACKING.md is updated after wave merge), close-gate (holistic → `git diff main...HEAD`), entry-gate (plan review → gate file content)
 - **Two provider modes:** OpenAI-compatible (default) and native Anthropic API
-- **Wave batching:** In `wave` trigger mode, fires every ~5 source edits. Gate reviews bypass wave counting
+- **Wave batching:** In `wave` trigger mode, fires every ~5 source edits. Gate reviews and wave-review bypass wave counting
+- **Sub-agent skip:** Worktree-based sub-agents are auto-detected and skipped — coordinator reviews the merged result at wave boundaries instead
 - **Context layers:** minimal (diff + active items), standard (+ guardrails + failure modes), full (+ changed file content)
 - **Always exit 0:** Never blocks the workflow at infrastructure level. Only findings can be blocking (via BLOCK verdict)
-- **Config:** `ENABLE_CROSS_AUDIT`, `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_TRIGGER`, `CROSS_AUDIT_CONTEXT`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_MIN_CHANGES`, `CROSS_AUDIT_TIMEOUT`
+- **Config:** `ENABLE_CROSS_AUDIT`, `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_TRIGGER`, `CROSS_AUDIT_CONTEXT`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_MIN_CHANGES`, `CROSS_AUDIT_TIMEOUT`, `CROSS_AUDIT_SKIP_SUBAGENT`
 
 ---
 
@@ -3790,12 +3805,13 @@ Each changelog entry uses a prefix that tells the AI what action to take:
 
 When the user says something like: *"Update the workflow from https://github.com/user/ai-sprint-workflow"*
 
-1. Fetch the raw `WORKFLOW.md` from the repository (use `curl` or `WebFetch` on the raw URL).
+1. Fetch the new `WORKFLOW.md` from the repository (use `curl` or `WebFetch` on the raw URL).
 2. Save it to the project root, replacing the old WORKFLOW.md.
-3. Run the Upgrade Procedure above (Steps 1-7).
+3. Optionally update `.claude/hooks/` from the repo (clone → `cp -r .claude/ .`) to get tested hook implementations. Or let the AI regenerate from updated WORKFLOW.md templates.
+4. Run the Upgrade Procedure above (Steps 1-7).
 
 **Edge cases:**
-- **No `.claude/` directory at all:** This is a fresh project, not an upgrade. Run bootstrap (Step 8.5) instead.
+- **No `.claude/` directory at all:** This is a fresh project, not an upgrade. Clone the repo and copy `.claude/` (recommended) or run bootstrap (Step 8.5).
 - **`.claude/` exists but no `HOOKS_VERSION`:** Pre-version system (v1.0 era). Treat as v1.0 and apply all changelog entries from v2.0 onward.
 - **Custom hooks not in template:** Leave them untouched. They are user-specific extensions — the upgrade procedure only touches hooks listed in the changelog.
 
@@ -3815,6 +3831,9 @@ When the user says something like: *"Update the workflow from https://github.com
 - **Updated:** Bootstrap Step 3 — `.gitignore` secret patterns are now part of setup
 - **Updated:** Discovery Question Q15 — marked as Claude Code prerequisite
 - **Doc:** `Docs/CROSS-LLM-AUDIT.md` — fixed data safety layer ordering, added configuration reference
+- **Updated hook:** `cross-llm-audit.sh` — wave-review mode (parallel merge checkpoint on TRACKING.md edit), sub-agent worktree detection + skip, persistent wave counter (`.claude/.state/`), MIN_CHANGES default 3
+- **Updated hook:** `detect-audit-signals.sh` — PostToolUse filter (only fires for TRACKING.md edits), missing section warnings
+- **Updated:** `Docs/CROSS-LLM-AUDIT.md` — four audit modes (added wave-review), sub-agent skip docs, updated skipped files list
 
 ### v2.0 (2026-03-01)
 - **New:** Cross-LLM audit system — external LLM reviews code changes via hooks
@@ -3831,4 +3850,4 @@ When the user says something like: *"Update the workflow from https://github.com
 - 8 Claude Code hooks: protect-claude, validate-tracking, session-start, id-uniqueness, entry-gate-session, detect-test-regression, validate-close-gate, validate-sprint-close
 - `sprint-audit.sh`, `CODING_GUARDRAILS.md`, `LESSONS_INDEX.md` templates
 - Workflow modes: Lite, Standard, Strict
-- `detect-audit-signals.sh` — CP1+CP2 metric regression and failure pattern detection
+- `detect-audit-signals.sh` — CP1+CP2 metric regression and failure pattern detection (now fires on TRACKING.md edits too, warns on missing tables)

@@ -247,7 +247,8 @@ else
 fi
 
 # 3.4 WORKFLOW.md hooks-config template has HOOK_PROTECT_SECRETS
-if grep -A9999 '^### Claude Code Hook Templates' "$WORKFLOW" | grep -q 'HOOK_PROTECT_SECRETS'; then
+# Use grep -c instead of grep -q to avoid SIGPIPE with pipefail (grep -q closes pipe early)
+if [[ $(sed -n '/^### Claude Code Hook Templates/,/^### /p' "$WORKFLOW" | grep -c 'HOOK_PROTECT_SECRETS') -gt 0 ]]; then
   pass "3.4 WORKFLOW.md hooks-config template has HOOK_PROTECT_SECRETS"
 else
   fail "3.4 WORKFLOW.md hooks-config template missing HOOK_PROTECT_SECRETS"

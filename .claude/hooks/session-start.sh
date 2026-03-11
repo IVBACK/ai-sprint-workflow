@@ -58,7 +58,11 @@ CROSS_AUDIT_STATUS="off"
 ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
 if [[ -f "$ENV_FILE" ]] && grep -q "^ENABLE_CROSS_AUDIT=true" "$ENV_FILE" 2>/dev/null; then
     CROSS_AUDIT_STATUS="on"
-elif [[ ! -f "$ENV_FILE" ]] && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
+elif [[ -f "$ENV_FILE" ]] && grep -q "ENABLE_CROSS_AUDIT" "$ENV_FILE" 2>/dev/null; then
+    # .env exists with cross-audit config but not enabled
+    CROSS_AUDIT_STATUS="configured-off"
+elif [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
+    # Setup script exists but no .env yet
     CROSS_AUDIT_STATUS="available"
 fi
 
@@ -78,6 +82,7 @@ jq -n \
     "3. State current sprint and last known status before proceeding.\n" +
     "Do NOT start implementation before completing this protocol.\n" +
     (if $audit == "on" then "\nCross-LLM Audit: ENABLED. External code reviews will appear inline after code changes.\nDo NOT attempt to read .env — the audit hook manages it automatically.\n" else "" end) +
+    (if $audit == "configured-off" then "\nCross-LLM Audit: configured but DISABLED. To enable: set ENABLE_CROSS_AUDIT=true in .env (user runs this in their terminal, not AI).\n" else "" end) +
     (if $audit == "available" then "\nCross-LLM Audit: available but not configured. To enable: user runs `bash .claude/setup-audit.sh` in their terminal.\n" else "" end) +
     "============================================"
   )

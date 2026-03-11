@@ -1,6 +1,6 @@
 #!/bin/bash
 # Hook: detect-audit-signals.sh
-# Event: SessionStart
+# Event: SessionStart + PostToolUse (Edit|Write on TRACKING.md)
 # Purpose: Self-activating CP1 and CP2 detector.
 #   CP1: Metric regression ≥20% between consecutive sprints
 #        Reads §Performance Baseline Log table from TRACKING.md
@@ -25,11 +25,38 @@ source "$HOOKS_DIR/../hooks-config.sh"
 [[ "$HOOK_DETECT_AUDIT_SIGNALS" != "true" ]] && exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
+# ── PostToolUse filter: only re-run when TRACKING.md is the edited file ──
+# On SessionStart, stdin is empty or has no tool_name → always run.
+# On PostToolUse, only run if the edited file is TRACKING.md.
+INPUT=$(cat)
+if [[ -n "$INPUT" ]]; then
+  TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+  FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+  if [[ -n "$TOOL" ]]; then
+    # PostToolUse context — only fire for TRACKING.md edits
+    case "$FILE" in
+      *TRACKING*.md) ;; # continue
+      *) exit 0 ;;
+    esac
+  fi
+fi
+
 TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/dev/null | head -1)
 [[ -z "$TRACKING" || ! -f "$TRACKING" ]] && exit 0
 
 # --- Sanitize helper: strip non-safe chars from metric/category names ---
 sanitize() { echo "$1" | tr -cd 'a-zA-Z0-9_\- ' | cut -c1-40; }
+
+# ── Check for missing structured sections ──
+# Warn if TRACKING.md exists but lacks the tables CP1/CP2 need.
+MISSING_SECTIONS=""
+if ! grep -q "Performance Baseline Log" "$TRACKING" 2>/dev/null; then
+  MISSING_SECTIONS+="Performance Baseline Log"
+fi
+if ! grep -q "Failure Mode History\|Failure History" "$TRACKING" 2>/dev/null; then
+  [[ -n "$MISSING_SECTIONS" ]] && MISSING_SECTIONS+=", "
+  MISSING_SECTIONS+="Failure Mode History"
+fi
 
 CP1_SIGNALS=""
 CP2_SIGNALS=""
@@ -137,9 +164,18 @@ fi
 # ══════════════════════════════════════════════
 # Output
 # ══════════════════════════════════════════════
-[[ -z "$CP1_SIGNALS" && -z "$CP2_SIGNALS" ]] && exit 0
+[[ -z "$CP1_SIGNALS" && -z "$CP2_SIGNALS" && -z "$MISSING_SECTIONS" ]] && exit 0
 
 CONTEXT=""
+
+if [[ -n "$MISSING_SECTIONS" ]]; then
+    CONTEXT+="=== ℹ AUDIT DATA GAP ===\n"
+    CONTEXT+="TRACKING.md is missing structured sections needed for automatic regression detection:\n"
+    CONTEXT+="  Missing: ${MISSING_SECTIONS}\n"
+    CONTEXT+="Without these tables, CP1 (metric regression) and/or CP2 (recurring failures) cannot fire.\n"
+    CONTEXT+="Add the tables to TRACKING.md to enable automatic audit signals.\n"
+    CONTEXT+="====================================================\n"
+fi
 
 if [[ -n "$CP1_SIGNALS" ]]; then
     CONTEXT+="=== ⚠ CP1 AUDIT SIGNAL (WORKFLOW.md Entry Gate Phase 1) ===\n"

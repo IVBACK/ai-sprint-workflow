@@ -20,8 +20,9 @@
 #   CROSS_AUDIT_TRIGGER                — "wave" or "item" (default: wave)
 #   CROSS_AUDIT_CONTEXT                — "minimal", "standard", "full" (default: standard)
 #   CROSS_AUDIT_LANG                   — Review language: "en" or "tr" (default: en)
-#   CROSS_AUDIT_MIN_CHANGES            — Minimum changed lines to trigger (default: 10)
+#   CROSS_AUDIT_MIN_CHANGES            — Minimum changed lines to trigger (default: 3)
 #   CROSS_AUDIT_TIMEOUT                — API timeout in seconds (default: 60)
+#   CROSS_AUDIT_SKIP_SUBAGENT          — Skip in worktree sub-agents (default: true)
 #
 # Exit: 0 always (non-blocking). Injects additionalContext on findings.
 
@@ -60,6 +61,22 @@ source "$HOOKS_DIR/../hooks-config.sh"
 # ── Master switch ──
 [[ "${ENABLE_CROSS_AUDIT:-false}" != "true" ]] && exit 0
 
+# ── Sub-agent detection: skip cross-audit in worktree-based sub-agents ──
+# Sub-agents run in isolated worktrees (CLAUDE_PROJECT_DIR differs from git toplevel).
+# Cross-audit in sub-agents is wasteful (narrow scope, results don't reach coordinator).
+# The coordinator reviews the full diff at wave/gate boundaries instead.
+if [[ "${CROSS_AUDIT_SKIP_SUBAGENT:-true}" == "true" ]]; then
+  _GIT_TOPLEVEL=$(git -C "${CLAUDE_PROJECT_DIR:-.}" rev-parse --show-toplevel 2>/dev/null || true)
+  _REAL_PROJECT=$(cd "${CLAUDE_PROJECT_DIR:-.}" && pwd -P 2>/dev/null || true)
+  if [[ -n "$_GIT_TOPLEVEL" && -n "$_REAL_PROJECT" ]]; then
+    _REAL_TOPLEVEL=$(cd "$_GIT_TOPLEVEL" && pwd -P 2>/dev/null || true)
+    if [[ "$_REAL_PROJECT" != "$_REAL_TOPLEVEL" ]]; then
+      # Worktree detected — this is a sub-agent, skip cross-audit
+      exit 0
+    fi
+  fi
+fi
+
 # ── Dependencies ──
 command -v jq >/dev/null 2>&1 || exit 0
 command -v curl >/dev/null 2>&1 || exit 0
@@ -94,7 +111,8 @@ AUDIT_MODE="per-edit"
 case "$FILE" in
   *_CLOSE_GATE*.md) AUDIT_MODE="close-gate" ;;
   *_ENTRY_GATE*.md) AUDIT_MODE="entry-gate" ;;
-  *TRACKING*.md|*CLAUDE.md|*WORKFLOW*.md|*[Rr]oadmap*.md|*ROADMAP*.md|*SPRINT_CLOSE*|\
+  *TRACKING*.md)    AUDIT_MODE="wave-review" ;;
+  *CLAUDE.md|*WORKFLOW*.md|*[Rr]oadmap*.md|*ROADMAP*.md|*SPRINT_CLOSE*|\
   *GUARDRAILS*|*LESSONS*|*.json|*.yaml|*.yml|*.toml|*.lock|*.env*) exit 0 ;;
 esac
 
@@ -113,25 +131,22 @@ fi
 TRIGGER="${CROSS_AUDIT_TRIGGER:-wave}"
 CONTEXT_LEVEL="${CROSS_AUDIT_CONTEXT:-standard}"
 AUDIT_LANG="${CROSS_AUDIT_LANG:-en}"
-MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-10}"
+MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-3}"
 TIMEOUT="${CROSS_AUDIT_TIMEOUT:-60}"
 
 # ── Trigger control: wave vs item ──
 # For "wave" mode, we use a counter file to batch changes.
 # The audit fires after the Nth source file edit (default: when user is asked for approval).
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-# Counter file uses project dir hash + username for stable identity across hook invocations.
+# Counter file uses .claude/.state/ for persistence (survives /tmp/ cleanup, container restarts).
 # Per-user counters prevent race conditions when multiple developers share a machine.
 # Override with CROSS_AUDIT_COUNTER_FILE env var for testing.
-_PROJECT_HASH=$(echo "$PROJECT_DIR" | sha256sum 2>/dev/null | cut -c1-8 \
-  || echo "$PROJECT_DIR" | md5sum 2>/dev/null | cut -c1-8 \
-  || echo "$PROJECT_DIR" | md5 -q 2>/dev/null | cut -c1-8 \
-  || echo "$PROJECT_DIR" | shasum 2>/dev/null | cut -c1-8 \
-  || echo "default")
+_STATE_DIR="${PROJECT_DIR}/.claude/.state"
+mkdir -p "$_STATE_DIR" 2>/dev/null
 _USER_ID="${USER:-${LOGNAME:-unknown}}"
-COUNTER_FILE="${CROSS_AUDIT_COUNTER_FILE:-/tmp/.cross-audit-counter-${_PROJECT_HASH}-${_USER_ID}}"
+COUNTER_FILE="${CROSS_AUDIT_COUNTER_FILE:-${_STATE_DIR}/cross-audit-counter-${_USER_ID}}"
 
-# Gate reviews always fire immediately — wave counting only applies to per-edit
+# Gate and wave-review always fire immediately — wave counting only applies to per-edit
 if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
   # Increment counter (atomic via flock if available)
   # Returns exit code 0 = threshold reached (continue to audit),
@@ -183,6 +198,16 @@ if [[ "$AUDIT_MODE" == "close-gate" ]]; then
   done
   # Increase truncation limit for holistic review (more context needed)
   MAX_DIFF_CHARS=48000
+elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
+  # Wave boundary: coordinator just merged sub-agent work and updated TRACKING.md
+  # Review the recent uncommitted + last commit changes (wave merge typically just committed)
+  # Use diff of HEAD~1..HEAD (last commit = wave merge) + any uncommitted changes
+  COMBINED_DIFF=$(git diff HEAD~1 -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' ':!*.json' ':!*.yaml' ':!*.yml' 2>/dev/null || true)
+  # Fallback: if no previous commit or diff is empty, use uncommitted changes
+  if [[ -z "$COMBINED_DIFF" ]]; then
+    COMBINED_DIFF=$(git diff HEAD -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' 2>/dev/null || true)
+  fi
+  MAX_DIFF_CHARS=32000
 elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
   # Entry Gate: send the gate report content itself, not code diff
   COMBINED_DIFF=""
@@ -199,8 +224,9 @@ fi
 if [[ -z "$COMBINED_DIFF" ]]; then
   exit 0
 fi
-if [[ "$AUDIT_MODE" == "per-edit" ]]; then
+if [[ "$AUDIT_MODE" == "per-edit" || "$AUDIT_MODE" == "wave-review" ]]; then
   CHANGED_LINES=$(echo "$COMBINED_DIFF" | grep -cE '^\+[^+]|^-[^-]' 2>/dev/null || echo 0)
+  # Wave-review needs at least MIN_CHANGES of actual code changes (skip trivial merges)
   if [[ "$CHANGED_LINES" -lt "$MIN_CHANGES" ]]; then
     exit 0
   fi
@@ -327,6 +353,35 @@ This is a holistic review of the ENTIRE sprint, not a single edit. Focus on:
 
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
 Focus on cross-cutting concerns that per-edit reviews would miss. Be concise."
+
+elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
+  MODE_INSTRUCTIONS="You are reviewing a WAVE MERGE — the coordinator just merged parallel sub-agent work into the main branch. ${LANG_DIRECTIVE}
+
+${CRITICAL_AXIS}
+
+${ITEM_CONTEXT}
+
+${GUARDRAILS_CONTEXT}
+
+${FAILURE_MODES}
+
+## Wave Merge Changes
+\`\`\`diff
+${COMBINED_DIFF}
+\`\`\`
+
+## Instructions
+This is code from parallel sub-agents merged by the coordinator. Sub-agents work in isolation, so focus on:
+1. Integration conflicts — do merged changes from different sub-agents work together correctly?
+2. API contract consistency — do producer/consumer interfaces match across merged items?
+3. Shared state conflicts — are there race conditions or conflicting writes to the same resources?
+4. Import/dependency coherence — are all needed imports present? Any duplicate or conflicting dependencies?
+5. Naming consistency — do newly added functions/variables follow the same conventions?
+6. Critical axis violations (if specified above)
+7. Security issues introduced by the merge
+
+Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
+Focus on cross-item integration issues that individual sub-agents couldn't detect. Be concise."
 
 elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
   MODE_INSTRUCTIONS="You are reviewing a SPRINT PLAN (Entry Gate report) for completeness and risks. ${LANG_DIRECTIVE}

@@ -18,6 +18,9 @@ __pycache__/
 .claude/hooks-config.local.sh
 .claude/hooks/*.local.sh
 
+# Hook runtime state (counters, timestamps — per-developer, not shared)
+.claude/.state/
+
 # Secrets — never commit API keys, credentials, or environment files
 .env
 .env.*

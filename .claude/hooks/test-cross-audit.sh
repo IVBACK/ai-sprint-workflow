@@ -2,9 +2,10 @@
 # Test script for cross-llm-audit.sh
 # Usage:
 #   bash .claude/hooks/test-cross-audit.sh              # Mock test (no API call)
-#   bash .claude/hooks/test-cross-audit.sh --live        # Live test (requires API key)
+#   bash .claude/hooks/test-cross-audit.sh --live        # Live test (uses .env or env vars)
 #
-# For live test, set env vars first:
+# Live test loads API key from .env automatically (same as the hook itself).
+# Or set env vars manually:
 #   export CROSS_AUDIT_API_KEY="your-key"
 #   export CROSS_AUDIT_API_BASE="https://models.inference.ai.azure.com"  # GitHub Models
 #   export CROSS_AUDIT_MODEL="gpt-4o"
@@ -75,9 +76,10 @@ assert_empty "no output without API key" "$OUT"
 
 # ── Test 3: Skip non-source files ──
 bold "Test 3: Skips non-source files"
-# Note: S*_ENTRY_GATE.md and S*_CLOSE_GATE.md are NOT skipped — they trigger
-# gate audit modes (entry-gate, close-gate). They are tested separately in tests 9-11.
-for skip_file in "TRACKING.md" "CLAUDE.md" "WORKFLOW.md" "Docs/Planning/Roadmap.md" \
+# Note: S*_ENTRY_GATE.md, S*_CLOSE_GATE.md, and TRACKING.md are NOT skipped —
+# they trigger special audit modes (entry-gate, close-gate, wave-review).
+# They are tested separately in tests 9-13.
+for skip_file in "CLAUDE.md" "WORKFLOW.md" "Docs/Planning/Roadmap.md" \
                  "SPRINT_CLOSE.md" "CODING_GUARDRAILS.md" "LESSONS.md" \
                  "config.json" ".env" "package-lock.json" "data.yaml"; do
   OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$skip_file\"}}" \
@@ -236,6 +238,42 @@ fi
 rm -f "$TEST_COUNTER"
 rm -rf "$TEMP_REPO"
 
+# ── Test 12: Wave-review mode (TRACKING.md triggers wave-review) ──
+bold "Test 12: Wave-review mode on TRACKING.md edit"
+TEMP_REPO=$(mktemp -d)
+git -C "$TEMP_REPO" init -q 2>/dev/null
+git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
+# Create source changes that would appear in a wave merge
+echo "function newFeature() { return 42; }" > "$TEMP_REPO/feature.js"
+git -C "$TEMP_REPO" add -A 2>/dev/null
+git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit -m "wave merge" -q 2>/dev/null
+# Create TRACKING.md (coordinator updating after merge)
+echo "| CORE-100 | Auth | fixed | ✓ |" > "$TEMP_REPO/TRACKING.md"
+OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/TRACKING.md\"}}" \
+  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_TRIGGER=wave \
+    CLAUDE_PROJECT_DIR="$TEMP_REPO" \
+    bash "$HOOK" 2>&1)
+# Wave-review should bypass wave counter and attempt audit (will fail at API call, that's ok)
+assert_exit "wave-review mode exits cleanly" 0 $?
+rm -rf "$TEMP_REPO"
+
+# ── Test 13: Wave-review skips when no code changes ──
+bold "Test 13: Wave-review skips when no code changes in diff"
+TEMP_REPO=$(mktemp -d)
+git -C "$TEMP_REPO" init -q 2>/dev/null
+git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
+# No source changes — only TRACKING.md
+echo "| CORE-100 | Auth | in_progress | |" > "$TEMP_REPO/TRACKING.md"
+OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/TRACKING.md\"}}" \
+  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_TRIGGER=wave CROSS_AUDIT_MIN_CHANGES=3 \
+    CLAUDE_PROJECT_DIR="$TEMP_REPO" \
+    bash "$HOOK" 2>&1)
+assert_exit "wave-review skips when no code diff" 0 $?
+assert_empty "no output for empty wave diff" "$OUT"
+rm -rf "$TEMP_REPO"
+
 # ══════════════════════════════════════════
 # Live test (optional)
 # ══════════════════════════════════════════
@@ -243,8 +281,28 @@ if [[ "$LIVE_MODE" == "--live" ]]; then
   echo ""
   bold "═══ LIVE API TEST ═══"
 
+  # Load .env the same way the hook does (shell env takes precedence)
+  _ENV_FILE="${PROJECT_DIR}/.env"
+  if [[ -f "$_ENV_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      key="${line%%=*}"
+      value="${line#*=}"
+      key=$(echo "$key" | sed 's/^[[:space:]]*export[[:space:]]*//' | tr -d '[:space:]')
+      value=$(echo "$value" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
+      if [[ "$key" == CROSS_AUDIT_* || "$key" == "ENABLE_CROSS_AUDIT" ]]; then
+        [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
+        _cur_val=$(printenv "$key" 2>/dev/null || true)
+        [[ -z "$_cur_val" ]] && export "$key=$value"
+      fi
+    done < "$_ENV_FILE"
+    echo "  Loaded cross-audit config from .env"
+  fi
+
   if [[ -z "${CROSS_AUDIT_API_KEY:-}" ]]; then
-    red "SKIP: CROSS_AUDIT_API_KEY not set. Export it first."
+    red "SKIP: CROSS_AUDIT_API_KEY not set."
+    red "  Option 1: Run  bash .claude/setup-audit.sh  to create .env"
+    red "  Option 2: export CROSS_AUDIT_API_KEY=\"your-key\" before running this script"
   else
     echo "Creating temporary test change..."
 
