@@ -46,8 +46,10 @@ bash .claude/setup-audit.sh
 ```
 
 The script walks you through provider selection, API key entry, and optional settings.
-Your API key is collected via hidden terminal input (`read -s`) and written directly to `.env`.
+Your API key is collected via hidden terminal input (`read -s`) and written to `.env`.
 **The key never enters the AI conversation.**
+
+**Data safety:** If `.env` or `hooks-config.local.sh` already exist, the script creates `.bak` backups before overwriting. Writes use atomic operations (temp file → move) to prevent corruption on interruption. The API key is quoted to handle special characters (`$`, `` ` ``, etc.). Signal traps ensure temp files are cleaned up on Ctrl+C.
 
 After the script completes, make a code change with 3+ lines to verify.
 

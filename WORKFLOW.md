@@ -261,7 +261,8 @@ existing project files (e.g., `package.json` reveals language + test framework).
 
 **Workflow Mode Recommendation:** After collecting answers, recommend a workflow mode
 based on project analysis. State the recommendation and let the user confirm:
-- **Lite** → Solo dev + small project (≤10 files) or rapid prototyping
+- **Freestyle** → Hackathon, experiments, learning (zero gate enforcement)
+- **Lite** → Solo dev + small project (≤10 files) — basic close gate + test regression enforced
 - **Standard** → Most projects (default)
 - **Strict** → Team + production systems, high-risk domains
 
@@ -292,7 +293,7 @@ project-root/
 │   ├── LESSONS_INDEX.md               # Bug → rule traceability
 │   ├── PARALLEL-EXECUTION.md         # Parallel wave patterns (optional, user-triggered)
 │   ├── CROSS-LLM-AUDIT.md           # Cross-LLM audit setup guide (optional)
-│   ├── WORKFLOW-MODES.md             # Lite/Standard/Strict mode details
+│   ├── WORKFLOW-MODES.md             # Freestyle/Lite/Standard/Strict mode details
 │   ├── TEAM-GUIDE.md                 # Team topologies, dependencies, PR/CI (team only)
 │   ├── UNITY-GUIDE.md                # Unity-specific git/LFS/scene rules (optional)
 │   ├── SPRINT-INDEX.md               # Topic-first cross-sprint retrieval index
@@ -2500,9 +2501,12 @@ Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
 # Version — tracks which WORKFLOW.md version these hooks were generated from.
 HOOKS_VERSION="2.1"
 
-WORKFLOW_MODE="standard"  # "lite", "standard", or "strict"
+WORKFLOW_MODE="standard"  # "freestyle", "lite", "standard", or "strict"
 
 # Mode-based defaults are set automatically (see actual file for case block).
+# Modes: freestyle (5/11 hooks, no gates), lite (7/11, close gate + CP3/CP4),
+#         standard (11/11, full workflow), strict (11/11 forced, no overrides).
+# Cross-audit defaults also vary by mode (wave-size, context, min-changes, enforce-block).
 # Hook flags use mode preset; individual HOOK_* overrides are below the case block.
 
 # ── Defaults ──────────────────────────────────────────────────
@@ -3734,6 +3738,34 @@ The `<!-- workflow-version -->` comment is **auto-maintained** — during bootst
 
 ### Upgrade Procedure
 
+#### Option A — CLI Upgrade (Recommended)
+
+```bash
+sprint-workflow upgrade        # interactive, asks for confirmation
+sprint-workflow upgrade --yes  # non-interactive (CI/scripting)
+```
+
+The CLI upgrade command automatically:
+
+1. **Fetches latest** — clones the upstream repo (shallow, temporary).
+2. **Compares versions** — if `HOOKS_VERSION` matches upstream `workflow-version`, reports "already up to date" and stops.
+3. **Backs up** — creates `hooks-config.sh.bak` and `settings.json.bak` before any changes.
+4. **Updates WORKFLOW.md** — only if the local copy is unmodified (version tag matches `HOOKS_VERSION`). If locally modified, skips with a warning.
+5. **Overwrites hook scripts** — these are framework code; always replaced with latest.
+6. **Merges settings.json** — adds new upstream hooks, preserves user-added custom hooks (uses `jq` merge when available; falls back to overwrite with backup).
+7. **Preserves user overrides** — extracts all `WORKFLOW_MODE`, `HOOK_*`, `ENABLE_*`, `CROSS_AUDIT_ENFORCE_BLOCK` values from old `hooks-config.sh`, applies them to the new template.
+8. **Bumps `HOOKS_VERSION`** — always updated to match the upstream version.
+9. **Shows summary** — lists what was updated, what user overrides were preserved, and what was skipped.
+
+**Data safety guarantees:**
+- No user configuration is lost — all overrides are extracted and restored.
+- Custom hooks in `settings.json` are preserved (merge, not replace).
+- `.env` and `hooks-config.local.sh` are never touched.
+- Atomic writes prevent corruption on interruption or disk-full.
+- Backup files (`.bak`) allow manual recovery if needed.
+
+#### Option B — AI-Driven Upgrade (Manual)
+
 When a user provides a new WORKFLOW.md (via GitHub link, download, or copy), the AI follows this procedure:
 
 **Step 1 — Detect versions**
@@ -3837,13 +3869,16 @@ Each changelog entry uses a prefix that tells the AI what action to take:
 
 When the user says something like: *"Update the workflow from https://github.com/user/ai-sprint-workflow"*
 
+**Preferred:** Run `sprint-workflow upgrade` — it handles everything automatically (Option A above).
+
+**Alternative (AI-driven, Option B):**
 1. Fetch the new `WORKFLOW.md` from the repository (use `curl` or `WebFetch` on the raw URL).
 2. Save it to the project root, replacing the old WORKFLOW.md.
 3. Optionally update `.claude/hooks/` from the repo (clone → `cp -r .claude/ .`) to get tested hook implementations. Or let the AI regenerate from updated WORKFLOW.md templates.
-4. Run the Upgrade Procedure above (Steps 1-7).
+4. Run the AI-Driven Upgrade Procedure above (Steps 1-7).
 
 **Edge cases:**
-- **No `.claude/` directory at all:** This is a fresh project, not an upgrade. Clone the repo and copy `.claude/` (recommended) or run bootstrap (Step 8.5).
+- **No `.claude/` directory at all:** This is a fresh project, not an upgrade. Run `sprint-workflow init` (recommended) or clone the repo and copy `.claude/`.
 - **`.claude/` exists but no `HOOKS_VERSION`:** Pre-version system (v1.0 era). Treat as v1.0 and apply all changelog entries from v2.0 onward.
 - **Custom hooks not in template:** Leave them untouched. They are user-specific extensions — the upgrade procedure only touches hooks listed in the changelog.
 

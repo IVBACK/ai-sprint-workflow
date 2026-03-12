@@ -22,28 +22,39 @@ HOOKS_VERSION="2.1"
 #   echo 'HOOK_ENTRY_GATE_SESSION=false' >> .claude/hooks-config.local.sh
 #
 # ── Workflow Mode Presets ──
-# Set WORKFLOW_MODE to auto-configure hooks for your project's needs.
+# Set WORKFLOW_MODE to auto-configure hooks and audit defaults for your project.
 # Individual overrides below still take precedence over the mode preset.
 #
-#   lite     — Solo dev, fast iteration. Core safety only.
-#              Enables: protect-claude, validate-tracking, session-start, id-uniqueness
-#              Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression
+#   freestyle — Hackathon, experiments, learning. Safety only, zero workflow enforcement.
+#               Enables: protect-claude, protect-secrets, validate-tracking, session-start, id-uniqueness (5/11)
+#               Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression
+#               Gates: none enforced (AI follows WORKFLOW.md voluntarily)
+#               Cross-audit defaults: N/A (not recommended)
+#
+#   lite     — Solo dev, small projects. Lightweight gates with basic enforcement.
+#              Enables: 5 core + close-gate + test-regression (7/11)
+#              Disables: entry-gate-session, sprint-close, audit-signals (CP1/CP2)
+#              Gates: abbreviated Entry Gate, basic Close Gate (sprint-audit.sh + verdict)
+#              Cross-audit defaults: wave-size 8, context minimal, min-changes 5
 #
 #   standard — Default. Full workflow with all hooks.
-#              Enables: all hooks
+#              Enables: all hooks (11/11)
+#              Cross-audit defaults: wave-size 5, context standard, min-changes 3
 #
 #   strict   — Team + critical systems. All hooks mandatory, no individual overrides.
 #              Enables: all hooks (overrides ignored — see note below)
+#              Cross-audit defaults: wave-size 3, context full, min-changes 1, enforce-block true
 #
 # Usage: set WORKFLOW_MODE and leave individual flags commented out to use the preset.
 #        Or set WORKFLOW_MODE and override specific flags below.
 #        strict mode ignores individual overrides — all hooks are forced on.
 
-WORKFLOW_MODE="standard"  # ← "lite", "standard", or "strict"
+WORKFLOW_MODE="standard"  # ← "freestyle", "lite", "standard", or "strict"
 
 # ── Mode-based defaults ──
 case "${WORKFLOW_MODE}" in
-  lite)
+  freestyle)
+    # Safety only — zero workflow enforcement
     _PROTECT_CLAUDE_MD=true
     _PROTECT_SECRETS=true
     _VALIDATE_TRACKING=true
@@ -54,8 +65,28 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=false
     _VALIDATE_SPRINT_CLOSE=false
     _DETECT_AUDIT_SIGNALS=false
+    # Cross-audit: not tuned (use global defaults if enabled manually)
+    ;;
+  lite)
+    # Core safety + close gate + test regression
+    _PROTECT_CLAUDE_MD=true
+    _PROTECT_SECRETS=true
+    _VALIDATE_TRACKING=true
+    _SESSION_START_PROTOCOL=true
+    _VALIDATE_ID_UNIQUENESS=true
+    _ENTRY_GATE_SESSION=false
+    _DETECT_TEST_REGRESSION=true
+    _VALIDATE_CLOSE_GATE=true
+    _VALIDATE_SPRINT_CLOSE=false
+    _DETECT_AUDIT_SIGNALS=false
+    # Cross-audit: relaxed defaults for small projects
+    _D_CROSS_AUDIT_WAVE_SIZE=8
+    _D_CROSS_AUDIT_CONTEXT=minimal
+    _D_CROSS_AUDIT_MIN_CHANGES=5
+    _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
   strict)
+    # All hooks forced on (overrides ignored after local config load)
     _PROTECT_CLAUDE_MD=true
     _PROTECT_SECRETS=true
     _VALIDATE_TRACKING=true
@@ -66,6 +97,11 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=true
     _VALIDATE_SPRINT_CLOSE=true
     _DETECT_AUDIT_SIGNALS=true
+    # Cross-audit: tighter defaults for critical projects
+    _D_CROSS_AUDIT_WAVE_SIZE=3
+    _D_CROSS_AUDIT_CONTEXT=full
+    _D_CROSS_AUDIT_MIN_CHANGES=1
+    _D_CROSS_AUDIT_ENFORCE_BLOCK=true
     ;;
   *)  # standard (default)
     _PROTECT_CLAUDE_MD=true
@@ -78,6 +114,11 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=true
     _VALIDATE_SPRINT_CLOSE=true
     _DETECT_AUDIT_SIGNALS=true
+    # Cross-audit: balanced defaults
+    _D_CROSS_AUDIT_WAVE_SIZE=5
+    _D_CROSS_AUDIT_CONTEXT=standard
+    _D_CROSS_AUDIT_MIN_CHANGES=3
+    _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
 esac
 
@@ -143,14 +184,14 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 _D_ENABLE_CROSS_AUDIT=false                              # Master switch
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
 _D_CROSS_AUDIT_TRIGGER=wave                              # "wave" (every N edits) or "item" (every edit)
-_D_CROSS_AUDIT_CONTEXT=standard                          # "minimal", "standard", "full"
+_D_CROSS_AUDIT_CONTEXT="${_D_CROSS_AUDIT_CONTEXT:-standard}"  # "minimal", "standard", "full" (mode-aware)
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
-_D_CROSS_AUDIT_MIN_CHANGES=3                             # Min changed lines to trigger
+_D_CROSS_AUDIT_MIN_CHANGES="${_D_CROSS_AUDIT_MIN_CHANGES:-3}"  # Min changed lines to trigger (mode-aware)
 _D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
 _D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
-_D_CROSS_AUDIT_ENFORCE_BLOCK=false                       # Exit non-zero on BLOCK verdict
+_D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
 # Wave Batching
-_D_CROSS_AUDIT_WAVE_SIZE=5                               # Edits before wave fires
+_D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
 _D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
 # Diff Truncation (max characters sent to external LLM)
 _D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE=48000                 # Close Gate (holistic sprint)

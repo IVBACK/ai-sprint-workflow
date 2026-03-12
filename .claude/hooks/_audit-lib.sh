@@ -131,7 +131,7 @@ _call_audit_api() {
     }
   else
     request_body=$(jq -n --arg model "$model" --rawfile prompt "$prompt_file" \
-      '{"model":$model,"messages":[{"role":"user","content":$prompt}],"temperature":0.1,"max_tokens":2000}')
+      '{"model":$model,"messages":[{"role":"user","content":$prompt}],"temperature":0.1,"max_tokens":2000,"response_format":{"type":"json_object"}}')
     response=$(curl -s --max-time "$timeout" -w "\n%{http_code}" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${api_key}" \
@@ -172,9 +172,22 @@ _call_audit_api() {
     return 1
   fi
 
-  # Parse verdict
+  # Parse verdict — layered: raw → strip fences → extract JSON substring
   _AUDIT_VERDICT=$(echo "$_AUDIT_CONTENT" | jq -r '.verdict // empty' 2>/dev/null || true)
-  [[ -z "$_AUDIT_VERDICT" ]] && _AUDIT_VERDICT="UNKNOWN"
+  if [[ -z "$_AUDIT_VERDICT" ]]; then
+    local _clean
+    _clean=$(echo "$_AUDIT_CONTENT" | sed '/^[[:space:]]*```[a-z]*/d')
+    _AUDIT_VERDICT=$(echo "$_clean" | jq -r '.verdict // empty' 2>/dev/null || true)
+  fi
+  if [[ -z "$_AUDIT_VERDICT" ]]; then
+    local _extracted
+    _extracted=$(echo "$_AUDIT_CONTENT" | sed -n '/{/,/}/p')
+    _AUDIT_VERDICT=$(echo "$_extracted" | jq -r '.verdict // empty' 2>/dev/null || true)
+  fi
+  if [[ -z "$_AUDIT_VERDICT" ]]; then
+    _AUDIT_VERDICT="UNKNOWN"
+    echo "Cross-audit: WARNING — Could not parse verdict from LLM response." >&2
+  fi
   _AUDIT_MODEL="$model"
 
   return 0

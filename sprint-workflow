@@ -42,11 +42,12 @@ declare -A _MSG_EN=(
   [exists]="exists, skipped"
   [hooks_inactive]="Hooks are Claude Code-only. .claude/ directory is inactive for"
   [workflow_via_md]="The workflow still works via WORKFLOW.md + markdown files."
-  [mode_lite]="Lite     — solo dev, small projects (~5 min/gate)"
+  [mode_freestyle]="Freestyle — hackathon, experiments, learning (~0 min/gate)"
+  [mode_lite]="Lite     — solo dev, small projects (~7 min/gate)"
   [mode_standard]="Standard — most projects, default (~15 min/gate)"
   [mode_strict]="Strict   — teams, critical systems (~25 min/gate)"
   [mode_tell_ai]="Tell the AI at session start:"
-  [mode_options]="Options: lite, standard, strict"
+  [mode_options]="Options: freestyle, lite, standard, strict"
   [audit_desc1]="A second AI silently reviews every ~5 code changes for bugs,"
   [audit_desc2]="security issues, and blind spots. Results appear inline."
   [audit_providers]="Supports: OpenAI, Anthropic, GitHub Models, Ollama (free/local)"
@@ -117,11 +118,12 @@ declare -A _MSG_TR=(
   [exists]="mevcut, atlandı"
   [hooks_inactive]="Hooklar yalnızca Claude Code içindir. .claude/ dizini aktif değil:"
   [workflow_via_md]="Workflow yine de WORKFLOW.md + markdown dosyaları ile çalışır."
-  [mode_lite]="Lite     — solo geliştirici, küçük projeler (~5 dk/geçit)"
+  [mode_freestyle]="Freestyle — hackathon, deneyler, öğrenme (~0 dk/geçit)"
+  [mode_lite]="Lite     — solo geliştirici, küçük projeler (~7 dk/geçit)"
   [mode_standard]="Standard — çoğu proje, varsayılan (~15 dk/geçit)"
   [mode_strict]="Strict   — takımlar, kritik sistemler (~25 dk/geçit)"
   [mode_tell_ai]="Oturum başlangıcında AI'a söyleyin:"
-  [mode_options]="Seçenekler: lite, standard, strict"
+  [mode_options]="Seçenekler: freestyle, lite, standard, strict"
   [audit_desc1]="İkinci bir AI, her ~5 kod değişikliğinde hataları,"
   [audit_desc2]="güvenlik sorunlarını ve kör noktaları sessizce inceler."
   [audit_providers]="Desteklenen: OpenAI, Anthropic, GitHub Models, Ollama (ücretsiz/yerel)"
@@ -399,20 +401,21 @@ cmd_init() {
   else
     _step "3/5" "$(_msg step_mode)"
     echo ""
-    echo "    1) $(_msg mode_lite)"
-    echo "    2) $(_msg mode_standard)"
-    echo "    3) $(_msg mode_strict)"
+    echo "    1) $(_msg mode_freestyle)"
+    echo "    2) $(_msg mode_lite)"
+    echo "    3) $(_msg mode_standard)"
+    echo "    4) $(_msg mode_strict)"
     echo ""
     local mode_choice
-    read -rp "    → [2] " mode_choice
-    mode_choice="${mode_choice:-2}"
+    read -rp "    → [3] " mode_choice
+    mode_choice="${mode_choice:-3}"
     case "$mode_choice" in
-      1) mode="lite" ;; 3) mode="strict" ;; *) mode="standard" ;;
+      1) mode="freestyle" ;; 2) mode="lite" ;; 4) mode="strict" ;; *) mode="standard" ;;
     esac
   fi
 
   if [[ "$has_hooks" == "true" && -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
-    sed -i "s/^WORKFLOW_MODE=.*/WORKFLOW_MODE=\"$mode\"/" "$_PROJECT_DIR/.claude/hooks-config.sh"
+    _safe_sed_replace "$_PROJECT_DIR/.claude/hooks-config.sh" "^WORKFLOW_MODE=.*" "WORKFLOW_MODE=\"$mode\""
     # Only print confirmation if not already printed by --mode or --auto
     [[ -z "$opt_mode" && "$auto" != "true" ]] && _check "WORKFLOW_MODE=$mode"
   else
@@ -699,11 +702,11 @@ cmd_config() {
   # Two args: set value
   case "$key" in
     mode)
-      if [[ "$value" =~ ^(lite|standard|strict)$ ]]; then
-        sed -i "s/^WORKFLOW_MODE=.*/WORKFLOW_MODE=\"$value\"/" "$config_file"
+      if [[ "$value" =~ ^(freestyle|lite|standard|strict)$ ]]; then
+        _safe_sed_replace "$config_file" "^WORKFLOW_MODE=.*" "WORKFLOW_MODE=\"$value\""
         _check "WORKFLOW_MODE=$value"
       else
-        _fail "Invalid mode: $value (use: lite, standard, strict)"
+        _fail "Invalid mode: $value (use: freestyle, lite, standard, strict)"
         return 1
       fi
       ;;
@@ -713,7 +716,7 @@ cmd_config() {
       mkdir -p "$_PROJECT_DIR/.claude"
       touch "$local_config"
       if grep -q "^$env_key=" "$local_config" 2>/dev/null; then
-        sed -i "s/^$env_key=.*/$env_key=$value/" "$local_config"
+        _safe_sed_replace "$local_config" "^${env_key}=.*" "${env_key}=${value}"
       else
         echo "$env_key=$value" >> "$local_config"
       fi
@@ -722,7 +725,7 @@ cmd_config() {
     hook.*)
       local hook_key="HOOK_$(echo "${key#hook.}" | tr '[:lower:]-' '[:upper:]_')"
       if grep -q "^$hook_key=" "$config_file" 2>/dev/null; then
-        sed -i "s/^$hook_key=.*/$hook_key=$value/" "$config_file"
+        _safe_sed_replace "$config_file" "^${hook_key}=.*" "${hook_key}=${value}"
       else
         echo "$hook_key=$value" >> "$config_file"
       fi
@@ -1017,6 +1020,164 @@ cmd_doctor() {
 # ════════════════════════════════════════════════════════════════
 # COMMAND: upgrade
 # ════════════════════════════════════════════════════════════════
+
+# Escape a string for safe use as sed replacement text
+# Handles: \ & | / newlines
+_sed_escape() {
+  printf '%s' "$1" | sed -e 's/[\\&|/]/\\&/g'
+}
+
+# Atomic file write: write to temp, then mv (prevents partial writes)
+# Preserves original file permissions when target exists
+_atomic_write() {
+  local target="$1"
+  local content="$2"
+  local tmp
+  tmp=$(mktemp "${target}.tmp.XXXXXX") || { echo "ERROR: mktemp failed for $target" >&2; return 1; }
+  printf '%s' "$content" > "$tmp" || { rm -f "$tmp"; return 1; }
+  # Preserve permissions of original file if it exists
+  [[ -f "$target" ]] && chmod --reference="$target" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$target" || { rm -f "$tmp"; return 1; }
+}
+
+# Safe sed replacement: escapes value, uses atomic write via temp file
+_safe_sed_replace() {
+  local file="$1" pattern="$2" replacement="$3"
+  local escaped_replacement
+  escaped_replacement=$(_sed_escape "$replacement")
+  local tmp="${file}.tmp.sed"
+  sed "s|${pattern}|${escaped_replacement}|" "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+}
+
+# Extract all user-set variables from hooks-config.sh
+# Returns lines like: WORKFLOW_MODE="lite"
+_extract_user_overrides() {
+  local config_file="$1"
+  [[ ! -f "$config_file" ]] && return
+
+  # Capture all uncommented variable assignments that users can customize:
+  #   WORKFLOW_MODE, HOOK_*, ENABLE_*, CROSS_AUDIT_ENFORCE_BLOCK
+  grep -E '^(WORKFLOW_MODE|HOOK_|ENABLE_|CROSS_AUDIT_ENFORCE_BLOCK)' "$config_file" 2>/dev/null || true
+}
+
+# Apply saved overrides back into the new config file
+# Uses atomic writes to prevent partial-restore corruption
+_restore_user_overrides() {
+  local config_file="$1"
+  local overrides_file="$2"
+  local restore_summary=""
+
+  [[ ! -f "$overrides_file" ]] && return
+
+  # Work on a temp copy — only replace original when fully done
+  local work_copy="${config_file}.restore.tmp"
+  cp "$config_file" "$work_copy" || return 1
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local var_name="${line%%=*}"
+    local var_value="${line#*=}"
+    local escaped_value
+    escaped_value=$(_sed_escape "$var_value")
+
+    # Check if variable exists in new config (commented or uncommented)
+    if grep -qE "^#?\s*${var_name}=" "$work_copy" 2>/dev/null; then
+      # Replace the line (uncommented or commented form)
+      sed "s|^#*[[:space:]]*${var_name}=.*|${var_name}=${escaped_value}|" "$work_copy" > "${work_copy}.sed" \
+        && mv -f "${work_copy}.sed" "$work_copy" \
+        || { rm -f "${work_copy}.sed"; }
+    else
+      # Variable doesn't exist in new template — append before strict enforcement block
+      local marker='# ── Strict mode enforcement'
+      if grep -qF "$marker" "$work_copy" 2>/dev/null; then
+        # Use awk for safe insertion (avoids sed delimiter issues with marker)
+        awk -v line="${var_name}=${var_value}" -v mark="$marker" \
+          '{if (index($0, mark)) print line; print}' "$work_copy" > "${work_copy}.sed" \
+          && mv -f "${work_copy}.sed" "$work_copy" \
+          || { rm -f "${work_copy}.sed"; }
+      else
+        echo "${var_name}=${var_value}" >> "$work_copy"
+      fi
+    fi
+    restore_summary="${restore_summary}    ${var_name}=${var_value}\n"
+  done < "$overrides_file"
+
+  # Atomic swap: only replace original after all overrides applied successfully
+  mv -f "$work_copy" "$config_file"
+  rm -f "${work_copy}.sed" 2>/dev/null
+
+  echo -e "$restore_summary"
+}
+
+# Merge settings.json: add new hooks from upstream, keep user's existing hooks
+_merge_settings_json() {
+  local user_file="$1"
+  local upstream_file="$2"
+
+  if [[ ! -f "$user_file" ]]; then
+    cp "$upstream_file" "$user_file"
+    return 0
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "WARN_NO_JQ"
+    cp "$upstream_file" "$user_file"
+    return 0
+  fi
+
+  # Strategy: for each hook event (SessionStart, PreToolUse, PostToolUse),
+  # take the upstream hooks as base, then add any user hooks whose command
+  # doesn't already exist in upstream.
+  local merged
+  merged=$(jq -s '
+    def merge_hook_group:
+      # $base = upstream entries, $user = user entries for same event
+      # Keep all upstream, add user entries whose command is not in upstream
+      . as [$base, $user] |
+      ($base | [.[].hooks[].command]) as $base_cmds |
+      $base + [$user[] | select(
+        [.hooks[].command] | any(. as $cmd | $base_cmds | index($cmd) | not)
+      )];
+
+    .[0] as $upstream | .[1] as $user |
+    ($upstream.hooks | keys) as $upstream_events |
+    ($user.hooks | keys) as $user_events |
+    ($upstream_events + $user_events | unique) as $all_events |
+
+    $upstream | .hooks = (
+      [
+        $all_events[] | . as $event |
+        {
+          ($event): (
+            if ($upstream.hooks[$event] // null) == null then
+              $user.hooks[$event]
+            elif ($user.hooks[$event] // null) == null then
+              $upstream.hooks[$event]
+            else
+              [$upstream.hooks[$event], $user.hooks[$event]] | merge_hook_group
+            end
+          )
+        }
+      ] | add
+    )
+  ' "$upstream_file" "$user_file" 2>/dev/null)
+
+  if [[ -n "$merged" && "$merged" != "null" ]]; then
+    local tmp_json="${user_file}.tmp.merge"
+    echo "$merged" | jq '.' > "$tmp_json" || { rm -f "$tmp_json"; echo "WARN_MERGE_FAIL"; cp "$upstream_file" "$user_file"; return 0; }
+    # Preserve permissions and atomic swap
+    [[ -f "$user_file" ]] && chmod --reference="$user_file" "$tmp_json" 2>/dev/null || true
+    mv -f "$tmp_json" "$user_file" || { rm -f "$tmp_json"; echo "WARN_MERGE_FAIL"; cp "$upstream_file" "$user_file"; return 0; }
+    return 0
+  else
+    # jq merge failed — fall back to overwrite
+    echo "WARN_MERGE_FAIL"
+    cp "$upstream_file" "$user_file"
+    return 0
+  fi
+}
+
 cmd_upgrade() {
   local auto_yes=false
   [[ "${1:-}" == "--yes" || "${1:-}" == "-y" ]] && auto_yes=true
@@ -1062,50 +1223,123 @@ cmd_upgrade() {
     fi
   fi
 
-  # Backup
+  # ── Track changes for summary ──
+  local summary_preserved="" summary_updated="" summary_skipped=""
+
+  # ── Backup hooks-config.sh ──
+  local overrides_file=""
   if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
     cp "$_PROJECT_DIR/.claude/hooks-config.sh" "$_PROJECT_DIR/.claude/hooks-config.sh.bak"
     _check "$(_msg backed_up) hooks-config.sh"
+    # Extract all user overrides before overwriting
+    overrides_file=$(mktemp)
+    _extract_user_overrides "$_PROJECT_DIR/.claude/hooks-config.sh" > "$overrides_file"
   fi
 
-  cp "$temp_dir/WORKFLOW.md" "$_PROJECT_DIR/WORKFLOW.md"
-  _check "$(_msg updated) WORKFLOW.md"
+  # ── Backup settings.json ──
+  if [[ -f "$_PROJECT_DIR/.claude/settings.json" ]]; then
+    cp "$_PROJECT_DIR/.claude/settings.json" "$_PROJECT_DIR/.claude/settings.json.bak"
+    _check "$(_msg backed_up) settings.json"
+  fi
 
+  # ── WORKFLOW.md: skip if user modified ──
+  local workflow_updated=false
+  if [[ -f "$_PROJECT_DIR/WORKFLOW.md" ]]; then
+    # Compare local workflow-version tag with current HOOKS_VERSION
+    # If they match, user hasn't modified it — safe to overwrite
+    local local_wf_version
+    local_wf_version=$(grep 'workflow-version:' "$_PROJECT_DIR/WORKFLOW.md" 2>/dev/null | head -1 | sed 's/.*workflow-version: *//' | sed 's/ *-->.*//')
+    if [[ "$local_wf_version" == "$current_version" ]]; then
+      cp "$temp_dir/WORKFLOW.md" "$_PROJECT_DIR/WORKFLOW.md"
+      _check "$(_msg updated) WORKFLOW.md"
+      workflow_updated=true
+      summary_updated="${summary_updated}    WORKFLOW.md\n"
+    else
+      _warn "WORKFLOW.md: local modifications detected — skipped"
+      echo "    Backup: diff $_PROJECT_DIR/WORKFLOW.md $temp_dir/WORKFLOW.md"
+      summary_skipped="${summary_skipped}    WORKFLOW.md (local modifications)\n"
+    fi
+  else
+    cp "$temp_dir/WORKFLOW.md" "$_PROJECT_DIR/WORKFLOW.md"
+    _check "$(_msg updated) WORKFLOW.md"
+    workflow_updated=true
+    summary_updated="${summary_updated}    WORKFLOW.md\n"
+  fi
+
+  # ── Hook scripts: always overwrite (framework code) ──
   if [[ -d "$_PROJECT_DIR/.claude/hooks" ]]; then
     cp "$temp_dir"/.claude/hooks/*.sh "$_PROJECT_DIR/.claude/hooks/"
     chmod +x "$_PROJECT_DIR"/.claude/hooks/*.sh
     _check "$(_msg updated) hook scripts"
+    summary_updated="${summary_updated}    hook scripts\n"
   fi
 
-  [[ -f "$temp_dir/.claude/settings.json" ]] && cp "$temp_dir/.claude/settings.json" "$_PROJECT_DIR/.claude/settings.json" && _check "$(_msg updated) settings.json"
-  [[ -f "$temp_dir/.claude/setup-audit.sh" ]] && cp "$temp_dir/.claude/setup-audit.sh" "$_PROJECT_DIR/.claude/setup-audit.sh" && chmod +x "$_PROJECT_DIR/.claude/setup-audit.sh" && _check "$(_msg updated) setup-audit.sh"
+  # ── settings.json: merge, not overwrite ──
+  if [[ -f "$temp_dir/.claude/settings.json" ]]; then
+    local merge_result
+    merge_result=$(_merge_settings_json "$_PROJECT_DIR/.claude/settings.json" "$temp_dir/.claude/settings.json")
+    if [[ "$merge_result" == "WARN_NO_JQ" ]]; then
+      _warn "jq not found — settings.json overwritten (backup: settings.json.bak)"
+      summary_updated="${summary_updated}    settings.json (overwritten, no jq)\n"
+    elif [[ "$merge_result" == "WARN_MERGE_FAIL" ]]; then
+      _warn "settings.json merge failed — overwritten (backup: settings.json.bak)"
+      summary_updated="${summary_updated}    settings.json (overwritten, merge failed)\n"
+    else
+      _check "$(_msg updated) settings.json (merged)"
+      summary_updated="${summary_updated}    settings.json (merged)\n"
+    fi
+  fi
 
+  # ── setup-audit.sh ──
+  [[ -f "$temp_dir/.claude/setup-audit.sh" ]] && cp "$temp_dir/.claude/setup-audit.sh" "$_PROJECT_DIR/.claude/setup-audit.sh" && chmod +x "$_PROJECT_DIR/.claude/setup-audit.sh" && _check "$(_msg updated) setup-audit.sh" && summary_updated="${summary_updated}    setup-audit.sh\n"
+
+  # ── Docs/ ──
   if [[ -d "$temp_dir/Docs" ]]; then
     mkdir -p "$_PROJECT_DIR/Docs"
     for ref in PARALLEL-EXECUTION.md CROSS-LLM-AUDIT.md WORKFLOW-MODES.md TEAM-GUIDE.md UNITY-GUIDE.md; do
       [[ -f "$temp_dir/Docs/$ref" ]] && cp "$temp_dir/Docs/$ref" "$_PROJECT_DIR/Docs/$ref"
     done
     _check "$(_msg updated) Docs/"
+    summary_updated="${summary_updated}    Docs/\n"
   fi
 
-  [[ -d "$temp_dir/dashboard" ]] && cp -r "$temp_dir/dashboard" "$_PROJECT_DIR/" && chmod +x "$_PROJECT_DIR/dashboard/sprint-status" 2>/dev/null && _check "$(_msg updated) dashboard"
+  # ── Dashboard ──
+  [[ -d "$temp_dir/dashboard" ]] && cp -r "$temp_dir/dashboard" "$_PROJECT_DIR/" && chmod +x "$_PROJECT_DIR/dashboard/sprint-status" 2>/dev/null && _check "$(_msg updated) dashboard" && summary_updated="${summary_updated}    dashboard/\n"
 
-  # Restore mode
-  if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh.bak" ]]; then
-    local old_mode
-    old_mode=$(grep '^WORKFLOW_MODE=' "$_PROJECT_DIR/.claude/hooks-config.sh.bak" | head -1 | cut -d'"' -f2)
-    if [[ -n "$old_mode" ]]; then
-      sed -i "s/^WORKFLOW_MODE=.*/WORKFLOW_MODE=\"$old_mode\"/" "$_PROJECT_DIR/.claude/hooks-config.sh"
-      _check "$(_msg restored) WORKFLOW_MODE=$old_mode"
-    fi
+  # ── Restore ALL user overrides to new hooks-config.sh ──
+  if [[ -n "$overrides_file" && -f "$overrides_file" && -s "$overrides_file" ]]; then
+    # Copy new template first
+    cp "$temp_dir/.claude/hooks-config.sh" "$_PROJECT_DIR/.claude/hooks-config.sh"
+    summary_preserved=$(_restore_user_overrides "$_PROJECT_DIR/.claude/hooks-config.sh" "$overrides_file")
+    _check "Restored user overrides to hooks-config.sh"
+    rm -f "$overrides_file"
   fi
 
+  # ── Bump HOOKS_VERSION (always takes precedence) ──
   if [[ -n "$latest_version" && -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
-    sed -i "s/^HOOKS_VERSION=.*/HOOKS_VERSION=\"$latest_version\"/" "$_PROJECT_DIR/.claude/hooks-config.sh"
+    _safe_sed_replace "$_PROJECT_DIR/.claude/hooks-config.sh" "^HOOKS_VERSION=.*" "HOOKS_VERSION=\"$latest_version\""
     _check "$(_msg bumped) HOOKS_VERSION → $latest_version"
   fi
 
   rm -rf "$temp_dir"
+
+  # ── Upgrade Summary ──
+  echo ""
+  echo "  $(_bold 'Upgrade Summary') ($current_version → $latest_version)"
+  echo "  ───────────────"
+  if [[ -n "$summary_updated" ]]; then
+    echo "  Updated:"
+    echo -e "$summary_updated"
+  fi
+  if [[ -n "$summary_preserved" ]]; then
+    echo "  Preserved user overrides:"
+    echo -e "$summary_preserved"
+  fi
+  if [[ -n "$summary_skipped" ]]; then
+    echo "  Skipped:"
+    echo -e "$summary_skipped"
+  fi
+  echo "  Backups: hooks-config.sh.bak, settings.json.bak"
   echo ""
   _check "$(_msg upgrade_complete) $current_version → $latest_version"
   echo ""
@@ -1141,7 +1375,7 @@ _sprint_workflow() {
       COMPREPLY=( $(compgen -W "claude-code cursor copilot windsurf cline codex gemini other" -- "$cur") )
       ;;
     --mode)
-      COMPREPLY=( $(compgen -W "lite standard strict" -- "$cur") )
+      COMPREPLY=( $(compgen -W "freestyle lite standard strict" -- "$cur") )
       ;;
     --lang)
       COMPREPLY=( $(compgen -W "en tr" -- "$cur") )
@@ -1189,7 +1423,7 @@ _sprint_workflow() {
         upgrade) _values 'flags' '--yes' ;;
         completions) _values 'shell' 'bash' 'zsh' 'fish' ;;
         --agent) _values 'agents' 'claude-code' 'cursor' 'copilot' 'windsurf' 'cline' 'codex' 'gemini' 'other' ;;
-        --mode)  _values 'modes' 'lite' 'standard' 'strict' ;;
+        --mode)  _values 'modes' 'freestyle' 'lite' 'standard' 'strict' ;;
         --lang)  _values 'langs' 'en' 'tr' ;;
       esac ;;
   esac
@@ -1211,7 +1445,7 @@ complete -c sprint-workflow -n '__fish_use_subcommand' -a 'completions' -d 'Gene
 complete -c sprint-workflow -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l auto -d 'Non-interactive mode'
 complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l agent -xa 'claude-code cursor copilot windsurf cline codex gemini other'
-complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l mode -xa 'lite standard strict'
+complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l mode -xa 'freestyle lite standard strict'
 complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l no-audit -d 'Skip audit setup'
 complete -c sprint-workflow -n '__fish_seen_subcommand_from init' -l lang -xa 'en tr'
 complete -c sprint-workflow -n '__fish_seen_subcommand_from log' -l all -d 'Show all entries'
@@ -1239,14 +1473,14 @@ cmd_help() {
   echo "    $(_bold 'init')          Install files + interactive onboarding + launch bootstrap"
   echo "                   --auto          Non-interactive (defaults: claude-code, standard, no audit)"
   echo "                   --agent NAME    Set agent (claude-code|cursor|copilot|windsurf|cline|codex|gemini)"
-  echo "                   --mode MODE     Set mode (lite|standard|strict)"
+  echo "                   --mode MODE     Set mode (freestyle|lite|standard|strict)"
   echo "                   --no-audit      Skip cross-LLM audit setup"
   echo "                   --lang LANG     UI language (en|tr)"
   echo ""
   echo "    $(_bold 'config')        View or set configuration"
   echo "                   config                    Show all settings"
   echo "                   config mode               Get workflow mode"
-  echo "                   config mode lite           Set workflow mode"
+  echo "                   config mode lite           Set workflow mode (freestyle|lite|standard|strict)"
   echo "                   config audit.wave-size 10  Set audit wave size"
   echo "                   config hook.protect-claude true  Toggle a hook"
   echo ""

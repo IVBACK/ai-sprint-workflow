@@ -644,7 +644,7 @@ if [[ -f "$HOOKS_CONFIG" ]]; then
     fail "WORKFLOW_MODE_VAR" "hooks-config.sh missing WORKFLOW_MODE variable"
     modes_ok=false
   fi
-  for mode in lite strict; do
+  for mode in freestyle lite strict; do
     if ! grep -qE "^\s*${mode}\)" "$HOOKS_CONFIG"; then
       fail "WORKFLOW_MODE_CASE" "hooks-config.sh missing case for mode: $mode"
       modes_ok=false
@@ -655,7 +655,7 @@ if [[ -f "$HOOKS_CONFIG" ]]; then
     fail "WORKFLOW_MODE_CASE" "hooks-config.sh missing default case for standard mode"
     modes_ok=false
   fi
-  $modes_ok && pass "WORKFLOW_MODES (lite/standard/strict)"
+  $modes_ok && pass "WORKFLOW_MODES (freestyle/lite/standard/strict)"
 else
   warn "WORKFLOW_MODES" ".claude/hooks-config.sh not found — workflow modes unavailable"
 fi

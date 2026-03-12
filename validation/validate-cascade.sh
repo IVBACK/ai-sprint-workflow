@@ -148,7 +148,9 @@ fi
 
 # 2.1 README hook counts — look specifically in the Workflow Modes table
 # Pattern: "Core safety (N/N)" or "All hooks (N/N)" in mode table rows
-README_LITE=$(grep -oP '\d+/\d+' "$README" | head -1)
+# With 4 modes: freestyle (5/11), lite (7/11), standard (11/11), strict (11/11)
+README_FREESTYLE=$(grep -oP '\d+/\d+' "$README" | head -1)
+README_LITE=$(grep -oP '\d+/\d+' "$README" | sed -n '2p')
 README_FULL=$(grep -oP '\(\d+/\d+\)' "$README" | tail -1 | tr -d '()')
 if [[ -z "$README_FULL" ]]; then
   README_FULL=$(grep -oP '\d+/\d+' "$README" | tail -1)
@@ -175,28 +177,29 @@ fi
 
 # 2.2 WORKFLOW-MODES.md hook counts
 if [[ -f "$MODES" ]]; then
-  MODES_LITE=$(grep -oP '\d+/\d+' "$MODES" | head -1)
+  MODES_FREESTYLE=$(grep -oP '\d+/\d+' "$MODES" | head -1)
+  MODES_LITE=$(grep -oP '\d+/\d+' "$MODES" | sed -n '2p')
   MODES_FULL=$(grep -oP '\d+/\d+' "$MODES" | tail -1)
-  if [[ "$MODES_LITE" == "$README_LITE" && "$MODES_FULL" == "$README_FULL" ]]; then
-    pass "2.2 WORKFLOW-MODES.md hook counts match README ($MODES_LITE, $MODES_FULL)"
+  if [[ "$MODES_FREESTYLE" == "$README_FREESTYLE" && "$MODES_LITE" == "$README_LITE" && "$MODES_FULL" == "$README_FULL" ]]; then
+    pass "2.2 WORKFLOW-MODES.md hook counts match README ($MODES_FREESTYLE, $MODES_LITE, $MODES_FULL)"
   else
-    fail "2.2 WORKFLOW-MODES.md hook counts ($MODES_LITE, $MODES_FULL) != README ($README_LITE, $README_FULL)"
+    fail "2.2 WORKFLOW-MODES.md hook counts ($MODES_FREESTYLE, $MODES_LITE, $MODES_FULL) != README ($README_FREESTYLE, $README_LITE, $README_FULL)"
   fi
 else
   warn "2.2 WORKFLOW-MODES.md not found"
 fi
 
 # 2.3 DESIGN.md hook counts — only match N/N patterns near "hook" or "Lite" context
-DESIGN_HOOK_COUNTS=$(grep -i 'hook\|lite\|standard\|strict' "$DESIGN" | grep -oP '\d+/\d+' | sort -u)
+DESIGN_HOOK_COUNTS=$(grep -i 'hook\|freestyle\|lite\|standard\|strict' "$DESIGN" | grep -oP '\d+/\d+' | sort -u)
 if [[ -n "$DESIGN_HOOK_COUNTS" ]]; then
   design_ok=true
   while IFS= read -r count; do
-    if [[ "$count" != "$README_LITE" && "$count" != "$README_FULL" ]]; then
+    if [[ "$count" != "$README_FREESTYLE" && "$count" != "$README_LITE" && "$count" != "$README_FULL" ]]; then
       # Check if this is actually a hook count (not a phase number like 2/4)
       num=$(echo "$count" | cut -d/ -f2)
       if [[ "$num" -ge 5 ]]; then
         design_ok=false
-        fail "2.3 DESIGN.md has unexpected hook count: $count (expected $README_LITE or $README_FULL)"
+        fail "2.3 DESIGN.md has unexpected hook count: $count (expected $README_FREESTYLE, $README_LITE, or $README_FULL)"
       fi
     fi
   done <<< "$DESIGN_HOOK_COUNTS"

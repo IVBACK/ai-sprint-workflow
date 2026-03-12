@@ -108,7 +108,7 @@ sprint-workflow init
 The CLI walks you through:
 1. **Install** — copies `WORKFLOW.md`, hooks, reference docs, dashboard (skips repo infrastructure)
 2. **Agent selection** — Claude Code, Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI
-3. **Workflow mode** — Lite / Standard / Strict
+3. **Workflow mode** — Freestyle / Lite / Standard / Strict
 4. **Cross-LLM audit** — optional second AI code reviewer (Claude Code only)
 5. **Launch** — optionally design a [roadmap](#want-a-richer-roadmap-design-it-first) first, then bootstrap. Choose CLI or Editor launch; extension-only agents get the prompt copied to clipboard
 
@@ -120,7 +120,7 @@ After setup, the agent bootstraps your project: scans your codebase, asks discov
 |---------|-------------|
 | `sprint-workflow init` | Install + interactive onboarding + launch AI bootstrap |
 | `sprint-workflow config` | View all settings |
-| `sprint-workflow config mode lite` | Set workflow mode (lite/standard/strict) |
+| `sprint-workflow config mode lite` | Set workflow mode (freestyle/lite/standard/strict) |
 | `sprint-workflow config hook.protect-claude true` | Toggle a specific hook |
 | `sprint-workflow config audit.wave-size 10` | Set audit wave size |
 | `sprint-workflow log` | View last 10 audit log entries |
@@ -225,7 +225,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
 | `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review |
 
-All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
+All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `freestyle`/`lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
 **Changing settings (3 ways):**
 1. Edit `_D_*` defaults in `.claude/hooks-config.sh` — applies to whole team (git-tracked)
@@ -285,7 +285,7 @@ your-project/
 │   ├── PARALLEL-EXECUTION.md    # Parallel wave patterns (optional, for sub-agent capable tools)
 │   ├── SPRINT-INDEX.md          # Topic-first cross-sprint retrieval index
 │   ├── CROSS-LLM-AUDIT.md      # Cross-LLM audit setup guide (optional)
-│   ├── WORKFLOW-MODES.md        # Lite/Standard/Strict mode details
+│   ├── WORKFLOW-MODES.md        # Freestyle/Lite/Standard/Strict mode details
 │   ├── TEAM-GUIDE.md            # Team topologies, dependencies, PR/CI (team only)
 │   ├── UNITY-GUIDE.md           # Unity-specific git/LFS/scene rules (optional)
 │   ├── Archive/                  # Archived sprint changelogs and failure history
@@ -414,13 +414,14 @@ Debt detection is two-tier: formalized debt (`TEMP(CORE-NNN)`, `TEMP(S…)`) is 
 
 ## Workflow Modes
 
-The same template supports three rigor levels:
+The same template supports four rigor levels:
 
-| Mode | Target | Entry Gate | Hooks | Overhead |
-|------|--------|-----------|-------|----------|
-| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (5/11) | ~5 min/gate |
-| **Standard** | Most projects (default) | Full or abbreviated | All hooks (11/11) | ~15 min/gate |
-| **Strict** | Teams, critical systems | Full always | All, overrides disabled | ~25 min/gate |
+| Mode | Target | Entry Gate | Close Gate | Hooks | Overhead |
+|------|--------|-----------|------------|-------|----------|
+| **Freestyle** | Hackathon, experiments | None enforced | None enforced | Core safety (5/11) | ~0 min |
+| **Lite** | Solo dev, small projects | Abbreviated only | Basic + hook enforced | Core + CP3/CP4 (7/11) | ~7 min/gate |
+| **Standard** | Most projects (default) | Full or abbreviated | Full 6-phase | All hooks (11/11) | ~15 min/gate |
+| **Strict** | Teams, critical systems | Full always | Full + sign-off | All, overrides disabled | ~25 min/gate |
 
 Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state the mode at session start.
 
@@ -433,8 +434,23 @@ The workflow uses a version system (v2.1+) to detect when hooks are outdated.
 - **WORKFLOW.md** has `<!-- workflow-version: X.Y -->` — the canonical version.
 - **`.claude/hooks-config.sh`** has `HOOKS_VERSION="X.Y"` — the installed version.
 - **`session-start.sh`** compares the two at session start and warns the AI if they differ.
+- **`sprint-workflow status`** checks for new versions automatically and warns if outdated.
 
-**To upgrade:** replace `WORKFLOW.md` with the latest version (or tell the AI: *"Update the workflow from [GitHub link]"*). The AI reads the §Changelog, backs up modified files, applies changes, and bumps `HOOKS_VERSION`. Pre-version-system projects are treated as v1.0.
+**To upgrade** (recommended):
+
+```bash
+sprint-workflow upgrade        # interactive, asks for confirmation
+sprint-workflow upgrade --yes  # non-interactive (CI/scripting)
+```
+
+The CLI upgrade command:
+- **Preserves all user overrides** — `WORKFLOW_MODE`, `HOOK_*`, `ENABLE_*`, `CROSS_AUDIT_*` settings are extracted, applied to the new template, and restored automatically.
+- **Merges `settings.json`** — new upstream hooks are added, your custom hooks are kept (uses `jq` when available, falls back to overwrite with `.bak` backup).
+- **Skips `WORKFLOW.md`** if you have local modifications (compares version tags); overwrites only if unmodified.
+- **Creates backups** — `hooks-config.sh.bak` and `settings.json.bak` before any changes.
+- **Shows a summary** — lists what was updated, preserved, and skipped.
+
+**Alternative (AI-driven):** tell the AI *"Update the workflow from [GitHub link]"* — it reads the §Changelog and applies changes manually. Pre-version-system projects are treated as v1.0.
 
 > Full procedure: [WORKFLOW.md §Upgrade](WORKFLOW.md#upgrade--updating-from-a-previous-version)
 

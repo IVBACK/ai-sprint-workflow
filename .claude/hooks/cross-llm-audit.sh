@@ -65,11 +65,20 @@ if [[ "${CROSS_AUDIT_SKIP_SUBAGENT:-true}" == "true" ]]; then
 fi
 
 # ── Dependencies ──
-if ! command -v jq >/dev/null 2>&1; then _log_audit "skip" "missing-jq"; exit 0; fi
-if ! command -v curl >/dev/null 2>&1; then _log_audit "skip" "missing-curl"; exit 0; fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Cross-audit: DISABLED — 'jq' is not installed. Install jq to enable cross-LLM audit." >&2
+  _log_audit "skip" "missing-jq"; exit 0
+fi
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Cross-audit: DISABLED — 'curl' is not installed. Install curl to enable cross-LLM audit." >&2
+  _log_audit "skip" "missing-curl"; exit 0
+fi
 
 # ── API key required ──
-if [[ -z "${CROSS_AUDIT_API_KEY:-}" ]]; then _log_audit "skip" "no-api-key"; exit 0; fi
+if [[ -z "${CROSS_AUDIT_API_KEY:-}" ]]; then
+  echo "Cross-audit: DISABLED — no API key configured. Run 'bash .claude/setup-audit.sh' to set up." >&2
+  _log_audit "skip" "no-api-key"; exit 0
+fi
 
 # ── Safety: reject keys that look like they were hardcoded (not from env) ──
 # If the key is found verbatim in hooks-config.sh, someone pasted it into a git-tracked file.
@@ -174,7 +183,11 @@ if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
 fi
 
 # ── Gather diff (strategy depends on audit mode) ──
-cd "$PROJECT_DIR" 2>/dev/null || exit 0
+cd "$PROJECT_DIR" 2>/dev/null || {
+  echo "Cross-audit: ERROR — project directory '$PROJECT_DIR' not found." >&2
+  _log_audit "error" "bad-project-dir"
+  exit 0
+}
 
 # HEAD fallback: if no commits yet, use empty tree as base
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -477,7 +490,8 @@ else
       "model": $model,
       "messages": [{"role": "user", "content": $prompt}],
       "temperature": 0.1,
-      "max_tokens": 2000
+      "max_tokens": 2000,
+      "response_format": {"type": "json_object"}
     }')
 
   RESPONSE=$(curl -s --max-time "$TIMEOUT" -w "\n%{http_code}" \
@@ -529,8 +543,22 @@ if [[ -z "$CONTENT" ]]; then
 fi
 
 # Try to parse verdict from JSON response
+# Strategy: try raw first, then strip markdown fences, then extract JSON substring
 VERDICT=$(echo "$CONTENT" | jq -r '.verdict // empty' 2>/dev/null || true)
-[[ -z "$VERDICT" ]] && VERDICT="UNKNOWN"
+if [[ -z "$VERDICT" ]]; then
+  # Strip markdown fenced code blocks (handles indented fences too)
+  CLEAN_CONTENT=$(echo "$CONTENT" | sed '/^[[:space:]]*```[a-z]*/d')
+  VERDICT=$(echo "$CLEAN_CONTENT" | jq -r '.verdict // empty' 2>/dev/null || true)
+fi
+if [[ -z "$VERDICT" ]]; then
+  # Last resort: extract from first { to last } (handles preamble/postamble text)
+  CLEAN_CONTENT=$(echo "$CONTENT" | sed -n '/{/,/}/p')
+  VERDICT=$(echo "$CLEAN_CONTENT" | jq -r '.verdict // empty' 2>/dev/null || true)
+fi
+if [[ -z "$VERDICT" ]]; then
+  VERDICT="UNKNOWN"
+  echo "Cross-audit: WARNING — Could not parse verdict from LLM response. Raw response logged." >&2
+fi
 
 # ── Emit additionalContext ──
 # Claude sees this and presents it alongside its own assessment.
@@ -547,7 +575,7 @@ case "$VERDICT" in
     DIRECTIVE="DIRECTIVE: External audit passed. Mention this to the user as additional confidence signal."
     ;;
   *)
-    DIRECTIVE="DIRECTIVE: Present these external audit findings to the user for review."
+    DIRECTIVE="DIRECTIVE: External audit returned an UNPARSEABLE response (verdict could not be extracted from LLM output). Present the raw response to the user for manual review. This likely indicates a response format issue."
     ;;
 esac
 
@@ -574,8 +602,12 @@ jq -n \
   )
 }'
 
-# ── P0: Log success ──
-_log_audit "success" "" "$VERDICT"
+# ── P0: Log result ──
+if [[ "$VERDICT" == "UNKNOWN" ]]; then
+  _log_audit "parse-failed" "verdict-not-parseable" "$VERDICT"
+else
+  _log_audit "success" "" "$VERDICT"
+fi
 
 # ── P1: Mechanical BLOCK enforcement ──
 # When enabled, BLOCK verdict causes non-zero exit → Claude Code treats as hook failure.
