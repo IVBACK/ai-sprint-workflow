@@ -156,17 +156,18 @@ fi
 if [[ -n "$README_LITE" ]]; then
   LITE_N=$(echo "$README_LITE" | cut -d/ -f1)
   FULL_N=$(echo "$README_FULL" | cut -d/ -f2)
-  # Verify FULL_N matches enforcer hooks in settings.json (not including optional cross-llm-audit)
-  if [[ "$ACTUAL_HOOKS" -gt 0 && "$FULL_N" != "$ACTUAL_HOOKS" ]]; then
-    fail "2.1a README full hook count ($FULL_N) != settings.json enforcer hooks ($ACTUAL_HOOKS) [total with optional: $ACTUAL_HOOKS_TOTAL]"
+  # Verify FULL_N matches total hooks in settings.json (including optional cross-llm-audit)
+  # README advertises the total hook count; hooks-config flags cover only toggle-able hooks
+  if [[ "$ACTUAL_HOOKS_TOTAL" -gt 0 && "$FULL_N" != "$ACTUAL_HOOKS_TOTAL" ]]; then
+    fail "2.1a README full hook count ($FULL_N) != settings.json total hooks ($ACTUAL_HOOKS_TOTAL)"
   else
-    pass "2.1a README full hook count ($FULL_N) consistent with settings.json enforcer hooks ($ACTUAL_HOOKS)"
+    pass "2.1a README full hook count ($FULL_N) consistent with settings.json total hooks ($ACTUAL_HOOKS_TOTAL)"
   fi
-  # Verify CONFIG_HOOKS matches
-  if [[ "$CONFIG_HOOKS" -gt 0 && "$FULL_N" != "$CONFIG_HOOKS" ]]; then
-    fail "2.1b README full hook count ($FULL_N) != hooks-config.sh flag count ($CONFIG_HOOKS)"
+  # Verify CONFIG_HOOKS matches enforcer-only count (toggle-able hooks, excludes optional hooks like cross-llm-audit)
+  if [[ "$CONFIG_HOOKS" -gt 0 && "$ACTUAL_HOOKS" -gt 0 && "$CONFIG_HOOKS" != "$ACTUAL_HOOKS" ]]; then
+    fail "2.1b hooks-config.sh flag count ($CONFIG_HOOKS) != settings.json enforcer hooks ($ACTUAL_HOOKS)"
   else
-    pass "2.1b README full hook count ($FULL_N) consistent with hooks-config.sh flags ($CONFIG_HOOKS)"
+    pass "2.1b hooks-config.sh flag count ($CONFIG_HOOKS) consistent with settings.json enforcer hooks ($ACTUAL_HOOKS)"
   fi
 else
   warn "2.1 No hook count pattern (N/N) found in README"
