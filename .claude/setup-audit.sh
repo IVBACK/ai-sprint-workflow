@@ -338,6 +338,23 @@ echo ""
 read -rp "  Min changed lines [3]: " MIN_CHANGES
 MIN_CHANGES="${MIN_CHANGES:-3}"
 
+# ── Dual review option ──
+echo ""
+echo "=== Dual Review (Autonomous Fix) ==="
+echo "  When enabled, the AI independently reviews code alongside the external LLM,"
+echo "  compares findings, and auto-fixes agreed issues without blocking you."
+echo "  Only disagreements and non-trivial fixes are escalated."
+echo ""
+read -rp "  Enable dual review? [y/N]: " ENABLE_DUAL
+DUAL_REVIEW="false"
+AUTOFIX_LIMIT=""
+if [[ "$ENABLE_DUAL" =~ ^[Yy] ]]; then
+  DUAL_REVIEW="true"
+  echo ""
+  read -rp "  Auto-fix line limit (default: 20): " AUTOFIX_LIMIT
+  AUTOFIX_LIMIT="${AUTOFIX_LIMIT:-20}"
+fi
+
 # ── Write .env (API key + personal overrides — git-ignored) ──
 # Preserve existing non-audit variables if .env exists
 EXISTING_VARS=""
@@ -367,6 +384,12 @@ _SETUP_TMPFILES+=("$ENV_TMP")
   echo "CROSS_AUDIT_CONTEXT=$CONTEXT"
   echo "CROSS_AUDIT_LANG=$LANG"
   echo "CROSS_AUDIT_MIN_CHANGES=$MIN_CHANGES"
+  if [[ "$DUAL_REVIEW" == "true" ]]; then
+    echo ""
+    echo "# Dual Review"
+    echo "CROSS_AUDIT_DUAL_REVIEW=true"
+    echo "CROSS_AUDIT_AUTOFIX_LIMIT=$AUTOFIX_LIMIT"
+  fi
   if [[ -n "$EXISTING_VARS" ]]; then
     echo ""
     echo "# Preserved from previous .env"

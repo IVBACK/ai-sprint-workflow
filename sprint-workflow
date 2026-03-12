@@ -710,7 +710,7 @@ cmd_config() {
         return 1
       fi
       ;;
-    audit.wave-size|audit.min-changes|audit.timeout|audit.context|audit.trigger|audit.lang|audit.model|audit.provider|audit.api-base)
+    audit.wave-size|audit.min-changes|audit.timeout|audit.context|audit.trigger|audit.lang|audit.model|audit.provider|audit.api-base|audit.dual-review|audit.autofix-limit|audit.autofix-log|audit.close-gate-autofix)
       local audit_key="${key#audit.}"
       local env_key="CROSS_AUDIT_$(echo "$audit_key" | tr '[:lower:]-' '[:upper:]_')"
       touch "$env_file"

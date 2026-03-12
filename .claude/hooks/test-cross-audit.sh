@@ -365,6 +365,100 @@ fi
 rm -rf "$TEMP_REPO"
 
 # ══════════════════════════════════════════
+# Dual Review Tests
+# ══════════════════════════════════════════
+bold "═══ Dual Review Tests ═══"
+echo ""
+
+# ── Test 17: DUAL_REVIEW=true adds dual review protocol to BLOCK directive ──
+bold "Test 17: Dual review BLOCK directive format"
+# We can't do a full API call, but we can verify the hook sources config correctly
+# by checking that the variable is recognized and doesn't cause errors
+OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
+  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_DUAL_REVIEW=true CROSS_AUDIT_AUTOFIX_LIMIT=15 \
+    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
+    CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
+    bash "$HOOK" 2>&1)
+assert_exit "dual review config accepted without error" 0 $?
+
+# ── Test 18: DUAL_REVIEW=false preserves legacy behavior ──
+bold "Test 18: DUAL_REVIEW=false preserves legacy behavior"
+OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
+  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_DUAL_REVIEW=false \
+    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
+    CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
+    bash "$HOOK" 2>&1)
+assert_exit "legacy mode exits cleanly" 0 $?
+
+# ── Test 19: Dual review config variables have valid defaults ──
+bold "Test 19: Dual review config defaults from hooks-config.sh"
+if [[ -f "$PROJECT_DIR/.claude/hooks-config.sh" ]]; then
+  # Source hooks-config.sh and check that dual review defaults exist
+  DUAL_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_DUAL_REVIEW:-MISSING}\"")
+  AUTOFIX_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_AUTOFIX_LIMIT:-MISSING}\"")
+  AUTOFIX_LOG_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_AUTOFIX_LOG:-MISSING}\"")
+  CG_AUTOFIX_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-MISSING}\"")
+  ALL_SET=true
+  for var_name in DUAL_VAL AUTOFIX_VAL AUTOFIX_LOG_VAL CG_AUTOFIX_VAL; do
+    val="${!var_name}"
+    if [[ "$val" == "MISSING" ]]; then
+      red "  FAIL: $var_name not set in hooks-config.sh"
+      FAILED=$((FAILED + 1))
+      ALL_SET=false
+    fi
+  done
+  if [[ "$ALL_SET" == "true" ]]; then
+    green "  PASS: all 4 dual review config vars have defaults (DUAL=$DUAL_VAL, LIMIT=$AUTOFIX_VAL, LOG=$AUTOFIX_LOG_VAL, CG=$CG_AUTOFIX_VAL)"
+    PASSED=$((PASSED + 1))
+  fi
+else
+  red "  FAIL: hooks-config.sh not found"
+  FAILED=$((FAILED + 1))
+fi
+
+# ── Test 20: Self-audit checklist is embedded in hook ──
+bold "Test 20: Self-audit checklist is embedded in hook"
+if grep -q "SELF-AUDIT CHECKLIST" "$HOOK"; then
+  green "  PASS: self-audit checklist found in hook"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: self-audit checklist not found in hook"
+  FAILED=$((FAILED + 1))
+fi
+
+# ── Test 21: DUAL REVIEW PROTOCOL directive exists in hook ──
+bold "Test 21: Dual review protocol directive in hook"
+if grep -q "DUAL REVIEW PROTOCOL" "$HOOK"; then
+  green "  PASS: dual review protocol directive found"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: dual review protocol directive not found"
+  FAILED=$((FAILED + 1))
+fi
+
+# ── Test 22: Workflow mode is injected into additionalContext ──
+bold "Test 22: Workflow-Mode in additionalContext output"
+if grep -q 'wfmode' "$HOOK" && grep -q 'WORKFLOW_MODE' "$HOOK"; then
+  green "  PASS: workflow mode is passed to additionalContext"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: workflow mode not found in additionalContext output"
+  FAILED=$((FAILED + 1))
+fi
+
+# ── Test 23: Dual review log field in _audit-lib.sh ──
+bold "Test 23: dual_review field in audit log"
+if grep -q 'dual_review' "$SCRIPT_DIR/_audit-lib.sh"; then
+  green "  PASS: dual_review field found in _audit-lib.sh"
+  PASSED=$((PASSED + 1))
+else
+  red "  FAIL: dual_review field not found in _audit-lib.sh"
+  FAILED=$((FAILED + 1))
+fi
+
+# ══════════════════════════════════════════
 # Live test (optional)
 # ══════════════════════════════════════════
 if [[ "$LIVE_MODE" == "--live" ]]; then

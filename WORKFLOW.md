@@ -1236,7 +1236,18 @@ as `additionalContext` after source file changes. When findings arrive:
 - **PASS verdict:** Mention as additional confidence signal, then continue.
 - **Conflicting opinions:** If your assessment disagrees with the external audit, present both perspectives and let the user decide. Do not silently override either opinion.
 This step is fully automated via the hook — no manual action needed. If the hook is not enabled, skip.
-See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for setup.
+
+**D.6b+ Dual Review Protocol (if `CROSS_AUDIT_DUAL_REVIEW=true`):**
+When dual review is enabled, findings arrive with a structured self-audit directive:
+1. Read external GPT findings from additionalContext.
+2. Run structured self-audit (8-item checklist for BLOCK/WARN, 3-item for PASS) on the same diff.
+3. Compare findings using the decision matrix:
+   - AGREE + fix ≤ `AUTOFIX_LIMIT` lines → auto-fix, inform user.
+   - AGREE + fix > limit → escalate to user.
+   - DISAGREE on BLOCK → escalate (mandatory — cannot dismiss BLOCK alone).
+   - DISAGREE on WARN → log disagreement, continue.
+4. PASS verdict → lightweight self-audit (bug scan, security, AC only), mention PASS as confidence signal.
+See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for setup and configuration.
 
 **D.7 Acceptance criteria exit check**
 Before marking the item done, read the item's acceptance criteria from the Entry Gate report
@@ -2539,6 +2550,11 @@ _D_AUDIT_LOG_MAX_BYTES=1048576                           # Log rotation: max siz
 _D_AUDIT_LOG_KEEP_LINES=500                              # Log rotation: lines to keep
 _D_AUDIT_HEALTH_STALE_SECONDS=3600                       # Health: stale threshold (1 hour)
 _D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count threshold
+# Dual Review (autonomous fix)
+_D_CROSS_AUDIT_DUAL_REVIEW=false                         # Dual review master switch
+_D_CROSS_AUDIT_AUTOFIX_LIMIT=20                          # Max lines for auto-fix
+_D_CROSS_AUDIT_AUTOFIX_LOG=true                          # Log auto-fixes
+_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true                   # Auto-fix during Close Gate
 # Dashboard
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (dir levels)
 

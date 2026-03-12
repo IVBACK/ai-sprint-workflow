@@ -31,3 +31,6 @@ __pycache__/
 credentials.json
 secrets.yaml
 secrets.yml
+
+# Planning docs (local drafts)
+Docs/Planning/

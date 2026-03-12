@@ -223,7 +223,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
 | `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
-| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review |
+| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review. Optional **dual review mode**: Claude independently audits alongside GPT, compares findings, and auto-fixes agreed issues |
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `freestyle`/`lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 

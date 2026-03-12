@@ -65,6 +65,8 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_SPRINT_CLOSE=false
     _DETECT_AUDIT_SIGNALS=false
     # Cross-audit: not tuned (use global defaults if enabled manually)
+    # Dual review: disabled in freestyle
+    _D_CROSS_AUDIT_DUAL_REVIEW=false
     ;;
   lite)
     # Core safety + close gate + test regression
@@ -83,6 +85,11 @@ case "${WORKFLOW_MODE}" in
     _D_CROSS_AUDIT_CONTEXT=minimal
     _D_CROSS_AUDIT_MIN_CHANGES=5
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
+    # Dual review: lightweight for solo dev
+    _D_CROSS_AUDIT_DUAL_REVIEW=true
+    _D_CROSS_AUDIT_AUTOFIX_LIMIT=20
+    _D_CROSS_AUDIT_AUTOFIX_LOG=false
+    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true
     ;;
   strict)
     # All hooks forced on (overrides ignored after local config load)
@@ -101,6 +108,11 @@ case "${WORKFLOW_MODE}" in
     _D_CROSS_AUDIT_CONTEXT=full
     _D_CROSS_AUDIT_MIN_CHANGES=1
     _D_CROSS_AUDIT_ENFORCE_BLOCK=true
+    # Dual review: strict — lower limit, no close gate autofix
+    _D_CROSS_AUDIT_DUAL_REVIEW=true
+    _D_CROSS_AUDIT_AUTOFIX_LIMIT=10
+    _D_CROSS_AUDIT_AUTOFIX_LOG=true
+    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=false
     ;;
   *)  # standard (default)
     _PROTECT_CLAUDE_MD=true
@@ -118,6 +130,11 @@ case "${WORKFLOW_MODE}" in
     _D_CROSS_AUDIT_CONTEXT=standard
     _D_CROSS_AUDIT_MIN_CHANGES=3
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
+    # Dual review: balanced defaults
+    _D_CROSS_AUDIT_DUAL_REVIEW=true
+    _D_CROSS_AUDIT_AUTOFIX_LIMIT=20
+    _D_CROSS_AUDIT_AUTOFIX_LOG=true
+    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true
     ;;
 esac
 
@@ -191,6 +208,11 @@ _D_CROSS_AUDIT_MIN_CHANGES="${_D_CROSS_AUDIT_MIN_CHANGES:-3}"  # Min changed lin
 _D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
 _D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
 _D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
+# Dual Review (autonomous fix)
+_D_CROSS_AUDIT_DUAL_REVIEW="${_D_CROSS_AUDIT_DUAL_REVIEW:-false}"    # Dual review switch (mode-aware)
+_D_CROSS_AUDIT_AUTOFIX_LIMIT="${_D_CROSS_AUDIT_AUTOFIX_LIMIT:-20}"   # Max lines for silent auto-fix (mode-aware)
+_D_CROSS_AUDIT_AUTOFIX_LOG="${_D_CROSS_AUDIT_AUTOFIX_LOG:-true}"     # Log all auto-fixes (mode-aware)
+_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX="${_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-true}"  # Allow auto-fix in close gate (mode-aware)
 # Wave Batching
 _D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
 _D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
@@ -241,6 +263,10 @@ CROSS_AUDIT_MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-$_D_CROSS_AUDIT_MIN_CHANGES}
 CROSS_AUDIT_TIMEOUT="${CROSS_AUDIT_TIMEOUT:-$_D_CROSS_AUDIT_TIMEOUT}"
 CROSS_AUDIT_SKIP_SUBAGENT="${CROSS_AUDIT_SKIP_SUBAGENT:-$_D_CROSS_AUDIT_SKIP_SUBAGENT}"
 CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-$_D_CROSS_AUDIT_ENFORCE_BLOCK}"
+CROSS_AUDIT_DUAL_REVIEW="${CROSS_AUDIT_DUAL_REVIEW:-$_D_CROSS_AUDIT_DUAL_REVIEW}"
+CROSS_AUDIT_AUTOFIX_LIMIT="${CROSS_AUDIT_AUTOFIX_LIMIT:-$_D_CROSS_AUDIT_AUTOFIX_LIMIT}"
+CROSS_AUDIT_AUTOFIX_LOG="${CROSS_AUDIT_AUTOFIX_LOG:-$_D_CROSS_AUDIT_AUTOFIX_LOG}"
+CROSS_AUDIT_CLOSE_GATE_AUTOFIX="${CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-$_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX}"
 CROSS_AUDIT_WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-$_D_CROSS_AUDIT_WAVE_SIZE}"
 CROSS_AUDIT_LOCK_TIMEOUT="${CROSS_AUDIT_LOCK_TIMEOUT:-$_D_CROSS_AUDIT_LOCK_TIMEOUT}"
 CROSS_AUDIT_MAX_DIFF_CLOSE_GATE="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-$_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE}"

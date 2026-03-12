@@ -3,7 +3,7 @@
 Send code changes to a second LLM for independent review during implementation.
 The primary agent (Claude) sees the external findings and presents them alongside its own assessment.
 
-**Status:** Optional. Disabled by default. Zero impact when off.
+**Status:** Optional. Enabled by default — requires API key to activate. Zero impact when off.
 
 **Requirement:** Claude Code. This feature uses Claude Code's hook system (`PostToolUse`, `additionalContext`) and cannot work with other agents or editors.
 
@@ -310,6 +310,85 @@ When Claude and the external LLM disagree:
 - Claude presents **both perspectives** clearly
 - States its own position
 - **User decides** — neither opinion auto-overrides the other
+
+---
+
+## Dual Review (Autonomous Fix)
+
+When `CROSS_AUDIT_DUAL_REVIEW=true`, Claude independently audits the same diff alongside the external LLM, compares findings, and auto-fixes agreed issues without blocking you. Only disagreements and non-trivial fixes are escalated.
+
+### How It Works
+
+```
+External LLM reviews diff → verdict arrives as additionalContext →
+  Claude runs structured self-audit (8-item checklist) on same diff →
+  Compares findings with external review →
+  AGREE + small fix (≤ AUTOFIX_LIMIT lines) → auto-fix, inform user →
+  AGREE + large fix → escalate to user →
+  DISAGREE on BLOCK → escalate (mandatory, cannot dismiss alone) →
+  DISAGREE on WARN → log disagreement, continue
+```
+
+**Zero additional API cost.** Self-review runs inside Claude's reasoning — no extra API calls.
+
+### Decision Matrix
+
+| External Verdict | Agreement | Action |
+|-----------------|-----------|--------|
+| **BLOCK** | Agree, fix ≤ N lines | Auto-fix, inform user |
+| **BLOCK** | Agree, fix > N lines | Escalate to user |
+| **BLOCK** | Disagree | Escalate — present both perspectives (mandatory) |
+| **WARN** | Agree | Auto-fix + log in Change Log |
+| **WARN** | Disagree | Log disagreement, continue |
+| **PASS** | — | Lightweight self-audit (bug scan, security, AC only) |
+
+### Self-Audit Checklist
+
+Full checklist (BLOCK/WARN with dual review):
+
+1. **BUG SCAN:** off-by-one, null/undefined, type mismatch, boundary conditions, resource leak
+2. **SECURITY SCAN:** input validation, auth/authz, no secrets in code, injection vectors
+3. **AC COMPLIANCE:** diff supports acceptance criteria, no missing AC
+4. **GUARDRAIL COMPLIANCE:** CODING_GUARDRAILS.md rules, naming, error handling
+5. **INTEGRATION RISK:** conflicts with active items, shared state, API changes
+6. **CRITICAL AXIS CHECK:** affects critical axis? improves/degrades?
+7. **FAILURE MODE CHECK:** predicted modes from Entry Gate, new unpredicted modes
+8. **REGRESSION RISK:** changes behavior validated by existing tests
+
+Lightweight checklist (PASS verdict): items 1-3 only.
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CROSS_AUDIT_DUAL_REVIEW` | `false` | Master switch for dual review |
+| `CROSS_AUDIT_AUTOFIX_LIMIT` | `20` | Max lines for silent auto-fix |
+| `CROSS_AUDIT_AUTOFIX_LOG` | `true` | Log auto-fixes to audit log |
+| `CROSS_AUDIT_CLOSE_GATE_AUTOFIX` | `true` | Allow auto-fix during Close Gate |
+
+### Mode Defaults
+
+| Workflow Mode | Dual Review | Autofix Limit | Autofix Log | Close Gate Autofix |
+|--------------|-------------|---------------|-------------|--------------------|
+| **Freestyle** | disabled | — | — | — |
+| **Lite** | enabled | 20 lines | off | yes |
+| **Standard** | enabled | 20 lines | on | yes |
+| **Strict** | enabled | 10 lines | on | no (always escalate) |
+
+Enable via setup script (`bash .claude/setup-audit.sh`) or directly:
+
+```bash
+# In .env
+CROSS_AUDIT_DUAL_REVIEW=true
+CROSS_AUDIT_AUTOFIX_LIMIT=20
+```
+
+Or via CLI:
+
+```bash
+sprint-workflow config audit.dual-review true
+sprint-workflow config audit.autofix-limit 15
+```
 
 ---
 

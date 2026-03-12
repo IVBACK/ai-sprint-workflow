@@ -565,22 +565,91 @@ fi
 # Claude sees this and presents it alongside its own assessment.
 
 DIRECTIVE=""
-case "$VERDICT" in
-  BLOCK)
-    DIRECTIVE="DIRECTIVE: This external audit found BLOCKING issues. Present these findings to the user. Do NOT proceed until the user reviews and decides."
-    ;;
-  WARN)
-    DIRECTIVE="DIRECTIVE: This external audit found warnings. Present these findings alongside your own assessment. Let the user decide whether to address them now or proceed."
-    ;;
-  PASS)
-    DIRECTIVE="DIRECTIVE: External audit passed. Mention this to the user as additional confidence signal."
-    ;;
-  *)
-    DIRECTIVE="DIRECTIVE: External audit returned an UNPARSEABLE response (verdict could not be extracted from LLM output). Present the raw response to the user for manual review. This likely indicates a response format issue."
-    ;;
-esac
+DUAL_REVIEW="${CROSS_AUDIT_DUAL_REVIEW:-false}"
+AUTOFIX_LIMIT="${CROSS_AUDIT_AUTOFIX_LIMIT:-20}"
+CG_AUTOFIX="${CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-true}"
 
-CONFLICT_RULE="If your assessment conflicts with the external audit on any point, present both perspectives clearly and let the user decide. Do not silently override either opinion."
+# ── Self-audit checklist (embedded for Claude to reference) ──
+SELF_AUDIT_CHECKLIST_FULL="=== SELF-AUDIT CHECKLIST ===
+1. BUG SCAN: off-by-one, null/undefined, type mismatch, boundary conditions, resource leak
+2. SECURITY SCAN: input validation, auth/authz, no secrets in code, injection vectors (SQL, XSS, command, path traversal)
+3. AC COMPLIANCE: diff supports acceptance criteria, no missing AC
+4. GUARDRAIL COMPLIANCE: CODING_GUARDRAILS.md rules, naming, error handling, immutable contracts
+5. INTEGRATION RISK: conflicts with active items (check TRACKING.md), shared state, API changes (skip in sub-agent)
+6. CRITICAL AXIS CHECK: affects critical axis? improves/degrades? (skip if undefined)
+7. FAILURE MODE CHECK: predicted modes from Entry Gate, new unpredicted modes
+8. REGRESSION RISK: changes behavior validated by existing tests
+=== END CHECKLIST ==="
+
+SELF_AUDIT_CHECKLIST_LIGHT="=== SELF-AUDIT CHECKLIST (lightweight) ===
+1. BUG SCAN: off-by-one, null/undefined, type mismatch, boundary conditions, resource leak
+2. SECURITY SCAN: input validation, auth/authz, no secrets in code, injection vectors
+3. AC COMPLIANCE: diff supports acceptance criteria, no missing AC
+=== END CHECKLIST ==="
+
+if [[ "$DUAL_REVIEW" == "true" ]]; then
+  # ── Dual Review directives ──
+  case "$VERDICT" in
+    BLOCK)
+      DIRECTIVE="DIRECTIVE: This external audit found BLOCKING issues. Run DUAL REVIEW PROTOCOL:
+1. Perform structured self-audit on the same diff using the checklist below.
+2. Compare your findings with the external findings.
+3. If you AGREE and can fix (≤${AUTOFIX_LIMIT} lines): apply fix, inform user.
+4. If you DISAGREE: present BOTH perspectives to user. Do NOT dismiss BLOCK alone.
+5. If fix is non-trivial (>${AUTOFIX_LIMIT} lines, architectural, cross-file): escalate to user.
+Workflow-Mode: ${WORKFLOW_MODE:-standard}
+Autofix-Limit: ${AUTOFIX_LIMIT} lines
+Close-Gate-Autofix: ${CG_AUTOFIX}
+Audit-Mode: ${AUDIT_MODE}
+
+${SELF_AUDIT_CHECKLIST_FULL}"
+      ;;
+    WARN)
+      DIRECTIVE="DIRECTIVE: This external audit found warnings. Run DUAL REVIEW PROTOCOL:
+1. Perform structured self-audit on the same diff using the checklist below.
+2. Compare findings. Auto-fix where you agree (≤${AUTOFIX_LIMIT} lines). Log disagreements in Change Log.
+3. Inform user of any auto-fixes applied. Continue implementation.
+Workflow-Mode: ${WORKFLOW_MODE:-standard}
+Autofix-Limit: ${AUTOFIX_LIMIT} lines
+Audit-Mode: ${AUDIT_MODE}
+
+${SELF_AUDIT_CHECKLIST_FULL}"
+      ;;
+    PASS)
+      DIRECTIVE="DIRECTIVE: External audit passed. Run lightweight self-audit (bug, security, AC only).
+Fix anything you find. Mention external PASS as confidence signal.
+Workflow-Mode: ${WORKFLOW_MODE:-standard}
+
+${SELF_AUDIT_CHECKLIST_LIGHT}"
+      ;;
+    *)
+      DIRECTIVE="DIRECTIVE: External audit returned an UNPARSEABLE response (verdict could not be extracted). Present raw response to user for manual review."
+      ;;
+  esac
+else
+  # ── Legacy single-review directives ──
+  case "$VERDICT" in
+    BLOCK)
+      DIRECTIVE="DIRECTIVE: This external audit found BLOCKING issues. Present these findings to the user. Do NOT proceed until the user reviews and decides."
+      ;;
+    WARN)
+      DIRECTIVE="DIRECTIVE: This external audit found warnings. Present these findings alongside your own assessment. Let the user decide whether to address them now or proceed."
+      ;;
+    PASS)
+      DIRECTIVE="DIRECTIVE: External audit passed. Mention this to the user as additional confidence signal."
+      ;;
+    *)
+      DIRECTIVE="DIRECTIVE: External audit returned an UNPARSEABLE response (verdict could not be extracted from LLM output). Present the raw response to the user for manual review."
+      ;;
+  esac
+fi
+
+CONFLICT_RULE=""
+if [[ "$DUAL_REVIEW" == "true" ]]; then
+  CONFLICT_RULE="COMPARISON RULES: For each external finding, state AGREE or DISAGREE with reasoning. BLOCK findings you disagree with MUST be escalated to the user — you cannot dismiss a BLOCK alone. Log all auto-fixes and disagreements."
+else
+  CONFLICT_RULE="If your assessment conflicts with the external audit on any point, present both perspectives clearly and let the user decide. Do not silently override either opinion."
+fi
 
 jq -n \
   --arg content "$CONTENT" \
@@ -591,11 +660,13 @@ jq -n \
   --arg directive "$DIRECTIVE" \
   --arg conflict "$CONFLICT_RULE" \
   --arg changed "$CHANGED_LINES" \
+  --arg dual "$DUAL_REVIEW" \
+  --arg wfmode "${WORKFLOW_MODE:-standard}" \
 '{
   "additionalContext": (
     "=== CROSS-LLM AUDIT RESULT ===\n" +
     "Model: " + $model + " | Lines changed: " + $changed + " | Tokens: ~" + $prompt_tokens + " in / ~" + $completion_tokens + " out\n" +
-    "Verdict: " + $verdict + "\n\n" +
+    "Verdict: " + $verdict + " | Dual-Review: " + $dual + " | Mode: " + $wfmode + "\n\n" +
     $content + "\n\n" +
     $directive + "\n" +
     $conflict + "\n" +
