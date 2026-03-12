@@ -18,7 +18,7 @@ project size, team structure, and risk tolerance.
 | **Checkpoints (CP1-2)** | Disabled | Disabled | Enabled (suppressible ×2) | Enabled + no suppression |
 | **Checkpoints (CP3-4)** | Disabled | Enabled (never suppressed) | Enabled (never suppressed) | Enabled (never suppressed) |
 | **Performance Baseline** | Not recorded | Recorded (Sprint Close step 5) | Recorded | Recorded |
-| **Cross-audit defaults** | N/A (not tuned) | wave-size 8, context minimal, min-changes 5 | wave-size 5, context standard, min-changes 3 | wave-size 3, context full, min-changes 1, enforce-block |
+| **Cross-audit defaults** | N/A (not tuned) | wave-size 8, min-changes 5 | wave-size 5, min-changes 3 | wave-size 3, min-changes 1, enforce-block |
 | **Parallel execution** | Not recommended | Not recommended | Optional (if agent supports) | Recommended (if agent supports) |
 | **Overhead** | ~0 min/gate | ~7 min/gate | ~15 min/gate | ~25 min/gate |
 
@@ -86,7 +86,7 @@ silent quality debt. Entry gate runs abbreviated but is not hook-enforced.
 - Sprint Close report validation hook
 - Architecture Review triggers
 
-**Cross-audit defaults:** wave-size 8, context minimal, min-changes 5.
+**Cross-audit defaults:** wave-size 8, min-changes 5.
 Relaxed settings appropriate for small projects — fewer API calls, less context sent.
 
 **Parallel execution:** Not recommended. Abbreviated gate + small scope means
@@ -117,8 +117,8 @@ Best for: most projects, solo or small teams, 5-50 file codebases.
 This is the default. All workflow features and hooks are active.
 The AI recommends abbreviated vs. full Entry Gate based on sprint size.
 
-**Cross-audit defaults:** wave-size 5, context standard, min-changes 3.
-Balanced settings — moderate review frequency with standard context.
+**Cross-audit defaults:** wave-size 5, min-changes 3.
+Balanced settings — moderate review frequency with standard context (includes sprint goal, AC, contracts).
 
 **Parallel execution:** Optional. If the agent supports sub-agents and the sprint has
 4+ independent items, parallel execution can reduce gate time by 40-60% at ~2-3x token cost.
@@ -134,9 +134,8 @@ WORKFLOW_MODE="standard"
 
 Best for: high-risk projects regardless of team size — production systems, regulated domains (finance, medical, security-critical).
 
-**Cross-audit defaults:** wave-size 3, context full, min-changes 1, enforce-block true.
-Tightest settings — every small change reviewed, full file context sent, BLOCK verdicts
-exit non-zero to prevent continuing past critical issues.
+**Cross-audit defaults:** wave-size 3, min-changes 1, enforce-block true.
+Tightest settings — every small change reviewed, full file context sent (includes sprint goal, AC, contracts, full file), BLOCK verdicts exit non-zero to prevent continuing past critical issues.
 
 **Parallel execution:** Recommended when agent supports it. Full gate with per-item
 failure mode analysis and fitness review benefits most from parallel waves (~2-3x tokens,
@@ -166,6 +165,16 @@ For non-Claude agents: tell the agent at session start:
 - Close Gate verdict requires team lead sign-off (or peer sign-off for Pair topology)
 - Sprint Close retrospective presented to team
 - See [TEAM-GUIDE.md](TEAM-GUIDE.md) for per-person TRACKING files, branch naming, and dependency rules
+
+## Inspecting Mode Effects
+
+To see the full impact of the current mode (which hooks are on/off, all audit defaults, active overrides):
+
+```bash
+sprint-workflow config mode --show
+```
+
+The `config` display also marks each setting with `(mode)`, `(override)`, or `(.env)` to show where each value comes from. Setting a mode-aware value warns when it diverges from the mode default.
 
 ## Switching Modes
 

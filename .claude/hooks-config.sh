@@ -65,8 +65,6 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_SPRINT_CLOSE=false
     _DETECT_AUDIT_SIGNALS=false
     # Cross-audit: not tuned (use global defaults if enabled manually)
-    # Dual review: disabled in freestyle
-    _D_CROSS_AUDIT_DUAL_REVIEW=false
     ;;
   lite)
     # Core safety + close gate + test regression
@@ -82,14 +80,7 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=false
     # Cross-audit: relaxed defaults for small projects
     _D_CROSS_AUDIT_WAVE_SIZE=8
-    _D_CROSS_AUDIT_CONTEXT=minimal
-    _D_CROSS_AUDIT_MIN_CHANGES=5
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
-    # Dual review: lightweight for solo dev
-    _D_CROSS_AUDIT_DUAL_REVIEW=true
-    _D_CROSS_AUDIT_AUTOFIX_LIMIT=20
-    _D_CROSS_AUDIT_AUTOFIX_LOG=false
-    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true
     ;;
   strict)
     # All hooks forced on (overrides ignored after local config load)
@@ -105,14 +96,7 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=true
     # Cross-audit: tighter defaults for critical projects
     _D_CROSS_AUDIT_WAVE_SIZE=3
-    _D_CROSS_AUDIT_CONTEXT=full
-    _D_CROSS_AUDIT_MIN_CHANGES=1
     _D_CROSS_AUDIT_ENFORCE_BLOCK=true
-    # Dual review: strict — lower limit, no close gate autofix
-    _D_CROSS_AUDIT_DUAL_REVIEW=true
-    _D_CROSS_AUDIT_AUTOFIX_LIMIT=10
-    _D_CROSS_AUDIT_AUTOFIX_LOG=true
-    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=false
     ;;
   *)  # standard (default)
     _PROTECT_CLAUDE_MD=true
@@ -127,14 +111,7 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=true
     # Cross-audit: balanced defaults
     _D_CROSS_AUDIT_WAVE_SIZE=5
-    _D_CROSS_AUDIT_CONTEXT=standard
-    _D_CROSS_AUDIT_MIN_CHANGES=3
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
-    # Dual review: balanced defaults
-    _D_CROSS_AUDIT_DUAL_REVIEW=true
-    _D_CROSS_AUDIT_AUTOFIX_LIMIT=20
-    _D_CROSS_AUDIT_AUTOFIX_LOG=true
-    _D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true
     ;;
 esac
 
@@ -194,42 +171,23 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 # _D_ prefix marks the default value for each setting.
 # Edit the values on the RIGHT side to change defaults.
 #
-#            Setting                          Value         Description
-#            ───────                          ─────         ───────────
-# Cross-LLM Audit
-_D_ENABLE_CROSS_AUDIT=true                               # Master switch (silently skips if no API key)
+# ┌─────────────────────────────────────────────────────────────┐
+# │  COMMONLY CHANGED — most users only need to touch these     │
+# └─────────────────────────────────────────────────────────────┘
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
-_D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider (see examples below)
 _D_CROSS_AUDIT_MODEL=                                    # Empty = auto-set per provider (see examples below)
-_D_CROSS_AUDIT_TRIGGER=wave                              # "wave" (every N edits) or "item" (every edit)
-_D_CROSS_AUDIT_CONTEXT="${_D_CROSS_AUDIT_CONTEXT:-standard}"  # "minimal", "standard", "full" (mode-aware)
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
-_D_CROSS_AUDIT_MIN_CHANGES="${_D_CROSS_AUDIT_MIN_CHANGES:-3}"  # Min changed lines to trigger (mode-aware)
-_D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
-_D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
-_D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
-# Dual Review (autonomous fix)
-_D_CROSS_AUDIT_DUAL_REVIEW="${_D_CROSS_AUDIT_DUAL_REVIEW:-false}"    # Dual review switch (mode-aware)
-_D_CROSS_AUDIT_AUTOFIX_LIMIT="${_D_CROSS_AUDIT_AUTOFIX_LIMIT:-20}"   # Max lines for silent auto-fix (mode-aware)
-_D_CROSS_AUDIT_AUTOFIX_LOG="${_D_CROSS_AUDIT_AUTOFIX_LOG:-true}"     # Log all auto-fixes (mode-aware)
-_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX="${_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-true}"  # Allow auto-fix in close gate (mode-aware)
-# Wave Batching
 _D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
-_D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
-# Diff Truncation (max characters sent to external LLM)
-_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE=48000                 # Close Gate (holistic sprint)
-_D_CROSS_AUDIT_MAX_DIFF_WAVE=32000                       # Wave review
-_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE=32000                 # Entry Gate (plan review)
-_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT=24000                   # Per-edit
-# Audit Signal Thresholds
+_D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
+#
+# ┌─────────────────────────────────────────────────────────────┐
+# │  POWER USER — rarely changed, safe to ignore                │
+# └─────────────────────────────────────────────────────────────┘
+_D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider (see examples below)
+_D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
+_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: per-edit=×0.75, wave=×1, close-gate=×1.5
 _D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (0.20 = 20%)
 _D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprint count)
-# Log & Health
-_D_AUDIT_LOG_MAX_BYTES=1048576                           # Log rotation: max size (1MB)
-_D_AUDIT_LOG_KEEP_LINES=500                              # Log rotation: lines to keep
-_D_AUDIT_HEALTH_STALE_SECONDS=3600                       # Health: stale threshold (1 hour)
-_D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count threshold
-# Dashboard
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (directory levels)
 
 # ── API Base & Model examples ──
@@ -252,33 +210,21 @@ _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (di
 #   Ollama:     llama3, mistral, codellama
 
 # ── Apply defaults (env vars and local overrides take precedence) ─────
-ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-$_D_ENABLE_CROSS_AUDIT}"
 CROSS_AUDIT_PROVIDER="${CROSS_AUDIT_PROVIDER:-$_D_CROSS_AUDIT_PROVIDER}"
 CROSS_AUDIT_API_BASE="${CROSS_AUDIT_API_BASE:-$_D_CROSS_AUDIT_API_BASE}"
 CROSS_AUDIT_MODEL="${CROSS_AUDIT_MODEL:-$_D_CROSS_AUDIT_MODEL}"
-CROSS_AUDIT_TRIGGER="${CROSS_AUDIT_TRIGGER:-$_D_CROSS_AUDIT_TRIGGER}"
-CROSS_AUDIT_CONTEXT="${CROSS_AUDIT_CONTEXT:-$_D_CROSS_AUDIT_CONTEXT}"
 CROSS_AUDIT_LANG="${CROSS_AUDIT_LANG:-$_D_CROSS_AUDIT_LANG}"
-CROSS_AUDIT_MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-$_D_CROSS_AUDIT_MIN_CHANGES}"
 CROSS_AUDIT_TIMEOUT="${CROSS_AUDIT_TIMEOUT:-$_D_CROSS_AUDIT_TIMEOUT}"
-CROSS_AUDIT_SKIP_SUBAGENT="${CROSS_AUDIT_SKIP_SUBAGENT:-$_D_CROSS_AUDIT_SKIP_SUBAGENT}"
 CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-$_D_CROSS_AUDIT_ENFORCE_BLOCK}"
-CROSS_AUDIT_DUAL_REVIEW="${CROSS_AUDIT_DUAL_REVIEW:-$_D_CROSS_AUDIT_DUAL_REVIEW}"
-CROSS_AUDIT_AUTOFIX_LIMIT="${CROSS_AUDIT_AUTOFIX_LIMIT:-$_D_CROSS_AUDIT_AUTOFIX_LIMIT}"
-CROSS_AUDIT_AUTOFIX_LOG="${CROSS_AUDIT_AUTOFIX_LOG:-$_D_CROSS_AUDIT_AUTOFIX_LOG}"
-CROSS_AUDIT_CLOSE_GATE_AUTOFIX="${CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-$_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX}"
 CROSS_AUDIT_WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-$_D_CROSS_AUDIT_WAVE_SIZE}"
-CROSS_AUDIT_LOCK_TIMEOUT="${CROSS_AUDIT_LOCK_TIMEOUT:-$_D_CROSS_AUDIT_LOCK_TIMEOUT}"
-CROSS_AUDIT_MAX_DIFF_CLOSE_GATE="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-$_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE}"
-CROSS_AUDIT_MAX_DIFF_WAVE="${CROSS_AUDIT_MAX_DIFF_WAVE:-$_D_CROSS_AUDIT_MAX_DIFF_WAVE}"
-CROSS_AUDIT_MAX_DIFF_ENTRY_GATE="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-$_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE}"
-CROSS_AUDIT_MAX_DIFF_PER_EDIT="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-$_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT}"
+CROSS_AUDIT_MAX_DIFF="${CROSS_AUDIT_MAX_DIFF:-$_D_CROSS_AUDIT_MAX_DIFF}"
+# Derived diff limits (base × multiplier) — override individual limits via env if needed
+CROSS_AUDIT_MAX_DIFF_PER_EDIT="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-$(( CROSS_AUDIT_MAX_DIFF * 3 / 4 ))}"
+CROSS_AUDIT_MAX_DIFF_WAVE="${CROSS_AUDIT_MAX_DIFF_WAVE:-$CROSS_AUDIT_MAX_DIFF}"
+CROSS_AUDIT_MAX_DIFF_ENTRY_GATE="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-$CROSS_AUDIT_MAX_DIFF}"
+CROSS_AUDIT_MAX_DIFF_CLOSE_GATE="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-$(( CROSS_AUDIT_MAX_DIFF * 3 / 2 ))}"
 AUDIT_CP1_THRESHOLD="${AUDIT_CP1_THRESHOLD:-$_D_AUDIT_CP1_THRESHOLD}"
 AUDIT_CP2_MIN_SPRINTS="${AUDIT_CP2_MIN_SPRINTS:-$_D_AUDIT_CP2_MIN_SPRINTS}"
-AUDIT_LOG_MAX_BYTES="${AUDIT_LOG_MAX_BYTES:-$_D_AUDIT_LOG_MAX_BYTES}"
-AUDIT_LOG_KEEP_LINES="${AUDIT_LOG_KEEP_LINES:-$_D_AUDIT_LOG_KEEP_LINES}"
-AUDIT_HEALTH_STALE_SECONDS="${AUDIT_HEALTH_STALE_SECONDS:-$_D_AUDIT_HEALTH_STALE_SECONDS}"
-AUDIT_HEALTH_ERROR_THRESHOLD="${AUDIT_HEALTH_ERROR_THRESHOLD:-$_D_AUDIT_HEALTH_ERROR_THRESHOLD}"
 DASHBOARD_SEARCH_DEPTH="${DASHBOARD_SEARCH_DEPTH:-$_D_DASHBOARD_SEARCH_DEPTH}"
 
 # ── Per-developer overrides from .env (git-ignored) ──

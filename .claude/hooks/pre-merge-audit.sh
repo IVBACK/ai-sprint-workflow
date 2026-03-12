@@ -37,12 +37,6 @@ fi
 SOURCE="$1"
 
 # ── Check prerequisites ──
-if [[ "${ENABLE_CROSS_AUDIT:-true}" != "true" ]]; then
-  echo "Cross-audit is disabled. Remove ENABLE_CROSS_AUDIT=false from .env to re-enable." >&2
-  _log_audit "skip" "disabled"
-  exit 0
-fi
-
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
 [[ -z "${CROSS_AUDIT_API_KEY:-}" ]] && { echo "CROSS_AUDIT_API_KEY not set" >&2; exit 1; }
@@ -89,15 +83,9 @@ if [[ -z "$COMBINED_DIFF" ]]; then
 fi
 
 CHANGED_LINES=$(echo "$COMBINED_DIFF" | grep -cE '^\+[^+]|^-[^-]' 2>/dev/null || echo 0)
-MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-3}"
-if [[ "$CHANGED_LINES" -lt "$MIN_CHANGES" ]]; then
-  echo "Only $CHANGED_LINES changed lines (minimum: $MIN_CHANGES). Skipping." >&2
-  _log_audit "skip" "below-min-changes"
-  exit 0
-fi
 
 # Truncate
-MAX_DIFF_CHARS=32000
+MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_WAVE:-${CROSS_AUDIT_MAX_DIFF:-32000}}"
 if [[ ${#COMBINED_DIFF} -gt $MAX_DIFF_CHARS ]]; then
   COMBINED_DIFF="${COMBINED_DIFF:0:$MAX_DIFF_CHARS}
 
@@ -169,14 +157,22 @@ This code was written by a sub-agent in an isolated worktree. It has NOT been me
 Your verdict determines whether the coordinator should proceed with the merge.
 
 Focus on:
-1. Correctness — are there bugs, logic errors, or missed edge cases?
+1. Correctness — bugs, logic errors, missed edge cases
 2. API contract compliance — do new/changed functions match expected signatures?
-3. Security issues — injection, auth bypass, data exposure
-4. Incomplete implementation — are there TODOs, placeholder code, or unfinished work?
-5. Test coverage — are there tests for the changed code?
+3. Security — injection, auth bypass, data exposure
+4. Incomplete implementation — distinguish:
+   - BLOCK: placeholder code that will break at runtime (empty functions, hardcoded dummy values, panic/todo!() macros)
+   - WARN: TODO comments noting future improvements that don't affect current functionality
+   - PASS: intentionally deferred work documented in tracking
+5. Test coverage — are there tests for the changed code? Missing tests for new public APIs = WARN
 6. Critical axis violations (if specified above)
 7. Coding rules violations (if guardrails provided above)
 8. Predicted risk mitigation — are failure modes (if listed above) addressed?
+
+SEVERITY DECISION TREE:
+- BLOCK: security issue (injection, auth bypass, data exposure), runtime crash (null deref, unhandled error, missing import), API contract break (signature mismatch, missing required field), placeholder code that will fail at runtime, critical axis violation
+- WARN: logic bug in non-critical path, missing edge case handling, missing tests for new code, TODO comments, performance concern, style violation
+- PASS: clean implementation, no issues found
 
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
 BLOCK = do not merge (critical issues). WARN = merge with caution. PASS = safe to merge.

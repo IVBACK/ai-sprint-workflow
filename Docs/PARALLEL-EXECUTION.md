@@ -222,9 +222,7 @@ Do not fire-and-forget agents. The coordinator:
 
 ### Cross-LLM Audit in Parallel Mode
 
-Cross-LLM audit automatically skips in worktree-based sub-agents (`CROSS_AUDIT_SKIP_SUBAGENT=true` by default). Reason: sub-agents have narrow scope (single item) and audit results don't reach the coordinator. Instead, the coordinator receives the holistic review at wave boundaries and gate files.
-
-To force audit in sub-agents (not recommended): set `CROSS_AUDIT_SKIP_SUBAGENT=false` in `.env`.
+Cross-LLM audit automatically skips in worktree-based sub-agents. Reason: sub-agents have narrow scope (single item) and audit results don't reach the coordinator. Instead, the coordinator receives the holistic review at wave boundaries and gate files.
 
 ### Inter-Wave Commit (Mandatory)
 
@@ -405,6 +403,45 @@ the next wave (expensive to fix at Close Gate).
 - **Close Gate Wave 2:** cross-cut review agent does the deep, systematic check
   (API consistency, type alignment, style, inter-item interactions) with full
   sprint diff context. This is where subtle cross-item issues get caught.
+
+### Coordinator Decision Framework
+
+Decision trees for common between-wave situations.
+
+**Early completion (agent finishes before others in wave):**
+```
+Agent reports PASS with AC evidence?
+├─ YES → merge immediately, don't wait for other agents
+│        (reduces merge complexity — fewer simultaneous diffs)
+└─ NO (WARN/FAIL) → hold until wave completes
+   ├─ WARN with minor issues → coordinator fixes during wait, merge when ready
+   └─ FAIL → re-launch agent with feedback while other agents still running
+```
+
+**Course correction triggers (act immediately, don't wait for wave end):**
+```
+- Agent asks a question → answer immediately (agent is blocked)
+- Agent reports STATUS: FAIL → assess: re-launchable or needs wave abort?
+- Agent touches a file not in its preflight packet → flag immediately
+- Agent's interim output shows wrong approach → provide correction
+- Two agents report conflicting changes to shared state → pause both, resolve
+```
+
+**Pre-merge audit BLOCK handling:**
+```
+Pre-merge audit returns BLOCK?
+├─ Finding is FACTUAL (real bug) → do not merge, re-launch agent with finding
+├─ Finding is SEVERITY dispute → merge with WARN, track for Close Gate review
+└─ Finding is FALSE POSITIVE → merge, document reasoning in commit message
+```
+
+**Agent SLA (when to give up on an agent):**
+```
+- Agent running 3x longer than wave peers → check output, consider terminating
+- Agent stuck in retry loop (same error 3+ times) → terminate, investigate manually
+- Agent produced output but didn't complete all items → merge completed items,
+  reassign remaining to next wave
+```
 
 ### Review Layers at a Glance
 

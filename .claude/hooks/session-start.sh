@@ -53,20 +53,16 @@ if [[ -n "$WORKFLOW_FILE" ]]; then
     fi
 fi
 
-# Detect cross-audit status
-# Enabled by default in hooks-config.sh — actual activation requires API key in .env
+# Detect cross-audit status — activates when API key is present
 CROSS_AUDIT_STATUS="no-key"
 ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
 if [[ -f "$ENV_FILE" ]] && grep -q "^CROSS_AUDIT_API_KEY=" "$ENV_FILE" 2>/dev/null; then
-    # Has API key — check if explicitly disabled
-    if [[ "${ENABLE_CROSS_AUDIT:-true}" == "true" ]]; then
-        CROSS_AUDIT_STATUS="on"
-    else
-        CROSS_AUDIT_STATUS="disabled"
-    fi
-elif [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
-    # Setup script exists but no API key yet
-    CROSS_AUDIT_STATUS="no-key"
+    CROSS_AUDIT_STATUS="on"
+fi
+
+# Warn about removed ENABLE_CROSS_AUDIT variable
+if [[ -f "$ENV_FILE" ]] && grep -q "^ENABLE_CROSS_AUDIT=" "$ENV_FILE" 2>/dev/null; then
+    DEPRECATED_WARN="ENABLE_CROSS_AUDIT is no longer used. Cross-audit activates when API key is present. To disable: remove CROSS_AUDIT_API_KEY from .env. You can safely delete the ENABLE_CROSS_AUDIT line."
 fi
 
 # Output additional context for the agent via JSON
@@ -75,18 +71,19 @@ jq -n \
   --arg claude_md "$CLAUDE_MD" \
   --arg audit "$CROSS_AUDIT_STATUS" \
   --arg version_warn "$VERSION_WARNING" \
+  --arg deprecated "${DEPRECATED_WARN:-}" \
 '{
   "additionalContext": (
     "=== SESSION START PROTOCOL (WORKFLOW.md) ===\n" +
     (if $version_warn != "" then "⚠ " + $version_warn + "\n\n" else "" end) +
+    (if $deprecated != "" then "⚠ " + $deprecated + "\n\n" else "" end) +
     "Before doing anything else:\n" +
     (if $claude_md != "" then "1. Read CLAUDE.md (\($claude_md)) — operational rules and last checkpoint.\n" else "" end) +
     (if $tracking != "" then "2. Read TRACKING.md (\($tracking)) — current sprint status, open items, blockers.\n" else "" end) +
     "3. State current sprint and last known status before proceeding.\n" +
     "Do NOT start implementation before completing this protocol.\n" +
-    (if $audit == "on" then "\nCross-LLM Audit: ENABLED. External code reviews will appear inline after code changes.\nDo NOT attempt to read .env — the audit hook manages it automatically.\n" else "" end) +
-    (if $audit == "disabled" then "\nCross-LLM Audit: explicitly DISABLED. To re-enable: remove ENABLE_CROSS_AUDIT=false from .env.\n" else "" end) +
-    (if $audit == "no-key" then "\nCross-LLM Audit: enabled but no API key configured. To activate: user runs `bash .claude/setup-audit.sh` in their terminal.\n" else "" end) +
+    (if $audit == "on" then "\nCross-LLM Audit: ACTIVE. External code reviews will appear inline after code changes.\nDo NOT attempt to read .env — the audit hook manages it automatically.\n" else "" end) +
+    (if $audit == "no-key" then "\nCross-LLM Audit: no API key configured. To activate: user runs `bash .claude/setup-audit.sh` in their terminal.\n" else "" end) +
     "============================================"
   )
 }'

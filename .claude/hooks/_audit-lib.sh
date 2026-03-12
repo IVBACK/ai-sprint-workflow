@@ -26,18 +26,14 @@ _log_audit() {
     fi
   fi
 
-  # Dual review fields (read from env, set by cross-llm-audit.sh when dual review is active)
-  local _dual="${CROSS_AUDIT_DUAL_REVIEW:-false}"
-
   if command -v jq >/dev/null 2>&1; then
     jq -cn --arg ts "$ts" --arg status "$status" --arg reason "$reason" \
           --arg verdict "$verdict" --arg file "${FILE:-}" --arg mode "${AUDIT_MODE:-}" \
-          --arg dual_review "$_dual" \
-      '{ts:$ts,status:$status,reason:$reason,verdict:$verdict,file:$file,mode:$mode,dual_review:($dual_review == "true")}' \
+      '{ts:$ts,status:$status,reason:$reason,verdict:$verdict,file:$file,mode:$mode}' \
       >> "$log_file" 2>/dev/null
   else
-    printf '{"ts":"%s","status":"%s","reason":"%s","verdict":"%s","file":"%s","mode":"%s","dual_review":%s}\n' \
-      "$ts" "$status" "$reason" "$verdict" "${FILE:-}" "${AUDIT_MODE:-}" "$_dual" \
+    printf '{"ts":"%s","status":"%s","reason":"%s","verdict":"%s","file":"%s","mode":"%s"}\n' \
+      "$ts" "$status" "$reason" "$verdict" "${FILE:-}" "${AUDIT_MODE:-}" \
       >> "$log_file" 2>/dev/null
   fi
 }
@@ -71,7 +67,7 @@ _scrub_secrets() {
 }
 
 # ── Load .env for CROSS_AUDIT_* vars ──
-# Only imports CROSS_AUDIT_* and ENABLE_CROSS_AUDIT from .env.
+# Only imports CROSS_AUDIT_* from .env.
 # Shell env vars take precedence (don't override already-set values).
 _load_audit_env() {
   local env_file="${1:-${CLAUDE_PROJECT_DIR:-.}/.env}"
@@ -82,7 +78,7 @@ _load_audit_env() {
     local value="${line#*=}"
     key=$(echo "$key" | sed 's/^[[:space:]]*export[[:space:]]*//' | tr -d '[:space:]')
     value=$(echo "$value" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
-    if [[ "$key" == CROSS_AUDIT_* || "$key" == "ENABLE_CROSS_AUDIT" ]]; then
+    if [[ "$key" == CROSS_AUDIT_* ]]; then
       [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
       local _cur_val
       _cur_val=$(printenv "$key" 2>/dev/null || true)

@@ -60,22 +60,15 @@ assert_contains() {
 bold "═══ Cross-LLM Audit Hook Tests ═══"
 echo ""
 
-# ── Test 1: Disabled by default ──
-bold "Test 1: Disabled by default"
+# ── Test 1: No API key → silent exit ──
+bold "Test 1: No API key → silent skip"
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=false bash "$HOOK" 2>&1)
-assert_exit "hook exits 0 when disabled" 0 $?
-assert_empty "no output when disabled" "$OUT"
-
-# ── Test 2: No API key → silent exit ──
-bold "Test 2: No API key → silent skip"
-OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="" bash "$HOOK" 2>&1)
+  | CROSS_AUDIT_API_KEY="" bash "$HOOK" 2>&1)
 assert_exit "exits 0 without API key" 0 $?
 assert_empty "no output without API key" "$OUT"
 
 # ── Test 3: Skip non-source files ──
-bold "Test 3: Skips non-source files"
+bold "Test 2: Skips non-source files"
 # Note: S*_ENTRY_GATE.md, S*_CLOSE_GATE.md, and TRACKING.md are NOT skipped —
 # they trigger special audit modes (entry-gate, close-gate, wave-review).
 # They are tested separately in tests 9-13.
@@ -83,26 +76,26 @@ for skip_file in "CLAUDE.md" "WORKFLOW.md" "Docs/Planning/Roadmap.md" \
                  "SPRINT_CLOSE.md" "CODING_GUARDRAILS.md" "LESSONS.md" \
                  "config.json" ".env" "package-lock.json" "data.yaml"; do
   OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$skip_file\"}}" \
-    | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" bash "$HOOK" 2>&1)
+    | CROSS_AUDIT_API_KEY="test" bash "$HOOK" 2>&1)
   assert_empty "skips $skip_file" "$OUT"
 done
 
 # ── Test 4: Skip non-Edit/Write tools ──
-bold "Test 4: Skips non-Edit/Write tools"
+bold "Test 3: Skips non-Edit/Write tools"
 for tool in "Bash" "Read" "Glob" "Grep" "Agent"; do
   OUT=$(echo "{\"tool_name\":\"$tool\",\"tool_input\":{\"file_path\":\"src/app.ts\"}}" \
-    | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" bash "$HOOK" 2>&1)
+    | CROSS_AUDIT_API_KEY="test" bash "$HOOK" 2>&1)
   assert_empty "skips tool=$tool" "$OUT"
 done
 
 # ── Test 5: Wave mode counter ──
-bold "Test 5: Wave mode batching (fires on 5th edit)"
+bold "Test 4: Wave mode batching (fires on 5th edit)"
 TEST_COUNTER="/tmp/.cross-audit-test-counter-$$"
 rm -f "$TEST_COUNTER"
 for i in 1 2 3 4; do
   OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-    | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-      CROSS_AUDIT_TRIGGER=wave CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
+    | CROSS_AUDIT_API_KEY="test" \
+      CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
       CROSS_AUDIT_COUNTER_FILE="$TEST_COUNTER" \
       bash "$HOOK" 2>&1)
 done
@@ -121,44 +114,43 @@ else
   FAILED=$((FAILED + 1))
 fi
 
-# ── Test 6: Item mode (no batching) ──
-bold "Test 6: Item mode passes through immediately"
+# ── Test 5: Wave-size=1 (every edit) ──
+bold "Test 5: Wave-size=1 passes through immediately"
 # This will try to run but fail at git diff (no changes) — that's fine
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=0 \
+  | CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_WAVE_SIZE=1 \
     CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
     bash "$HOOK" 2>&1)
-# If we get here without crashing, the item trigger path works
-assert_exit "item mode doesn't crash" 0 $?
+# If we get here without crashing, wave-size=1 path works
+assert_exit "wave-size=1 doesn't crash" 0 $?
 
-# ── Test 7: Min changes threshold ──
-bold "Test 7: Minimum changes threshold (empty diff → skip)"
+# ── Test 6: Empty diff → skip ──
+bold "Test 6: Empty diff → skip"
 # Use a clean temp git repo so git diff returns nothing
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
 git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=10 \
+  | CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_WAVE_SIZE=1 \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 rm -rf "$TEMP_REPO"
 assert_empty "skips when diff is empty" "$OUT"
 
-# ── Test 8: CROSS_AUDIT_FIRE override ──
-bold "Test 8: CROSS_AUDIT_FIRE=true forces immediate audit"
+# ── Test 7: CROSS_AUDIT_FIRE override ──
+bold "Test 7: CROSS_AUDIT_FIRE=true forces immediate audit"
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave CROSS_AUDIT_FIRE=true \
-    CROSS_AUDIT_MIN_CHANGES=10 \
+  | CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_FIRE=true \
     CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
     bash "$HOOK" 2>&1)
-# Should pass wave gate but stop at min changes (no real diff)
+# Should pass wave gate but stop at empty diff (no real diff)
 assert_exit "FIRE override exits cleanly" 0 $?
 
 # ── Test 9: Close Gate mode (holistic review) ──
-bold "Test 9: Close Gate mode detection"
+bold "Test 8: Close Gate mode detection"
 # Close Gate files should bypass wave counting and skip file exclusion
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
@@ -172,8 +164,7 @@ git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit -m "spr
 echo "console.log('more changes')" >> "$TEMP_REPO/app.js"
 git -C "$TEMP_REPO" add -A 2>/dev/null
 OUT=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/S1_CLOSE_GATE.md\"}}" \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave \
+  | CROSS_AUDIT_API_KEY="test" \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 # Close gate should bypass wave counter (fire immediately) but fail at API call
@@ -181,8 +172,8 @@ OUT=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/
 assert_exit "close-gate mode exits cleanly" 0 $?
 rm -rf "$TEMP_REPO"
 
-# ── Test 10: Entry Gate mode detection ──
-bold "Test 10: Entry Gate mode detection"
+# ── Test 9: Entry Gate mode detection ──
+bold "Test 9: Entry Gate mode detection"
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
 git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
@@ -195,16 +186,15 @@ cat > "$TEMP_REPO/S2_ENTRY_GATE.md" << 'GEOF'
 - Token expiry not handled
 GEOF
 OUT=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/S2_ENTRY_GATE.md\"}}" \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave \
+  | CROSS_AUDIT_API_KEY="test" \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 # Entry gate should bypass wave counter and use file content as diff
 assert_exit "entry-gate mode exits cleanly" 0 $?
 rm -rf "$TEMP_REPO"
 
-# ── Test 11: Gate files skip wave counting ──
-bold "Test 11: Gate files skip wave counting"
+# ── Test 10: Gate files skip wave counting ──
+bold "Test 10: Gate files skip wave counting"
 TEST_COUNTER="/tmp/.cross-audit-test-counter-gate-$$"
 rm -f "$TEST_COUNTER"
 echo "3" > "$TEST_COUNTER"
@@ -216,8 +206,7 @@ git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow
 echo "change" > "$TEMP_REPO/app.js"
 git -C "$TEMP_REPO" add -A 2>/dev/null
 OUT=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/S1_CLOSE_GATE.md\"}}" \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave \
+  | CROSS_AUDIT_API_KEY="test" \
     CROSS_AUDIT_COUNTER_FILE="$TEST_COUNTER" \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
@@ -238,8 +227,8 @@ fi
 rm -f "$TEST_COUNTER"
 rm -rf "$TEMP_REPO"
 
-# ── Test 12: Wave-review mode (TRACKING.md triggers wave-review) ──
-bold "Test 12: Wave-review mode on TRACKING.md edit"
+# ── Test 11: Wave-review mode (TRACKING.md triggers wave-review) ──
+bold "Test 11: Wave-review mode on TRACKING.md edit"
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
 git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
@@ -250,32 +239,30 @@ git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit -m "wav
 # Create TRACKING.md (coordinator updating after merge)
 echo "| CORE-100 | Auth | fixed | ✓ |" > "$TEMP_REPO/TRACKING.md"
 OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/TRACKING.md\"}}" \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave \
+  | CROSS_AUDIT_API_KEY="test" \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 # Wave-review should bypass wave counter and attempt audit (will fail at API call, that's ok)
 assert_exit "wave-review mode exits cleanly" 0 $?
 rm -rf "$TEMP_REPO"
 
-# ── Test 13: Wave-review skips when no code changes ──
-bold "Test 13: Wave-review skips when no code changes in diff"
+# ── Test 12: Wave-review skips when no code changes ──
+bold "Test 12: Wave-review skips when no code changes in diff"
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
 git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
 # No source changes — only TRACKING.md
 echo "| CORE-100 | Auth | in_progress | |" > "$TEMP_REPO/TRACKING.md"
 OUT=$(echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TEMP_REPO/TRACKING.md\"}}" \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=wave CROSS_AUDIT_MIN_CHANGES=3 \
+  | CROSS_AUDIT_API_KEY="test" \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 assert_exit "wave-review skips when no code diff" 0 $?
 assert_empty "no output for empty wave diff" "$OUT"
 rm -rf "$TEMP_REPO"
 
-# ── Test 14: Audit log is created on skip ──
-bold "Test 14: Audit log is created (P0)"
+# ── Test 13: Audit log is created on skip ──
+bold "Test 13: Audit log is created (P0)"
 TEMP_REPO=$(mktemp -d)
 git -C "$TEMP_REPO" init -q 2>/dev/null
 git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
@@ -283,8 +270,8 @@ TEST_STATE_DIR="$TEMP_REPO/.claude/.state"
 mkdir -p "$TEST_STATE_DIR"
 TEST_LOG="$TEST_STATE_DIR/cross-audit-log.jsonl"
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
+  | CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_WAVE_SIZE=1 \
     CLAUDE_PROJECT_DIR="$TEMP_REPO" \
     bash "$HOOK" 2>&1)
 if [[ -f "$TEST_LOG" ]]; then
@@ -302,35 +289,8 @@ else
 fi
 rm -rf "$TEMP_REPO"
 
-# ── Test 15: Disabled hook logs 'disabled' reason ──
-bold "Test 15: Disabled hook logs reason (P0)"
-TEMP_REPO=$(mktemp -d)
-git -C "$TEMP_REPO" init -q 2>/dev/null
-git -C "$TEMP_REPO" -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init" -q 2>/dev/null
-TEST_STATE_DIR="$TEMP_REPO/.claude/.state"
-mkdir -p "$TEST_STATE_DIR"
-TEST_LOG="$TEST_STATE_DIR/cross-audit-log.jsonl"
-OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=false \
-    CLAUDE_PROJECT_DIR="$TEMP_REPO" \
-    bash "$HOOK" 2>&1)
-if [[ -f "$TEST_LOG" ]]; then
-  LAST_REASON=$(tail -1 "$TEST_LOG" | jq -r '.reason' 2>/dev/null)
-  if [[ "$LAST_REASON" == "disabled" ]]; then
-    green "  PASS: disabled hook logs 'disabled' reason"
-    PASSED=$((PASSED + 1))
-  else
-    red "  FAIL: log reason is '$LAST_REASON', expected 'disabled'"
-    FAILED=$((FAILED + 1))
-  fi
-else
-  red "  FAIL: audit log not created"
-  FAILED=$((FAILED + 1))
-fi
-rm -rf "$TEMP_REPO"
-
-# ── Test 16: verify-evidence.sh validates file:line refs ──
-bold "Test 16: Evidence verification script (P3)"
+# ── Test 14: verify-evidence.sh validates file:line refs ──
+bold "Test 14: Evidence verification script (P3)"
 TEMP_REPO=$(mktemp -d)
 mkdir -p "$TEMP_REPO/src"
 # Create a 50-line file
@@ -370,38 +330,22 @@ rm -rf "$TEMP_REPO"
 bold "═══ Dual Review Tests ═══"
 echo ""
 
-# ── Test 17: DUAL_REVIEW=true adds dual review protocol to BLOCK directive ──
-bold "Test 17: Dual review BLOCK directive format"
-# We can't do a full API call, but we can verify the hook sources config correctly
-# by checking that the variable is recognized and doesn't cause errors
+# ── Test 15: Review protocol config accepted without error ──
+bold "Test 15: Review protocol config accepted"
 OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_DUAL_REVIEW=true CROSS_AUDIT_AUTOFIX_LIMIT=15 \
-    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
+  | CROSS_AUDIT_API_KEY="test" \
+    CROSS_AUDIT_WAVE_SIZE=1 \
     CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
     bash "$HOOK" 2>&1)
-assert_exit "dual review config accepted without error" 0 $?
+assert_exit "review protocol config accepted without error" 0 $?
 
-# ── Test 18: DUAL_REVIEW=false preserves legacy behavior ──
-bold "Test 18: DUAL_REVIEW=false preserves legacy behavior"
-OUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/app.ts"}}' \
-  | ENABLE_CROSS_AUDIT=true CROSS_AUDIT_API_KEY="test" \
-    CROSS_AUDIT_DUAL_REVIEW=false \
-    CROSS_AUDIT_TRIGGER=item CROSS_AUDIT_MIN_CHANGES=999 \
-    CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
-    bash "$HOOK" 2>&1)
-assert_exit "legacy mode exits cleanly" 0 $?
-
-# ── Test 19: Dual review config variables have valid defaults ──
-bold "Test 19: Dual review config defaults from hooks-config.sh"
+# ── Test 16: Core audit config variables have valid defaults ──
+bold "Test 16: Core audit config defaults from hooks-config.sh"
 if [[ -f "$PROJECT_DIR/.claude/hooks-config.sh" ]]; then
-  # Source hooks-config.sh and check that dual review defaults exist
-  DUAL_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_DUAL_REVIEW:-MISSING}\"")
-  AUTOFIX_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_AUTOFIX_LIMIT:-MISSING}\"")
-  AUTOFIX_LOG_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_AUTOFIX_LOG:-MISSING}\"")
-  CG_AUTOFIX_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_CLOSE_GATE_AUTOFIX:-MISSING}\"")
+  WAVE_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_WAVE_SIZE:-MISSING}\"")
+  ENFORCE_VAL=$(bash -c "source '$PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${CROSS_AUDIT_ENFORCE_BLOCK:-MISSING}\"")
   ALL_SET=true
-  for var_name in DUAL_VAL AUTOFIX_VAL AUTOFIX_LOG_VAL CG_AUTOFIX_VAL; do
+  for var_name in WAVE_VAL ENFORCE_VAL; do
     val="${!var_name}"
     if [[ "$val" == "MISSING" ]]; then
       red "  FAIL: $var_name not set in hooks-config.sh"
@@ -410,7 +354,7 @@ if [[ -f "$PROJECT_DIR/.claude/hooks-config.sh" ]]; then
     fi
   done
   if [[ "$ALL_SET" == "true" ]]; then
-    green "  PASS: all 4 dual review config vars have defaults (DUAL=$DUAL_VAL, LIMIT=$AUTOFIX_VAL, LOG=$AUTOFIX_LOG_VAL, CG=$CG_AUTOFIX_VAL)"
+    green "  PASS: core audit config vars have defaults (WAVE=$WAVE_VAL, ENFORCE=$ENFORCE_VAL)"
     PASSED=$((PASSED + 1))
   fi
 else
@@ -418,8 +362,8 @@ else
   FAILED=$((FAILED + 1))
 fi
 
-# ── Test 20: Self-audit checklist is embedded in hook ──
-bold "Test 20: Self-audit checklist is embedded in hook"
+# ── Test 17: Self-audit checklist is embedded in hook ──
+bold "Test 17: Self-audit checklist is embedded in hook"
 if grep -q "SELF-AUDIT CHECKLIST" "$HOOK"; then
   green "  PASS: self-audit checklist found in hook"
   PASSED=$((PASSED + 1))
@@ -428,18 +372,18 @@ else
   FAILED=$((FAILED + 1))
 fi
 
-# ── Test 21: DUAL REVIEW PROTOCOL directive exists in hook ──
-bold "Test 21: Dual review protocol directive in hook"
-if grep -q "DUAL REVIEW PROTOCOL" "$HOOK"; then
-  green "  PASS: dual review protocol directive found"
+# ── Test 18: Review protocol directive exists in hook ──
+bold "Test 18: Review protocol directive in hook"
+if grep -q "structured self-audit" "$HOOK"; then
+  green "  PASS: review protocol directive found"
   PASSED=$((PASSED + 1))
 else
-  red "  FAIL: dual review protocol directive not found"
+  red "  FAIL: review protocol directive not found"
   FAILED=$((FAILED + 1))
 fi
 
-# ── Test 22: Workflow mode is injected into additionalContext ──
-bold "Test 22: Workflow-Mode in additionalContext output"
+# ── Test 19: Workflow mode is injected into additionalContext ──
+bold "Test 19: Workflow-Mode in additionalContext output"
 if grep -q 'wfmode' "$HOOK" && grep -q 'WORKFLOW_MODE' "$HOOK"; then
   green "  PASS: workflow mode is passed to additionalContext"
   PASSED=$((PASSED + 1))
@@ -448,13 +392,13 @@ else
   FAILED=$((FAILED + 1))
 fi
 
-# ── Test 23: Dual review log field in _audit-lib.sh ──
-bold "Test 23: dual_review field in audit log"
-if grep -q 'dual_review' "$SCRIPT_DIR/_audit-lib.sh"; then
-  green "  PASS: dual_review field found in _audit-lib.sh"
+# ── Test 20: Audit log structure in _audit-lib.sh ──
+bold "Test 20: audit log has mode field in _audit-lib.sh"
+if grep -q 'mode' "$SCRIPT_DIR/_audit-lib.sh"; then
+  green "  PASS: mode field found in _audit-lib.sh"
   PASSED=$((PASSED + 1))
 else
-  red "  FAIL: dual_review field not found in _audit-lib.sh"
+  red "  FAIL: mode field not found in _audit-lib.sh"
   FAILED=$((FAILED + 1))
 fi
 
@@ -474,7 +418,7 @@ if [[ "$LIVE_MODE" == "--live" ]]; then
       value="${line#*=}"
       key=$(echo "$key" | sed 's/^[[:space:]]*export[[:space:]]*//' | tr -d '[:space:]')
       value=$(echo "$value" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
-      if [[ "$key" == CROSS_AUDIT_* || "$key" == "ENABLE_CROSS_AUDIT" ]]; then
+      if [[ "$key" == CROSS_AUDIT_* ]]; then
         [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
         _cur_val=$(printenv "$key" 2>/dev/null || true)
         [[ -z "$_cur_val" ]] && export "$key=$value"
@@ -516,9 +460,7 @@ PYEOF
     bold "Sending to ${CROSS_AUDIT_API_BASE:-https://api.openai.com/v1} (model: ${CROSS_AUDIT_MODEL:-gpt-4o})..."
 
     OUT=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEMP_FILE\"}}" \
-      | ENABLE_CROSS_AUDIT=true \
-        CROSS_AUDIT_TRIGGER=item \
-        CROSS_AUDIT_MIN_CHANGES=1 \
+      | CROSS_AUDIT_WAVE_SIZE=1 \
         CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
         bash "$HOOK" 2>&1)
 

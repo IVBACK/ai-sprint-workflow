@@ -309,51 +309,8 @@ echo ""
 echo "Optional settings (press Enter for defaults):"
 echo ""
 
-echo "  Trigger mode — how often the 2nd LLM reviews your code:"
-echo "    wave  = batches ~5 edits, then reviews (lower cost, recommended)"
-echo "    item  = reviews after EVERY edit (thorough but higher API cost)"
-echo "  Gate reviews (Entry/Close) always fire immediately regardless."
-echo ""
-read -rp "  Trigger mode [wave]: " TRIGGER
-TRIGGER="${TRIGGER:-wave}"
-
-echo ""
-echo "  Context level — how much project info is sent with the diff:"
-echo "    minimal  = diff + active items + critical axis (~2-4k tokens)"
-echo "    standard = + coding guardrails + failure modes   (~4-8k tokens)"
-echo "    full     = + full content of changed files       (~8-16k tokens)"
-echo "  Higher context = better reviews but higher API cost per call."
-echo ""
-read -rp "  Context level [standard]: " CONTEXT
-CONTEXT="${CONTEXT:-standard}"
-
-echo ""
 read -rp "  Review language — en or tr [en]: " LANG
 LANG="${LANG:-en}"
-
-echo ""
-echo "  Min changed lines — edits smaller than this are skipped."
-echo "  Prevents noisy reviews for trivial changes (typo fixes, etc.)."
-echo ""
-read -rp "  Min changed lines [3]: " MIN_CHANGES
-MIN_CHANGES="${MIN_CHANGES:-3}"
-
-# ── Dual review option ──
-echo ""
-echo "=== Dual Review (Autonomous Fix) ==="
-echo "  When enabled, the AI independently reviews code alongside the external LLM,"
-echo "  compares findings, and auto-fixes agreed issues without blocking you."
-echo "  Only disagreements and non-trivial fixes are escalated."
-echo ""
-read -rp "  Enable dual review? [y/N]: " ENABLE_DUAL
-DUAL_REVIEW="false"
-AUTOFIX_LIMIT=""
-if [[ "$ENABLE_DUAL" =~ ^[Yy] ]]; then
-  DUAL_REVIEW="true"
-  echo ""
-  read -rp "  Auto-fix line limit (default: 20): " AUTOFIX_LIMIT
-  AUTOFIX_LIMIT="${AUTOFIX_LIMIT:-20}"
-fi
 
 # ── Write .env (API key + personal overrides — git-ignored) ──
 # Preserve existing non-audit variables if .env exists
@@ -361,7 +318,7 @@ EXISTING_VARS=""
 if [[ -f "$ENV_FILE" ]]; then
   # Backup existing .env before overwriting
   cp "$ENV_FILE" "${ENV_FILE}.bak" || { echo "ERROR: Failed to backup .env" >&2; exit 1; }
-  EXISTING_VARS=$(grep -v '^\s*#' "$ENV_FILE" | grep -v '^ENABLE_CROSS_AUDIT' | grep -v '^CROSS_AUDIT_' | grep -v '^\s*$' || true)
+  EXISTING_VARS=$(grep -v '^\s*#' "$ENV_FILE" | grep -v '^CROSS_AUDIT_' | grep -v '^\s*$' || true)
 fi
 
 # Atomic write: build in temp file, then move into place
@@ -380,16 +337,7 @@ _SETUP_TMPFILES+=("$ENV_TMP")
   echo "CROSS_AUDIT_PROVIDER=$PROVIDER"
   echo "CROSS_AUDIT_API_BASE=$API_BASE"
   echo "CROSS_AUDIT_MODEL=$MODEL"
-  echo "CROSS_AUDIT_TRIGGER=$TRIGGER"
-  echo "CROSS_AUDIT_CONTEXT=$CONTEXT"
   echo "CROSS_AUDIT_LANG=$LANG"
-  echo "CROSS_AUDIT_MIN_CHANGES=$MIN_CHANGES"
-  if [[ "$DUAL_REVIEW" == "true" ]]; then
-    echo ""
-    echo "# Dual Review"
-    echo "CROSS_AUDIT_DUAL_REVIEW=true"
-    echo "CROSS_AUDIT_AUTOFIX_LIMIT=$AUTOFIX_LIMIT"
-  fi
   if [[ -n "$EXISTING_VARS" ]]; then
     echo ""
     echo "# Preserved from previous .env"
@@ -403,7 +351,7 @@ mv -f "$ENV_TMP" "$ENV_FILE" || { echo "ERROR: Failed to install .env" >&2; exit
 echo ""
 if [[ "${CALLED_FROM_INIT:-}" == "1" ]]; then
   # Compact summary when called from sprint-workflow init
-  printf '  \033[32m✓\033[0m Audit configured: %s / %s / %s\n' "$PROVIDER" "$MODEL" "$TRIGGER"
+  printf '  \033[32m✓\033[0m Audit configured: %s / %s\n' "$PROVIDER" "$MODEL"
 else
   # Full banner when run standalone
   echo "╔══════════════════════════════════════════════════════╗"
@@ -414,7 +362,6 @@ else
   echo "║  Defaults: .claude/hooks-config.sh                  ║"
   echo "║  Provider: $(printf '%-40s' "$PROVIDER")║"
   echo "║  Model:    $(printf '%-40s' "$MODEL")║"
-  echo "║  Trigger:  $(printf '%-40s' "$TRIGGER")║"
   echo "║                                                     ║"
   echo "╠══════════════════════════════════════════════════════╣"
   echo "║  What happens now?                                  ║"
@@ -430,7 +377,7 @@ else
   echo "║                                                     ║"
   echo "╠══════════════════════════════════════════════════════╣"
   echo "║  Useful commands:                                   ║"
-  echo "║  Disable:  ENABLE_CROSS_AUDIT=false in .env          ║"
+  echo "║  Disable:  Remove API key from .env                   ║"
   echo "║  Reconfig: bash .claude/setup-audit.sh (re-run)     ║"
   echo "║  Docs:     Docs/CROSS-LLM-AUDIT.md                 ║"
   echo "╚══════════════════════════════════════════════════════╝"

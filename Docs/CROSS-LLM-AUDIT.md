@@ -16,19 +16,32 @@ A second opinion from a different model catches blind spots. Different LLMs have
 ## How It Works
 
 ```
-Claude implements item → Hook detects source file change →
-  Collects git diff + project context →
-  Sends to external LLM API →
-  External review returns as additionalContext →
-  Claude presents both its own and external assessment →
-  User decides
+Claude implements item
+  │
+  ▼
+Hook detects source file change
+  │
+  ▼
+Collects git diff + layered project context
+  │  ┌─ Always: sprint goal, progress, critical axis, immutable contracts
+  │  ├─ standard/full: guardrails, failure modes, acceptance criteria
+  │  └─ full: complete file content
+  │
+  ▼
+Sends to external LLM API
+  │
+  ▼
+External review returns as additionalContext
+  │
+  ▼
+Claude presents both its own and external assessment → User decides
 ```
 
 The hook fires on `PostToolUse(Edit|Write)` and supports three audit modes:
 
 | Mode | Trigger | What's Reviewed | Focus |
 |------|---------|-----------------|-------|
-| **Per-edit** | Source file change | Uncommitted `git diff` | Bugs, security, AC coverage + integration risk |
+| **Per-edit** | Source file change (wave-size batched) | Uncommitted `git diff` | Bugs, security, AC coverage + integration risk |
 | **Wave Review** | `TRACKING.md` edited | Last commit diff (`HEAD~1..HEAD`) | Cross-item integration + code quality (dual-axis) |
 | **Close Gate** | `S*_CLOSE_GATE.md` written | Full sprint diff (`git diff main...HEAD`) | Cross-item consistency, architecture, failure mode verification |
 | **Entry Gate** | `S*_ENTRY_GATE.md` written | Gate report content | Plan quality, missing risks, AC vs guardrails |
@@ -123,14 +136,9 @@ All settings are centralized in `.claude/hooks-config.sh` with a `_D_*` defaults
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `ENABLE_CROSS_AUDIT` | `true` | Master switch — silently skips if no API key |
 | `CROSS_AUDIT_PROVIDER` | `openai` | `openai` (OpenAI-compatible) or `anthropic` (native) |
-| `CROSS_AUDIT_TRIGGER` | `wave` | `wave` (every N edits) or `item` (every edit) |
-| `CROSS_AUDIT_CONTEXT` | `standard` | `minimal`, `standard`, or `full` (see below) |
 | `CROSS_AUDIT_LANG` | `en` | `en` (English) or `tr` (Turkish) |
-| `CROSS_AUDIT_MIN_CHANGES` | `3` | Edits smaller than this line count are skipped |
 | `CROSS_AUDIT_TIMEOUT` | `60` | API request timeout in seconds |
-| `CROSS_AUDIT_SKIP_SUBAGENT` | `true` | Skip audit in worktree sub-agents |
 | `CROSS_AUDIT_ENFORCE_BLOCK` | `false` | Exit non-zero on BLOCK verdict |
 
 ### Wave Batching
@@ -138,18 +146,16 @@ All settings are centralized in `.claude/hooks-config.sh` with a `_D_*` defaults
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `CROSS_AUDIT_WAVE_SIZE` | `5` | Source file edits before wave fires |
-| `CROSS_AUDIT_LOCK_TIMEOUT` | `5` | Flock timeout in seconds |
 
 Force immediate audit in wave mode: `export CROSS_AUDIT_FIRE=true`
 
-### Diff Truncation (max characters sent to external LLM)
+### Diff Truncation
 
-| Setting | Default | Mode |
-|---------|---------|------|
-| `CROSS_AUDIT_MAX_DIFF_PER_EDIT` | `24000` | Per-edit reviews |
-| `CROSS_AUDIT_MAX_DIFF_WAVE` | `32000` | Wave reviews |
-| `CROSS_AUDIT_MAX_DIFF_ENTRY_GATE` | `32000` | Entry Gate plan reviews |
-| `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE` | `48000` | Close Gate holistic reviews |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CROSS_AUDIT_MAX_DIFF` | `32000` | Base diff limit (chars). Derived per mode: per-edit=×0.75 (24k), wave=×1 (32k), entry-gate=×1 (32k), close-gate=×1.5 (48k) |
+
+Override individual limits via env if needed: `CROSS_AUDIT_MAX_DIFF_PER_EDIT`, `CROSS_AUDIT_MAX_DIFF_WAVE`, `CROSS_AUDIT_MAX_DIFF_ENTRY_GATE`, `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE`.
 
 ### Audit Signal Thresholds (CP1 / CP2)
 
@@ -157,15 +163,6 @@ Force immediate audit in wave mode: `export CROSS_AUDIT_FIRE=true`
 |---------|---------|-------------|
 | `AUDIT_CP1_THRESHOLD` | `0.20` | Metric regression threshold (0.20 = 20%) |
 | `AUDIT_CP2_MIN_SPRINTS` | `2` | Recurring failure: same category in N+ sprints |
-
-### Log & Health
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `AUDIT_LOG_MAX_BYTES` | `1048576` | Log rotation trigger (1MB) |
-| `AUDIT_LOG_KEEP_LINES` | `500` | Lines kept after rotation |
-| `AUDIT_HEALTH_STALE_SECONDS` | `3600` | Health check: stale threshold (1 hour) |
-| `AUDIT_HEALTH_ERROR_THRESHOLD` | `5` | Health check: error count threshold |
 
 ### Dashboard
 
@@ -182,13 +179,16 @@ CROSS_AUDIT_API_BASE=https://openrouter.ai/api/v1
 CROSS_AUDIT_MODEL=gpt-4o-mini
 ```
 
-### CROSS_AUDIT_CONTEXT Detail
+### Context (Always Full)
 
-| Level | What's Sent | Token Cost |
-|-------|-------------|------------|
-| `minimal` | Diff + active items from TRACKING.md + critical axis | Low (~2-4k) |
-| `standard` (default) | Minimal + CODING_GUARDRAILS.md + Entry Gate failure modes | Medium (~4-8k) |
-| `full` | Standard + full content of changed files | High (~8-16k) |
+Every review sends the maximum available context for best quality:
+- Diff + active items + critical axis
+- Sprint goal + sprint progress
+- Coding guardrails + failure modes
+- Acceptance criteria + immutable contracts
+- Full content of changed files (per-edit mode)
+
+Typical cost: ~5-17k tokens per review depending on diff size.
 
 ### Internal / Testing Variables
 
@@ -206,7 +206,7 @@ CROSS_AUDIT_MODEL=gpt-4o-mini
 
 Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at `CROSS_AUDIT_MAX_DIFF_PER_EDIT`, default ~24k chars). Reviews for bugs, security issues, AC coverage, coding rule violations, and **integration risk** (could this change conflict with other active items?).
 
-Subject to wave/item trigger mode and `MIN_CHANGES` threshold.
+Subject to wave-size batching.
 
 ### Wave Review (parallel merge checkpoint)
 
@@ -226,7 +226,7 @@ Reviews two axes (dual-axis):
 - Security issues
 - Critical axis violations
 
-Bypasses wave counting — always fires immediately. Subject to `MIN_CHANGES` threshold (skips trivial merges).
+Bypasses wave counting — always fires immediately.
 
 ### Close Gate (holistic sprint review)
 
@@ -257,25 +257,30 @@ Bypasses wave counting — always fires immediately.
 
 ### Per-Edit Mode
 - Git diff (`git diff HEAD` — staged + unstaged combined, truncated at `CROSS_AUDIT_MAX_DIFF_PER_EDIT`)
+- Sprint goal from Roadmap.md (always)
+- Sprint progress from TRACKING.md — e.g. "3/8 items completed" (always)
 - Active items from TRACKING.md (items with status `in_progress` or `fixed`)
 - Critical axis from CLAUDE.md (single line)
-- In `standard`/`full`: CODING_GUARDRAILS.md + Entry Gate failure modes
+- Immutable contracts from CLAUDE.md (always, ~200 tokens)
+- In `standard`/`full`: CODING_GUARDRAILS.md + Entry Gate failure modes + acceptance criteria
 - In `full`: Full content of the currently edited file (first 8000 chars). Note: in close-gate mode, `$FILE` is the gate report itself, not source files — so this layer is most useful in per-edit mode
 
 ### Wave Review Mode
 - Last commit diff (`git diff HEAD~1`, `CROSS_AUDIT_MAX_DIFF_WAVE` max), excluding TRACKING.md and config files
 - Falls back to uncommitted changes if no previous commit
-- Active items, critical axis, guardrails, failure modes (same context layers as per-edit)
+- Same context layers as per-edit (sprint goal, progress, active items, critical axis, contracts, guardrails, failure modes, AC)
 
 ### Close Gate Mode
 - Full sprint diff against main branch (`git diff main...HEAD`, auto-detects main/master, `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE` max)
-- Active items, critical axis, guardrails, failure modes (same context layers)
+- Same context layers as per-edit (sprint goal, progress, active items, critical axis, contracts, guardrails, failure modes, AC)
 
 ### Entry Gate Mode
 - The gate report content (`CROSS_AUDIT_MAX_DIFF_ENTRY_GATE` max)
+- Sprint goal from Roadmap.md + sprint progress
 - Critical axis from CLAUDE.md
 - Active items from TRACKING.md (items with status `in_progress` or `fixed`)
 - In `standard`/`full`: CODING_GUARDRAILS.md (AC quality evaluated against project standards)
+- Note: immutable contracts not sent (entry-gate reviews the plan, not code)
 
 ### Skipped Files (never trigger the hook)
 
@@ -313,9 +318,9 @@ When Claude and the external LLM disagree:
 
 ---
 
-## Dual Review (Autonomous Fix)
+## Review Protocol
 
-When `CROSS_AUDIT_DUAL_REVIEW=true`, Claude independently audits the same diff alongside the external LLM, compares findings, and auto-fixes agreed issues without blocking you. Only disagreements and non-trivial fixes are escalated.
+When external audit findings arrive, Claude independently audits the same diff, compares findings, and auto-fixes agreed issues. Only disagreements are escalated. In close-gate mode, Claude reports findings without auto-fixing (prevents infinite loops).
 
 ### How It Works
 
@@ -323,10 +328,10 @@ When `CROSS_AUDIT_DUAL_REVIEW=true`, Claude independently audits the same diff a
 External LLM reviews diff → verdict arrives as additionalContext →
   Claude runs structured self-audit (8-item checklist) on same diff →
   Compares findings with external review →
-  AGREE + small fix (≤ AUTOFIX_LIMIT lines) → auto-fix, inform user →
-  AGREE + large fix → escalate to user →
+  AGREE → auto-fix, inform user what changed →
   DISAGREE on BLOCK → escalate (mandatory, cannot dismiss alone) →
   DISAGREE on WARN → log disagreement, continue
+  Close-gate mode → report only, no auto-fix
 ```
 
 **Zero additional API cost.** Self-review runs inside Claude's reasoning — no extra API calls.
@@ -335,8 +340,7 @@ External LLM reviews diff → verdict arrives as additionalContext →
 
 | External Verdict | Agreement | Action |
 |-----------------|-----------|--------|
-| **BLOCK** | Agree, fix ≤ N lines | Auto-fix, inform user |
-| **BLOCK** | Agree, fix > N lines | Escalate to user |
+| **BLOCK** | Agree | Auto-fix, inform user |
 | **BLOCK** | Disagree | Escalate — present both perspectives (mandatory) |
 | **WARN** | Agree | Auto-fix + log in Change Log |
 | **WARN** | Disagree | Log disagreement, continue |
@@ -357,38 +361,7 @@ Full checklist (BLOCK/WARN with dual review):
 
 Lightweight checklist (PASS verdict): items 1-3 only.
 
-### Configuration
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `CROSS_AUDIT_DUAL_REVIEW` | `false` | Master switch for dual review |
-| `CROSS_AUDIT_AUTOFIX_LIMIT` | `20` | Max lines for silent auto-fix |
-| `CROSS_AUDIT_AUTOFIX_LOG` | `true` | Log auto-fixes to audit log |
-| `CROSS_AUDIT_CLOSE_GATE_AUTOFIX` | `true` | Allow auto-fix during Close Gate |
-
-### Mode Defaults
-
-| Workflow Mode | Dual Review | Autofix Limit | Autofix Log | Close Gate Autofix |
-|--------------|-------------|---------------|-------------|--------------------|
-| **Freestyle** | disabled | — | — | — |
-| **Lite** | enabled | 20 lines | off | yes |
-| **Standard** | enabled | 20 lines | on | yes |
-| **Strict** | enabled | 10 lines | on | no (always escalate) |
-
-Enable via setup script (`bash .claude/setup-audit.sh`) or directly:
-
-```bash
-# In .env
-CROSS_AUDIT_DUAL_REVIEW=true
-CROSS_AUDIT_AUTOFIX_LIMIT=20
-```
-
-Or via CLI:
-
-```bash
-sprint-workflow config audit.dual-review true
-sprint-workflow config audit.autofix-limit 15
-```
+The review protocol is always active when cross-LLM audit is enabled. In close-gate mode, auto-fix is automatically disabled to prevent review loops.
 
 ---
 
@@ -401,9 +374,7 @@ Model: gpt-4o | Lines changed: 47 | Tokens: ~3200 in / ~800 out
 ```
 
 This helps you monitor API costs. To reduce costs:
-- Use `CROSS_AUDIT_CONTEXT=minimal`
-- Use `CROSS_AUDIT_TRIGGER=wave` (fewer calls)
-- Increase `CROSS_AUDIT_MIN_CHANGES` (skip small edits)
+- Increase `CROSS_AUDIT_WAVE_SIZE` (fewer calls)
 - Use a cheaper model (`gpt-4o-mini`, local Ollama, etc.)
 
 ---
@@ -458,17 +429,16 @@ Large prompts (up to 48KB for holistic sprint reviews) are written to a temporar
 ### Recommendations
 - **Never hardcode API keys in source files.** Use environment variables.
 - **Keep `CROSS_AUDIT_API_KEY` in your shell profile** (`~/.bashrc`, `~/.config/fish/config.fish`), not in project files.
-- **Use `CROSS_AUDIT_CONTEXT=minimal`** if your project handles sensitive data — this sends only the diff and item summaries.
 - **Use local models (Ollama, LM Studio)** for maximum data privacy — nothing leaves your machine.
 
 ---
 
 ## Integration with Workflow Modes
 
-The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mode** — `ENABLE_CROSS_AUDIT` defaults to `true` and is not affected by Lite/Standard/Strict presets:
+The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mode** — it activates when an API key is present and is not affected by Lite/Standard/Strict presets:
 
-- Can be enabled in Lite mode for extra safety on fast iterations
-- Can be disabled in Strict mode if team prefers internal review only
+- Can be used in Lite mode for extra safety on fast iterations
+- Can be left without an API key in Strict mode if team prefers internal review only
 - `hooks-config.sh` strict mode enforcement does NOT force cross-audit on
 
 **Note:** The audit _signal_ hooks (CP1 metric regression, CP2 recurring failures via `detect-audit-signals.sh`) **are** controlled by workflow mode — Lite mode disables them by default. Override with `HOOK_DETECT_AUDIT_SIGNALS=true` in `.env` if needed
@@ -494,7 +464,6 @@ Note: GitHub Models availability depends on your Copilot plan. Check [GitHub Mod
 Use Claude as the cross-audit reviewer (useful when your primary agent is GPT, Gemini, etc.):
 
 ```bash
-export ENABLE_CROSS_AUDIT=true
 export CROSS_AUDIT_PROVIDER="anthropic"
 export CROSS_AUDIT_API_KEY="sk-ant-..."
 # API_BASE and MODEL are auto-set for anthropic provider
@@ -591,10 +560,4 @@ bash .claude/hooks/verify-evidence.sh report.txt
 
 ## Disabling
 
-To disable cross-audit, add to `.env` (personal) or edit `hooks-config.sh` (team-wide):
-
-```bash
-ENABLE_CROSS_AUDIT=false
-```
-
-Or remove your API key from `.env` — without a key, the hook silently skips.
+Remove your API key from `.env` — without a key, the hook silently skips.

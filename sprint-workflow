@@ -648,24 +648,43 @@ cmd_config() {
       key_val=$(grep '^CROSS_AUDIT_API_KEY=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
       [[ -n "$key_val" && "$key_val" != "your-api-key-here" ]] && has_key="true"
     fi
-    # Source hooks-config to get ENABLE_CROSS_AUDIT value
-    local audit_enabled="true"
-    if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
-      audit_enabled=$(bash -c "source '$_PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${ENABLE_CROSS_AUDIT:-true}\"")
-    fi
-    if [[ "$audit_enabled" == "true" && "$has_key" == "true" ]]; then
-      echo "    Status: ACTIVE (enabled + API key set)"
-    elif [[ "$audit_enabled" == "true" && "$has_key" == "false" ]]; then
-      echo "    Status: ENABLED but no API key — run: bash .claude/setup-audit.sh"
+    if [[ "$has_key" == "true" ]]; then
+      echo "    Status: ACTIVE (API key set)"
     else
-      echo "    Status: DISABLED (ENABLE_CROSS_AUDIT=false)"
+      echo "    Status: INACTIVE (no API key) — run: bash .claude/setup-audit.sh"
     fi
+    # Show effective audit settings (sourced from config + mode defaults)
+    local _audit_vars
+    _audit_vars=$(bash -c "source '$config_file' 2>/dev/null; echo \
+      \"CROSS_AUDIT_WAVE_SIZE=\${CROSS_AUDIT_WAVE_SIZE};\
+CROSS_AUDIT_ENFORCE_BLOCK=\${CROSS_AUDIT_ENFORCE_BLOCK};\
+CROSS_AUDIT_MAX_DIFF=\${CROSS_AUDIT_MAX_DIFF};\
+CROSS_AUDIT_LANG=\${CROSS_AUDIT_LANG}\"" 2>/dev/null)
+    # Mode-aware vars — show with (mode) marker if not overridden in .env
+    local _mode_aware_keys="CROSS_AUDIT_WAVE_SIZE CROSS_AUDIT_ENFORCE_BLOCK"
+    IFS=';' read -ra _apairs <<< "$_audit_vars"
+    for _apair in "${_apairs[@]}"; do
+      local _ak="${_apair%%=*}" _av="${_apair#*=}"
+      [[ -z "$_ak" ]] && continue
+      local _marker=""
+      if echo "$_mode_aware_keys" | grep -qw "$_ak"; then
+        # Check if overridden in .env
+        if [[ -f "$env_file" ]] && grep -q "^${_ak}=" "$env_file" 2>/dev/null; then
+          _marker=" $(_dim '(override)')"
+        else
+          _marker=" $(_dim '(mode)')"
+        fi
+      fi
+      printf '    %-35s %s%s\n' "$_ak" "$_av" "$_marker"
+    done
     if [[ -f "$env_file" ]]; then
       grep '^CROSS_AUDIT_' "$env_file" 2>/dev/null | grep -v 'API_KEY' | while IFS= read -r line; do
         local ck cv
         ck=$(echo "$line" | cut -d= -f1)
         cv=$(echo "$line" | cut -d= -f2)
-        printf '    %-35s %s\n' "$ck" "$cv"
+        # Skip if already shown above
+        echo "$_audit_vars" | grep -q "^${ck}=" 2>/dev/null && continue
+        printf '    %-35s %s %s\n' "$ck" "$cv" "$(_dim '(.env)')"
       done
     fi
 
@@ -699,6 +718,78 @@ cmd_config() {
     return 0
   fi
 
+  # Special: config mode --show
+  if [[ "$key" == "mode" && "$value" == "--show" ]]; then
+    local cur_mode
+    cur_mode=$(grep '^WORKFLOW_MODE=' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f2)
+    cur_mode="${cur_mode:-standard}"
+    echo ""
+    echo "  $(_bold "Mode: $cur_mode")"
+    echo "  ─────────────────"
+    echo ""
+
+    # Hook effects
+    echo "  $(_bold 'Hooks')"
+    local _mode_hooks
+    _mode_hooks=$(bash -c "
+      WORKFLOW_MODE='$cur_mode'
+      source '$config_file' 2>/dev/null
+      echo \"HOOK_PROTECT_CLAUDE_MD=\$HOOK_PROTECT_CLAUDE_MD\"
+      echo \"HOOK_PROTECT_SECRETS=\$HOOK_PROTECT_SECRETS\"
+      echo \"HOOK_VALIDATE_TRACKING=\$HOOK_VALIDATE_TRACKING\"
+      echo \"HOOK_SESSION_START_PROTOCOL=\$HOOK_SESSION_START_PROTOCOL\"
+      echo \"HOOK_VALIDATE_ID_UNIQUENESS=\$HOOK_VALIDATE_ID_UNIQUENESS\"
+      echo \"HOOK_ENTRY_GATE_SESSION=\$HOOK_ENTRY_GATE_SESSION\"
+      echo \"HOOK_DETECT_TEST_REGRESSION=\$HOOK_DETECT_TEST_REGRESSION\"
+      echo \"HOOK_VALIDATE_CLOSE_GATE=\$HOOK_VALIDATE_CLOSE_GATE\"
+      echo \"HOOK_VALIDATE_SPRINT_CLOSE=\$HOOK_VALIDATE_SPRINT_CLOSE\"
+      echo \"HOOK_DETECT_AUDIT_SIGNALS=\$HOOK_DETECT_AUDIT_SIGNALS\"
+    " 2>/dev/null)
+    while IFS= read -r _hl; do
+      local _hk="${_hl%%=*}" _hv="${_hl#*=}"
+      [[ -z "$_hk" ]] && continue
+      local _short="${_hk#HOOK_}"
+      _short=$(echo "$_short" | tr '[:upper:]_' '[:lower:]-')
+      if [[ "$_hv" == "true" ]]; then
+        printf '    %-35s %s\n' "$_short" "$(_green "on")"
+      else
+        printf '    %-35s %s\n' "$_short" "$(_dim "off")"
+      fi
+    done <<< "$_mode_hooks"
+
+    # Audit defaults for this mode
+    echo ""
+    echo "  $(_bold 'Audit Defaults')"
+    local _mode_audit
+    _mode_audit=$(bash -c "WORKFLOW_MODE='$cur_mode'; source '$config_file' 2>/dev/null; \
+      echo \"wave-size=\$CROSS_AUDIT_WAVE_SIZE\"; \
+      echo \"enforce-block=\$CROSS_AUDIT_ENFORCE_BLOCK\"" 2>/dev/null)
+    while IFS= read -r _al; do
+      local _akey="${_al%%=*}" _aval="${_al#*=}"
+      [[ -z "$_akey" ]] && continue
+      printf '    %-35s %s\n' "$_akey" "$_aval"
+    done <<< "$_mode_audit"
+
+    # Check for overrides
+    echo ""
+    local _override_count=0
+    if [[ -f "$env_file" ]]; then
+      local _mode_aware_env_keys="CROSS_AUDIT_WAVE_SIZE CROSS_AUDIT_ENFORCE_BLOCK"
+      for _mek in $_mode_aware_env_keys; do
+        if grep -q "^${_mek}=" "$env_file" 2>/dev/null; then
+          local _ov
+          _ov=$(grep "^${_mek}=" "$env_file" | head -1 | cut -d= -f2)
+          [[ $_override_count -eq 0 ]] && echo "  $(_bold 'Active Overrides') $(_dim '(from .env)')"
+          printf '    %-35s %s\n' "${_mek}" "$_ov"
+          _override_count=$((_override_count + 1))
+        fi
+      done
+    fi
+    [[ $_override_count -eq 0 ]] && echo "  $(_dim 'No overrides — using pure mode defaults')"
+    echo ""
+    return 0
+  fi
+
   # Two args: set value
   case "$key" in
     mode)
@@ -720,6 +811,18 @@ cmd_config() {
         echo "$env_key=$value" >> "$env_file"
       fi
       _check "$env_key=$value (in .env)"
+      # Warn if overriding a mode-aware default
+      local _mode_aware="CROSS_AUDIT_WAVE_SIZE CROSS_AUDIT_ENFORCE_BLOCK"
+      if echo "$_mode_aware" | grep -qw "$env_key"; then
+        local _cur_mode
+        _cur_mode=$(grep '^WORKFLOW_MODE=' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f2)
+        _cur_mode="${_cur_mode:-standard}"
+        local _mode_default
+        _mode_default=$(bash -c "WORKFLOW_MODE='$_cur_mode'; source '$config_file' 2>/dev/null; echo \"\${$env_key}\"" 2>/dev/null)
+        if [[ "$value" != "$_mode_default" ]]; then
+          _warn "Note: $_cur_mode mode default is $_mode_default. Your override ($value) will persist."
+        fi
+      fi
       ;;
     hook.*)
       local hook_key="HOOK_$(echo "${key#hook.}" | tr '[:lower:]-' '[:upper:]_')"
@@ -967,28 +1070,19 @@ cmd_doctor() {
   echo "  ─────────────────"
   echo ""
 
-  # Cross-audit is enabled by default — check for API key
-  local audit_enabled="true"
-  if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
-    audit_enabled=$(bash -c "source '$_PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${ENABLE_CROSS_AUDIT:-true}\"")
-  fi
-  if [[ "$audit_enabled" == "true" ]]; then
-    _check "Cross-audit enabled (default)"
-    if [[ -f "$_PROJECT_DIR/.env" ]]; then
-      local has_key
-      has_key=$(grep '^CROSS_AUDIT_API_KEY=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
-      if [[ -n "$has_key" && "$has_key" != "your-api-key-here" && "$has_key" != "no-key-needed" ]]; then
-        _check "API key configured"
-      elif [[ "$has_key" == "no-key-needed" ]]; then
-        _check "Local provider (no key needed)"
-      else
-        _warn "No API key — cross-audit will silently skip. Run: sprint-workflow audit-setup"
-      fi
+  # Cross-audit activates when API key is present
+  if [[ -f "$_PROJECT_DIR/.env" ]]; then
+    local has_key
+    has_key=$(grep '^CROSS_AUDIT_API_KEY=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
+    if [[ -n "$has_key" && "$has_key" != "your-api-key-here" && "$has_key" != "no-key-needed" ]]; then
+      _check "Cross-audit active (API key configured)"
+    elif [[ "$has_key" == "no-key-needed" ]]; then
+      _check "Cross-audit active (local provider, no key needed)"
     else
-      _warn "No .env file — cross-audit will silently skip. Run: sprint-workflow audit-setup"
+      _warn "No API key — cross-audit will silently skip. Run: sprint-workflow audit-setup"
     fi
   else
-    _warn "Cross-audit explicitly disabled"
+    _warn "No .env file — cross-audit will silently skip. Run: sprint-workflow audit-setup"
   fi
   # .env gitignore check (if .env exists)
   if [[ -f "$_PROJECT_DIR/.env" ]]; then
@@ -1000,7 +1094,34 @@ cmd_doctor() {
     fi
   fi
 
-  if [[ "$audit_enabled" == "true" && -f "$_PROJECT_DIR/.claude/hooks/audit-health-check.sh" ]]; then
+  # Config consistency: check for mode-aware overrides that diverge from mode defaults
+  if [[ -f "$_PROJECT_DIR/.env" && -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
+    local _doc_mode
+    _doc_mode=$(grep '^WORKFLOW_MODE=' "$_PROJECT_DIR/.claude/hooks-config.sh" 2>/dev/null | head -1 | cut -d'"' -f2)
+    _doc_mode="${_doc_mode:-standard}"
+    local _ma_keys="CROSS_AUDIT_WAVE_SIZE CROSS_AUDIT_ENFORCE_BLOCK"
+    # Get mode defaults for comparison
+    local _mode_defaults
+    _mode_defaults=$(bash -c "WORKFLOW_MODE='$_doc_mode'; source '$_PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; \
+      echo \"CROSS_AUDIT_WAVE_SIZE=\$CROSS_AUDIT_WAVE_SIZE;\
+CROSS_AUDIT_ENFORCE_BLOCK=\$CROSS_AUDIT_ENFORCE_BLOCK\"" 2>/dev/null)
+    local _override_issues=0
+    for _mk in $_ma_keys; do
+      local _env_val _mode_val
+      _env_val=$(grep "^${_mk}=" "$_PROJECT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"'"'" 2>/dev/null)
+      [[ -z "$_env_val" ]] && continue
+      _mode_val=$(echo "$_mode_defaults" | tr ';' '\n' | grep "^${_mk}=" | cut -d= -f2)
+      [[ "$_env_val" != "$_mode_val" ]] && _override_issues=$((_override_issues + 1))
+    done
+    if [[ $_override_issues -gt 0 ]]; then
+      _warn "$_override_issues mode-aware override(s) in .env diverge from '$_doc_mode' defaults"
+      echo "    Run: sprint-workflow config mode --show"
+    else
+      _check "Config consistent with '$_doc_mode' mode (no overrides)"
+    fi
+  fi
+
+  if [[ -f "$_PROJECT_DIR/.claude/hooks/audit-health-check.sh" ]]; then
     echo ""
     bash "$_PROJECT_DIR/.claude/hooks/audit-health-check.sh" 2>/dev/null || true
   fi

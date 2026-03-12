@@ -63,6 +63,7 @@ Every session starts from zero. This workflow solves three problems:
                   │ IMPLEMENTATION│  "Are we building it correctly?"
                   │    LOOP      │  Pre-code guardrails → code → self-verify → test → run all tests
                   └──────┬───────┘  ◄─── Auto-Detection Checkpoint 3 (broken past-sprint output)
+                         │               ◄─── Cross-LLM Audit (external review + dual self-audit)
                          │               ║ Parallel: per-item agents in dependency waves ║
                          ▼
                   ┌──────────────┐
@@ -119,10 +120,11 @@ After setup, the agent bootstraps your project: scans your codebase, asks discov
 | Command | Description |
 |---------|-------------|
 | `sprint-workflow init` | Install + interactive onboarding + launch AI bootstrap |
-| `sprint-workflow config` | View all settings |
+| `sprint-workflow config` | View all settings (shows mode-aware defaults and overrides) |
 | `sprint-workflow config mode lite` | Set workflow mode (freestyle/lite/standard/strict) |
+| `sprint-workflow config mode --show` | Show all mode effects (hooks, audit defaults, active overrides) |
 | `sprint-workflow config hook.protect-claude true` | Toggle a specific hook |
-| `sprint-workflow config audit.wave-size 10` | Set audit wave size |
+| `sprint-workflow config audit.wave-size 10` | Set audit wave size (warns if diverging from mode default) |
 | `sprint-workflow log` | View last 10 audit log entries |
 | `sprint-workflow log --errors` | Filter to errors only |
 | `sprint-workflow log --success -n 5` | Last 5 successful audits |
@@ -223,7 +225,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
 | `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
-| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review. Optional **dual review mode**: Claude independently audits alongside GPT, compares findings, and auto-fixes agreed issues |
+| `cross-llm-audit.sh` | After `Edit`/`Write` (source, gates, TRACKING) | **Optional.** Sends diff to external LLM (OpenAI, Anthropic, GitHub Models, Ollama) for independent review. Four modes: per-edit, wave-review (parallel merge checkpoint), Close Gate holistic, Entry Gate plan review. **Dual review**: Claude independently audits alongside the external LLM, compares findings, auto-fixes agreed issues, escalates disagreements |
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `freestyle`/`lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
@@ -232,7 +234,7 @@ All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any fla
 2. Put overrides in `.env` — personal, git-ignored
 3. Export as env var: `export CROSS_AUDIT_WAVE_SIZE=10` — temporary, current shell
 
-**Cross-LLM Audit (Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Enabled by default — just add your API key: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key and personal overrides stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. Optional `CROSS_AUDIT_ENFORCE_BLOCK=true` mechanically blocks commits when the reviewer returns a BLOCK verdict (default: advisory only). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+**Cross-LLM Audit (Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). The reviewer receives full context: sprint goal, progress, critical axis, immutable contracts, acceptance criteria, guardrails, and failure modes. Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Enabled by default — just add your API key: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key and personal overrides stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. Optional `CROSS_AUDIT_ENFORCE_BLOCK=true` mechanically blocks commits when the reviewer returns a BLOCK verdict (default: advisory only). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 

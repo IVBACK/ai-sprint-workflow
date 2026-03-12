@@ -795,26 +795,69 @@ If items exceed scope limit → apply §Scope Negotiation.
    After all items reviewed: if Must count now exceeds scope limit → apply §Scope Negotiation
    before proceeding to step 9.
 
-**Domain Research (conditional — per item, before step 9):**
-For each item, before writing the verification plan:
-- Does this item require domain-specific knowledge? (mathematical formulas, protocol
-  specifications, algorithm implementations, hardware/API behavior, specialized techniques)
-- Is the AI confident it holds correct, verified knowledge — or is it working from
-  approximate memory that could contain errors?
+**Domain Research (per item, before step 9):**
+For each item, check against these mandatory triggers:
 
-If uncertain or if the domain is specialized:
+```
+DOMAIN RESEARCH TRIGGERS — if ANY match, research is required:
+ T1. Item implements or references an external specification (RFC, PCI-DSS, GDPR,
+     OAuth, WebSocket, protobuf, OpenGL/Vulkan, etc.)
+ T2. Item involves mathematical formula, physics simulation, or cryptographic operation
+ T3. Item uses a library, API, or framework the project hasn't used before
+ T4. Item's domain is outside the project's existing technology stack
+ T5. Item requires knowledge that may have changed since AI training cutoff
+     (new API versions, deprecated methods, updated standards)
+ T6. AI's knowledge is approximate — "I think it works like X" or "the formula
+     is roughly Y" (treat as knowledge gap, not sufficient basis for coding)
+```
+
+**If ANY trigger matches → do NOT silently skip or self-assess. ASK the user:**
+> "CORE-### may need domain research: [which trigger matched, why].
+>  Research now? [y/N]"
+
+If user approves:
    1. **Research:** search for authoritative sources — academic papers (SIGGRAPH, GDC),
       official specifications, reference implementations from established engines/frameworks.
    2. **Extract:** document the exact formulas, algorithms, or specifications found.
    3. **Verify:** cross-reference at least 2 independent sources where possible.
-   4. **Record:** write findings to the Entry Gate report (step 12a) under a
-      "§Domain Research" section — sources, key formulas, and how they map to sprint items.
+   4. **Record:** write findings to `Docs/Planning/S<N>_DOMAIN_RESEARCH.md` (mandatory —
+      do NOT leave findings only in chat). Also summarize in the Entry Gate report (step 12a)
+      under a "§Domain Research" section.
 
-This step prevents trial-and-error implementation loops. The AI must treat
-"I think the formula is roughly X" as a knowledge gap — not as sufficient basis for coding.
+   Research report format (`Docs/Planning/S<N>_DOMAIN_RESEARCH.md`):
+   ```markdown
+   # Domain Research — Sprint N
 
-Skip when: item uses well-known patterns within the project's existing stack,
-or the AI can point to a specific authoritative source it has already verified.
+   ## CORE-### — [topic]
+   **Trigger:** [T1-T6 which matched]
+   **Question:** [what needed to be answered]
+
+   ### Findings
+   [exact formulas, algorithms, specifications, API signatures]
+
+   ### Sources
+   1. [source name] — [URL or reference] — [what was extracted]
+   2. [source name] — [URL or reference] — [cross-reference confirmation]
+
+   ### Implementation Notes
+   [how findings map to code — which files, which functions, key constraints]
+
+   ---
+   (repeat per item)
+   ```
+
+   This file persists across sessions — if the implementation spans multiple conversations,
+   the research is not lost. Implementation Loop A.5 reads this file instead of relying
+   on chat history.
+
+If user declines:
+   Log in Entry Gate report: `"Domain research: skipped by user ([trigger] flagged)"`
+   This creates an audit trail — if implementation fails later, the skipped research
+   is visible as a potential root cause.
+
+**Skip without asking** only when: item uses well-known patterns within the project's
+existing stack AND no trigger above matches. If in doubt, ask — the cost of asking
+is 5 seconds, the cost of wrong domain knowledge is hours of debugging.
 
 Flag items that required research as `research: done` in the Entry Gate report
 so Implementation Loop step A.5 knows research is already complete.
@@ -1123,20 +1166,29 @@ For each Must item (in dependency order from Entry Gate step 11):
 
 **A.5 Domain Research (conditional)**
 Trigger: item was flagged `research: done` at Entry Gate (findings already documented),
-OR the AI encounters uncertainty about the correct approach during pre-code check.
+OR a domain research trigger (T1–T6, see Entry Gate §Domain Research) matches during
+pre-code check that was not caught at Entry Gate.
 
 If Entry Gate already completed research for this item:
-→ Read the §Domain Research section from `Docs/Planning/S<N>_ENTRY_GATE.md`.
+→ Read `Docs/Planning/S<N>_DOMAIN_RESEARCH.md` (full findings) and the summary
+  in `Docs/Planning/S<N>_ENTRY_GATE.md` §Domain Research.
   Verify findings are still applicable. Proceed to B.
 
-If research was not done at Entry Gate but a knowledge gap is now apparent:
-1. Search for authoritative sources (papers, specs, reference implementations).
-2. Document exact formulas, algorithms, or specifications.
-3. Cross-reference with at least 2 sources where possible.
-4. Log research findings in TRACKING.md §Change Log:
-   `"Domain research for CORE-###: [topic] — sources: [list]"`
+If research was not done at Entry Gate but a trigger now matches:
+→ **ASK the user** before researching: "CORE-### needs domain research during
+  implementation: [trigger, reason]. Research now? [y/N]"
+→ If approved:
+  1. Search for authoritative sources (papers, specs, reference implementations).
+  2. Document exact formulas, algorithms, or specifications.
+  3. Cross-reference with at least 2 sources where possible.
+  4. **Append** findings to `Docs/Planning/S<N>_DOMAIN_RESEARCH.md` (create if it
+     doesn't exist — use the same format as Entry Gate research reports).
+  5. Log in TRACKING.md §Change Log:
+     `"Domain research for CORE-###: [topic] — sources: [list]"`
+→ If declined: log `"Domain research: skipped by user"` and proceed.
 
-Skip when: item uses well-known patterns, or Entry Gate already completed
+Skip without asking when: item uses well-known patterns within the project's
+existing stack AND no trigger (T1–T6) matches, or Entry Gate already completed
 research for this item and findings are documented and still valid.
 
 **A.6 Approach Selection (conditional)**
@@ -1228,7 +1280,7 @@ Run ALL tests written so far — current item + all previous items in this sprin
 Test needs infrastructure not available locally?
 → Mark "pending" in TRACKING.md → it will run at Close Gate Phase 3.
 
-**D.6b Cross-LLM audit (optional — only if `ENABLE_CROSS_AUDIT=true`)**
+**D.6b Cross-LLM audit (optional — only if API key configured)**
 If the cross-LLM audit hook is enabled, external review findings are automatically injected
 as `additionalContext` after source file changes. When findings arrive:
 - **BLOCK verdict:** Present findings to the user. Do not proceed until the user reviews and decides.
@@ -1237,13 +1289,12 @@ as `additionalContext` after source file changes. When findings arrive:
 - **Conflicting opinions:** If your assessment disagrees with the external audit, present both perspectives and let the user decide. Do not silently override either opinion.
 This step is fully automated via the hook — no manual action needed. If the hook is not enabled, skip.
 
-**D.6b+ Dual Review Protocol (if `CROSS_AUDIT_DUAL_REVIEW=true`):**
-When dual review is enabled, findings arrive with a structured self-audit directive:
+**D.6b+ Review Protocol:**
+When external audit findings arrive, Claude runs a structured self-audit:
 1. Read external GPT findings from additionalContext.
 2. Run structured self-audit (8-item checklist for BLOCK/WARN, 3-item for PASS) on the same diff.
 3. Compare findings using the decision matrix:
-   - AGREE + fix ≤ `AUTOFIX_LIMIT` lines → auto-fix, inform user.
-   - AGREE + fix > limit → escalate to user.
+   - AGREE → auto-fix, inform user what changed.
    - DISAGREE on BLOCK → escalate (mandatory — cannot dismiss BLOCK alone).
    - DISAGREE on WARN → log disagreement, continue.
 4. PASS verdict → lightweight self-audit (bug scan, security, AC only), mention PASS as confidence signal.
@@ -2522,44 +2573,26 @@ WORKFLOW_MODE="standard"  # "freestyle", "lite", "standard", or "strict"
 # ── Defaults ──────────────────────────────────────────────────
 # Edit the values on the RIGHT side to change defaults.
 #
-#            Setting                          Value         Description
-#            ───────                          ─────         ───────────
-# Cross-LLM Audit
-_D_ENABLE_CROSS_AUDIT=true                               # Master switch (silently skips if no API key)
+# ┌─────────────────────────────────────────────────────────────┐
+# │  COMMONLY CHANGED — most users only need to touch these     │
+# └─────────────────────────────────────────────────────────────┘
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
-_D_CROSS_AUDIT_TRIGGER=wave                              # "wave" or "item"
-_D_CROSS_AUDIT_CONTEXT=standard                          # "minimal", "standard", "full"
+_D_CROSS_AUDIT_MODEL=                                    # Empty = auto-set per provider
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
-_D_CROSS_AUDIT_MIN_CHANGES=3                             # Min changed lines to trigger
+_D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
+_D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
+#
+# ┌─────────────────────────────────────────────────────────────┐
+# │  POWER USER — rarely changed, safe to ignore                │
+# └─────────────────────────────────────────────────────────────┘
+_D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider
 _D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
-_D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
-_D_CROSS_AUDIT_ENFORCE_BLOCK=false                       # Exit non-zero on BLOCK verdict
-# Wave Batching
-_D_CROSS_AUDIT_WAVE_SIZE=5                               # Edits before wave fires
-_D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
-# Diff Truncation (max characters sent to external LLM)
-_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE=48000                 # Close Gate
-_D_CROSS_AUDIT_MAX_DIFF_WAVE=32000                       # Wave review
-_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE=32000                 # Entry Gate
-_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT=24000                   # Per-edit
-# Audit Signal Thresholds
+_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: per-edit=×0.75, wave=×1, close-gate=×1.5
 _D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (20%)
 _D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprints)
-# Log & Health
-_D_AUDIT_LOG_MAX_BYTES=1048576                           # Log rotation: max size (1MB)
-_D_AUDIT_LOG_KEEP_LINES=500                              # Log rotation: lines to keep
-_D_AUDIT_HEALTH_STALE_SECONDS=3600                       # Health: stale threshold (1 hour)
-_D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count threshold
-# Dual Review (autonomous fix)
-_D_CROSS_AUDIT_DUAL_REVIEW=false                         # Dual review master switch
-_D_CROSS_AUDIT_AUTOFIX_LIMIT=20                          # Max lines for auto-fix
-_D_CROSS_AUDIT_AUTOFIX_LOG=true                          # Log auto-fixes
-_D_CROSS_AUDIT_CLOSE_GATE_AUTOFIX=true                   # Auto-fix during Close Gate
-# Dashboard
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (dir levels)
 
 # ── Apply defaults (env vars and local overrides take precedence) ──
-ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-$_D_ENABLE_CROSS_AUDIT}"
 # ... (all variables follow this pattern — see actual file for full list)
 
 # Strict mode enforcement (overrides all individual flags to true)
@@ -2851,11 +2884,7 @@ fi
 CROSS_AUDIT_STATUS="off"
 ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
 if [[ -f "$ENV_FILE" ]] && grep -q "^CROSS_AUDIT_API_KEY=" "$ENV_FILE" 2>/dev/null; then
-    if [[ "${ENABLE_CROSS_AUDIT:-true}" == "true" ]]; then
-        CROSS_AUDIT_STATUS="on"
-    else
-        CROSS_AUDIT_STATUS="disabled"
-    fi
+    CROSS_AUDIT_STATUS="on"
 elif [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
     CROSS_AUDIT_STATUS="no-key"
 fi
@@ -3019,9 +3048,9 @@ The full script lives in `.claude/hooks/cross-llm-audit.sh` (authoritative sourc
 - **Two provider modes:** OpenAI-compatible (default) and native Anthropic API
 - **Wave batching:** In `wave` trigger mode, fires every ~5 source edits. Gate reviews and wave-review bypass wave counting
 - **Sub-agent skip:** Worktree-based sub-agents are auto-detected and skipped — coordinator reviews the merged result at wave boundaries instead
-- **Context layers:** minimal (diff + active items), standard (+ guardrails + failure modes), full (+ changed file content)
+- **Context:** Always sends full context (diff + active items + guardrails + failure modes + AC + contracts + sprint goal/progress + file content)
 - **Always exit 0:** Never blocks the workflow at infrastructure level. Only findings can be blocking (via BLOCK verdict)
-- **Config:** `ENABLE_CROSS_AUDIT`, `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_TRIGGER`, `CROSS_AUDIT_CONTEXT`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_MIN_CHANGES`, `CROSS_AUDIT_TIMEOUT`, `CROSS_AUDIT_SKIP_SUBAGENT`
+- **Config:** `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_WAVE_SIZE`, `CROSS_AUDIT_TIMEOUT`, `CROSS_AUDIT_ENFORCE_BLOCK`
 
 ---
 
@@ -3923,7 +3952,7 @@ When the user says something like: *"Update the workflow from https://github.com
 
 ### v2.0 (2026-03-01)
 - **New:** Cross-LLM audit system — external LLM reviews code changes via hooks
-- **New hook:** `cross-llm-audit.sh` — sends diffs to 2nd LLM (wave/item trigger, 3 context levels)
+- **New hook:** `cross-llm-audit.sh` — sends diffs to 2nd LLM (wave/item trigger, full context)
 - **New:** `setup-audit.sh` — interactive cross-audit setup (7 providers, API key via `read -s`)
 - **New:** `.env.example` — cross-audit configuration template
 - **New:** Team topology support — per-person TRACKING files, branch naming, dependency rules
