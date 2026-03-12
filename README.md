@@ -99,11 +99,18 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
+> **Requires:** bash, curl, git. Windows users: use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) or Git Bash.
+
 **Any agent** — install CLI + interactive setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/sprint-workflow -o ~/.local/bin/sprint-workflow && chmod +x ~/.local/bin/sprint-workflow
-sprint-workflow init
+mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/sprint-workflow -o ~/.local/bin/sprint-workflow && chmod +x ~/.local/bin/sprint-workflow
+```
+
+Then run:
+
+```bash
+~/.local/bin/sprint-workflow init
 ```
 
 The CLI walks you through:
