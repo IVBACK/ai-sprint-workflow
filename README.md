@@ -98,10 +98,11 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
-**Any agent** — one command, interactive setup:
+**Any agent** — install CLI + interactive setup:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/sprint-workflow) init
+curl -fsSL https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/sprint-workflow -o ~/.local/bin/sprint-workflow && chmod +x ~/.local/bin/sprint-workflow
+sprint-workflow init
 ```
 
 The CLI walks you through:
@@ -111,25 +112,9 @@ The CLI walks you through:
 4. **Cross-LLM audit** — optional second AI code reviewer (Claude Code only)
 5. **Launch** — optionally design a [roadmap](#want-a-richer-roadmap-design-it-first) first, then bootstrap. Choose CLI or Editor launch; extension-only agents get the prompt copied to clipboard
 
-<details>
-<summary>Alternative: clone and run locally</summary>
-
-```bash
-git clone https://github.com/IVBACK/ai-sprint-workflow.git /tmp/ai-sprint-workflow
-bash /tmp/ai-sprint-workflow/sprint-workflow init
-rm -rf /tmp/ai-sprint-workflow
-```
-</details>
-
 After setup, the agent bootstraps your project: scans your codebase, asks discovery questions, creates `CLAUDE.md` + tracking files, and sets up the first sprint. Existing `.claude/` hooks are detected and preserved — you get the exact tested implementations (11 hooks including secret protection, cross-LLM audit, validation gates).
 
 ### CLI Reference
-
-The `sprint-workflow` CLI manages the full lifecycle. Install it locally for ongoing use:
-
-```bash
-ln -s "$(pwd)/sprint-workflow" ~/.local/bin/sprint-workflow
-```
 
 | Command | Description |
 |---------|-------------|
@@ -142,7 +127,7 @@ ln -s "$(pwd)/sprint-workflow" ~/.local/bin/sprint-workflow
 | `sprint-workflow log --errors` | Filter to errors only |
 | `sprint-workflow log --success -n 5` | Last 5 successful audits |
 | `sprint-workflow audit-setup` | Configure cross-LLM audit (interactive) |
-| `sprint-workflow status` | Sprint dashboard (alias for `sprint-status`) |
+| `sprint-workflow status` | Sprint dashboard (CLI, watch mode, or web) |
 | `sprint-workflow upgrade` | Update workflow to latest version |
 | `sprint-workflow doctor` | Health check (hooks, config, permissions, version) |
 | `sprint-workflow completions bash` | Generate shell completions (bash/zsh/fish) |
@@ -163,7 +148,7 @@ eval "$(sprint-workflow completions zsh)"     # zsh  → ~/.zshrc
 sprint-workflow completions fish > ~/.config/fish/completions/sprint-workflow.fish
 ```
 
-**Either way, the agent will:**
+**What the agent does during bootstrap:**
 - Detect whether this is a greenfield or existing project (Step 0)
 - Scan your project (language, framework, build system, test framework — large projects capped at 50 files)
 - Ask 16 discovery questions (skipping ones it can infer from project files)
@@ -310,7 +295,7 @@ your-project/
 ├── Tools/
 │   └── sprint-audit.sh           # Automated close gate checks
 ├── dashboard/                    # Sprint dashboard (optional, standalone)
-│   ├── sprint-status             # Bash wrapper (symlink target for ~/.local/bin/)
+│   ├── sprint-status             # Bash wrapper (called by sprint-workflow status)
 │   └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
 └── .claude/                      # Claude Code hooks (Step 8.5, skip for other agents)
     ├── hooks-config.sh           # Centralized config (hooks, audit, thresholds, limits)
@@ -479,18 +464,13 @@ Parallel adds mandatory inter-wave commits. Merge overhead: 30-45% of wave time 
 
 A standalone CLI + web dashboard for visualizing sprint status. Zero external dependencies — pure Python stdlib.
 
-**Install (optional):**
-```bash
-ln -s "$(pwd)/dashboard/sprint-status" ~/.local/bin/sprint-status
-```
-
 **Usage:**
 ```bash
-sprint-status              # CLI summary (one-shot snapshot)
-sprint-status -w           # CLI watch mode (live, auto-refreshes on file changes)
-sprint-status --serve      # Web dashboard (live, http://127.0.0.1:8384)
-sprint-status --json       # Machine-readable JSON output
-sprint-status /path/to/project   # Explicit project root
+sprint-workflow status              # CLI summary (one-shot snapshot)
+sprint-workflow status -w           # CLI watch mode (live, auto-refreshes on file changes)
+sprint-workflow status --serve      # Web dashboard (live, http://127.0.0.1:8384)
+sprint-workflow status --json       # Machine-readable JSON output
+sprint-workflow status /path/to/project   # Explicit project root
 ```
 
 The dashboard reads `TRACKING.md`, `Roadmap.md`, and gate reports — no configuration needed. Works with any project that uses this workflow, regardless of which AI agent produced the files.
