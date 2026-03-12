@@ -229,10 +229,10 @@ All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any fla
 
 **Changing settings (3 ways):**
 1. Edit `_D_*` defaults in `.claude/hooks-config.sh` — applies to whole team (git-tracked)
-2. Put overrides in `.claude/hooks-config.local.sh` — personal, git-ignored
+2. Put overrides in `.env` — personal, git-ignored
 3. Export as env var: `export CROSS_AUDIT_WAVE_SIZE=10` — temporary, current shell
 
-**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. Optional `CROSS_AUDIT_ENFORCE_BLOCK=true` mechanically blocks commits when the reviewer returns a BLOCK verdict (default: advisory only). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+**Cross-LLM Audit (Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Enabled by default — just add your API key: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key and personal overrides stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. Optional `CROSS_AUDIT_ENFORCE_BLOCK=true` mechanically blocks commits when the reviewer returns a BLOCK verdict (default: advisory only). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
@@ -299,7 +299,6 @@ your-project/
 │   └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
 └── .claude/                      # Claude Code hooks (Step 8.5, skip for other agents)
     ├── hooks-config.sh           # Centralized config (hooks, audit, thresholds, limits)
-    ├── hooks-config.local.sh     # Personal overrides (git-ignored, optional)
     ├── settings.json             # Hook registrations
     ├── setup-audit.sh            # Interactive cross-LLM audit setup
     └── hooks/

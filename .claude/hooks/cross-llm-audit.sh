@@ -5,14 +5,15 @@
 #          for independent code review. Returns structured findings as
 #          additionalContext so Claude can present them alongside its own assessment.
 #
-# OPTIONAL — disabled by default. Enable via:
-#   ENABLE_CROSS_AUDIT=true + CROSS_AUDIT_API_KEY in .env (project root, git-ignored)
+# Enabled by default — requires CROSS_AUDIT_API_KEY to be set.
+#   API key goes in .env (project root, git-ignored)
 #   or in shell profile (~/.bashrc, ~/.config/fish/config.fish)
+#   Silently skips if no API key is configured.
 #
 # Supports any OpenAI-compatible API (OpenAI, GitHub Models, Azure, Ollama, OpenRouter, etc.)
 #
 # Configuration (env vars or hooks-config.sh):
-#   ENABLE_CROSS_AUDIT=true|false      — Master switch (default: false)
+#   ENABLE_CROSS_AUDIT=true|false      — Master switch (default: true, requires API key)
 #   CROSS_AUDIT_PROVIDER               — "openai" or "anthropic" (default: openai)
 #   CROSS_AUDIT_API_BASE               — API base URL (auto-set per provider)
 #   CROSS_AUDIT_API_KEY                — API key (required when enabled)
@@ -36,9 +37,7 @@ if [[ ! -f "$HOOKS_DIR/_audit-lib.sh" ]]; then
 fi
 source "$HOOKS_DIR/_audit-lib.sh"
 
-# ── Load .env BEFORE hooks-config.sh ──
-_load_audit_env "${CLAUDE_PROJECT_DIR:-.}/.env"
-
+# ── Load config (hooks-config.sh loads .env automatically) ──
 source "$HOOKS_DIR/../hooks-config.sh"
 
 # ── Master switch ──
@@ -117,13 +116,15 @@ esac
 PROVIDER="${CROSS_AUDIT_PROVIDER:-openai}"  # "openai" or "anthropic"
 API_BASE="${CROSS_AUDIT_API_BASE:-}"
 MODEL="${CROSS_AUDIT_MODEL:-}"
-# Set provider-specific defaults
-if [[ "$PROVIDER" == "anthropic" ]]; then
-  API_BASE="${API_BASE:-https://api.anthropic.com}"
-  MODEL="${MODEL:-claude-sonnet-4-20250514}"
-else
-  API_BASE="${API_BASE:-https://api.openai.com/v1}"
-  MODEL="${MODEL:-gpt-4o}"
+# Auto-set provider-specific defaults when not configured
+if [[ -z "$API_BASE" || -z "$MODEL" ]]; then
+  if [[ "$PROVIDER" == "anthropic" ]]; then
+    API_BASE="${API_BASE:-https://api.anthropic.com}"
+    MODEL="${MODEL:-claude-sonnet-4-20250514}"
+  else
+    API_BASE="${API_BASE:-https://api.openai.com/v1}"
+    MODEL="${MODEL:-gpt-4o}"
+  fi
 fi
 TRIGGER="${CROSS_AUDIT_TRIGGER:-wave}"
 CONTEXT_LEVEL="${CROSS_AUDIT_CONTEXT:-standard}"

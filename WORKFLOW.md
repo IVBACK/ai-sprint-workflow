@@ -66,10 +66,10 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    credentials.json
    secrets.yaml
    secrets.yml
-   .claude/hooks-config.local.sh
+   .claude/hooks-config.local.sh    # legacy, kept for backward compat
    .claude/hooks/*.local.sh
    ```
-   This prevents API keys and secrets from being committed to git.
+   This prevents API keys, secrets, and personal overrides from being committed to git.
    If a `.gitignore` already exists, append only missing entries — do not overwrite.
 4. If Roadmap.md is empty or has no sprint items, run Initial Planning:
    *(Design-first alternative: if the user ran a `ROADMAP-DESIGN-PROMPT.md` session beforehand,
@@ -145,7 +145,7 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
    - `.claude/hooks/detect-test-regression.sh` — CP3: surfaces test failures from Bash output
    - `.claude/hooks/validate-close-gate.sh` — CP4: validates Close Gate report, checks for unverified must items
    - `.claude/hooks/validate-sprint-close.sh` — validates Sprint Close report sections (retrospective, baseline, handoff)
-   - `.claude/hooks/cross-llm-audit.sh` — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — requires `ENABLE_CROSS_AUDIT=true` + API key. If user answered Yes to Q15, remind them: *"Run `bash .claude/setup-audit.sh` in your terminal to complete cross-audit setup."* See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+   - `.claude/hooks/cross-llm-audit.sh` — sends code changes to an external LLM for independent review. Enabled by default — requires API key to activate (silently skips if no key). If user answered Yes to Q15, remind them: *"Run `bash .claude/setup-audit.sh` in your terminal to set up your API key."* See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
    - `.claude/setup-audit.sh` — **(always create)** interactive terminal script for cross-LLM audit setup. Collects API key via hidden input (`read -s`), writes to `.env`. Even if the user said No to Q15 — include the script so they can enable it later without re-bootstrapping.
    Make all hook scripts executable (`chmod +x .claude/hooks/*.sh .claude/setup-audit.sh`).
    File contents: see §File Templates → "Claude Code Hook Templates".
@@ -306,7 +306,6 @@ project-root/
 │   └── sprint-audit.sh                # Automated close gate checks
 └── .claude/                           # Claude Code hooks (Step 8.5, skip for other agents)
     ├── hooks-config.sh                # Centralized config (hooks, audit, thresholds, limits)
-    ├── hooks-config.local.sh          # Personal overrides (git-ignored, optional)
     ├── settings.json                  # Hook registrations
     ├── setup-audit.sh                 # Interactive cross-LLM audit setup
     └── hooks/
@@ -2495,7 +2494,7 @@ Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
 #
 # HOW TO CHANGE A SETTING:
 #   1. Edit the value in the "Defaults" table below      (applies to whole team)
-#   2. Or put it in .claude/hooks-config.local.sh         (personal, git-ignored)
+#   2. Or put it in .env                                  (personal, git-ignored)
 #   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
 
 # Version — tracks which WORKFLOW.md version these hooks were generated from.
@@ -2515,7 +2514,7 @@ WORKFLOW_MODE="standard"  # "freestyle", "lite", "standard", or "strict"
 #            Setting                          Value         Description
 #            ───────                          ─────         ───────────
 # Cross-LLM Audit
-_D_ENABLE_CROSS_AUDIT=false                              # Master switch
+_D_ENABLE_CROSS_AUDIT=true                               # Master switch (silently skips if no API key)
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
 _D_CROSS_AUDIT_TRIGGER=wave                              # "wave" or "item"
 _D_CROSS_AUDIT_CONTEXT=standard                          # "minimal", "standard", "full"
@@ -2835,10 +2834,14 @@ fi
 # Detect cross-audit status (check .env without exposing contents)
 CROSS_AUDIT_STATUS="off"
 ENV_FILE="${CLAUDE_PROJECT_DIR:-.}/.env"
-if [[ -f "$ENV_FILE" ]] && grep -q "^ENABLE_CROSS_AUDIT=true" "$ENV_FILE" 2>/dev/null; then
-    CROSS_AUDIT_STATUS="on"
-elif [[ ! -f "$ENV_FILE" ]] && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
-    CROSS_AUDIT_STATUS="available"
+if [[ -f "$ENV_FILE" ]] && grep -q "^CROSS_AUDIT_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+    if [[ "${ENABLE_CROSS_AUDIT:-true}" == "true" ]]; then
+        CROSS_AUDIT_STATUS="on"
+    else
+        CROSS_AUDIT_STATUS="disabled"
+    fi
+elif [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/setup-audit.sh" ]]; then
+    CROSS_AUDIT_STATUS="no-key"
 fi
 
 # Output additional context for the agent via JSON
@@ -2992,7 +2995,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 # Checks TRACKING.md for unacknowledged deferred items
 ```
 
-**`.claude/hooks/cross-llm-audit.sh`** — **(optional)** sends code changes to an external LLM for independent review. Disabled by default — enable with `ENABLE_CROSS_AUDIT=true` + API key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for full setup and configuration.
+**`.claude/hooks/cross-llm-audit.sh`** — sends code changes to an external LLM for independent review. Enabled by default — requires API key to activate (silently skips if no key). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md) for full setup and configuration.
 
 The full script lives in `.claude/hooks/cross-llm-audit.sh` (authoritative source). Key design points:
 
@@ -3679,7 +3682,7 @@ Use this checklist when bootstrapping a new project:
 □ .gitignore includes:
     □ Secret files: .env, .env.*, *.key, *.pem, *.p12, credentials.json, secrets.yaml/yml
     □ Exception: !.env.example (template allowed)
-    □ Local hook overrides: .claude/hooks-config.local.sh, .claude/hooks/*.local.sh
+    □ Legacy local overrides: .claude/hooks-config.local.sh (backward compat)
     □ AI-generated analysis reports (session artifacts)
     □ Build artifacts, IDE files
 ```
@@ -3760,7 +3763,7 @@ The CLI upgrade command automatically:
 **Data safety guarantees:**
 - No user configuration is lost — all overrides are extracted and restored.
 - Custom hooks in `settings.json` are preserved (merge, not replace).
-- `.env` and `hooks-config.local.sh` are never touched.
+- `.env` is never touched (personal overrides and API key).
 - Atomic writes prevent corruption on interruption or disk-full.
 - Backup files (`.bak`) allow manual recovery if needed.
 

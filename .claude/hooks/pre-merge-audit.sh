@@ -37,8 +37,8 @@ fi
 SOURCE="$1"
 
 # ── Check prerequisites ──
-if [[ "${ENABLE_CROSS_AUDIT:-false}" != "true" ]]; then
-  echo "Cross-audit is disabled. Set ENABLE_CROSS_AUDIT=true to enable." >&2
+if [[ "${ENABLE_CROSS_AUDIT:-true}" != "true" ]]; then
+  echo "Cross-audit is disabled. Remove ENABLE_CROSS_AUDIT=false from .env to re-enable." >&2
   _log_audit "skip" "disabled"
   exit 0
 fi

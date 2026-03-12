@@ -14,7 +14,7 @@ __pycache__/
 *.swo
 *~
 
-# Per-developer local config overrides (team use)
+# Legacy local config (replaced by .env overrides)
 .claude/hooks-config.local.sh
 .claude/hooks/*.local.sh
 

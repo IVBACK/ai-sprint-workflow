@@ -49,7 +49,7 @@ The script walks you through provider selection, API key entry, and optional set
 Your API key is collected via hidden terminal input (`read -s`) and written to `.env`.
 **The key never enters the AI conversation.**
 
-**Data safety:** If `.env` or `hooks-config.local.sh` already exist, the script creates `.bak` backups before overwriting. Writes use atomic operations (temp file → move) to prevent corruption on interruption. The API key is quoted to handle special characters (`$`, `` ` ``, etc.). Signal traps ensure temp files are cleaned up on Ctrl+C.
+**Data safety:** If `.env` already exists, the script creates a `.bak` backup before overwriting. Writes use atomic operations (temp file → move) to prevent corruption on interruption. The API key is quoted to handle special characters (`$`, `` ` ``, etc.). Signal traps ensure temp files are cleaned up on Ctrl+C.
 
 After the script completes, make a code change with 3+ lines to verify.
 
@@ -82,26 +82,23 @@ Two provider modes are supported: **OpenAI-compatible** (default) and **Anthropi
 Create a `.env` file in the project root:
 
 ```bash
-ENABLE_CROSS_AUDIT=true
 CROSS_AUDIT_API_KEY=your-api-key-here
 ```
 
-The hook auto-loads `CROSS_AUDIT_API_KEY` and `ENABLE_CROSS_AUDIT` from `.env`. No `export` needed.
+Cross-audit is **enabled by default** — it only needs an API key to activate. The hook auto-loads `CROSS_AUDIT_API_KEY` from `.env`. No `export` needed.
 
 Alternatively, add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`):
 
 ```bash
-export ENABLE_CROSS_AUDIT=true
 export CROSS_AUDIT_API_KEY="your-api-key-here"
 ```
 
 Shell profile vars take precedence — `.env` only fills in values not already set.
+If no API key is configured, the hook silently skips with zero overhead.
 
-**Step 2: All other settings in `.claude/hooks-config.sh`** (centralized config)
+**Step 2: Personal overrides in `.env`** (optional)
 
-All audit settings (provider, model, trigger, language, thresholds, diff limits, etc.) are centralized in `.claude/hooks-config.sh`. Edit that file to change defaults.
-
-For per-developer overrides, create `.claude/hooks-config.local.sh` (git-ignored):
+Team defaults are in `.claude/hooks-config.sh`. To override any setting personally, add it to `.env`:
 
 ```bash
 CROSS_AUDIT_PROVIDER=anthropic
@@ -119,14 +116,14 @@ Make a code change with 3+ lines. Check stderr for "Cross-audit:" messages. If t
 
 All settings are centralized in `.claude/hooks-config.sh` with a `_D_*` defaults table. To change a setting:
 1. Edit `_D_*` value in `hooks-config.sh` (team-wide, git-tracked)
-2. Or override in `.claude/hooks-config.local.sh` (personal, git-ignored)
+2. Or override in `.env` (personal, git-ignored)
 3. Or export as env var (temporary, current shell)
 
 ### Core Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `ENABLE_CROSS_AUDIT` | `false` | Master switch — must be `true` to enable |
+| `ENABLE_CROSS_AUDIT` | `true` | Master switch — silently skips if no API key |
 | `CROSS_AUDIT_PROVIDER` | `openai` | `openai` (OpenAI-compatible) or `anthropic` (native) |
 | `CROSS_AUDIT_TRIGGER` | `wave` | `wave` (every N edits) or `item` (every edit) |
 | `CROSS_AUDIT_CONTEXT` | `standard` | `minimal`, `standard`, or `full` (see below) |
@@ -178,7 +175,7 @@ Force immediate audit in wave mode: `export CROSS_AUDIT_FIRE=true`
 
 ### API Base & Model (optional overrides)
 
-Auto-set per provider. Override in `hooks-config.sh` or `hooks-config.local.sh`:
+Auto-set per provider. Override in `hooks-config.sh` or `.env`:
 
 ```bash
 CROSS_AUDIT_API_BASE=https://openrouter.ai/api/v1
@@ -389,13 +386,13 @@ Large prompts (up to 48KB for holistic sprint reviews) are written to a temporar
 
 ## Integration with Workflow Modes
 
-The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mode** — `ENABLE_CROSS_AUDIT` is not affected by Lite/Standard/Strict presets:
+The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mode** — `ENABLE_CROSS_AUDIT` defaults to `true` and is not affected by Lite/Standard/Strict presets:
 
 - Can be enabled in Lite mode for extra safety on fast iterations
 - Can be disabled in Strict mode if team prefers internal review only
 - `hooks-config.sh` strict mode enforcement does NOT force cross-audit on
 
-**Note:** The audit _signal_ hooks (CP1 metric regression, CP2 recurring failures via `detect-audit-signals.sh`) **are** controlled by workflow mode — Lite mode disables them by default. Override with `HOOK_DETECT_AUDIT_SIGNALS=true` in `hooks-config.local.sh` if needed
+**Note:** The audit _signal_ hooks (CP1 metric regression, CP2 recurring failures via `detect-audit-signals.sh`) **are** controlled by workflow mode — Lite mode disables them by default. Override with `HOOK_DETECT_AUDIT_SIGNALS=true` in `.env` if needed
 
 ---
 
@@ -404,7 +401,6 @@ The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mod
 If you have a GitHub Copilot subscription, you can use GitHub Models:
 
 ```bash
-export ENABLE_CROSS_AUDIT=true
 export CROSS_AUDIT_API_BASE="https://models.inference.ai.azure.com"
 export CROSS_AUDIT_API_KEY="$(gh auth token)"  # Uses your GitHub CLI token
 export CROSS_AUDIT_MODEL="gpt-4o"
@@ -516,10 +512,10 @@ bash .claude/hooks/verify-evidence.sh report.txt
 
 ## Disabling
 
-Remove the env vars, or:
+To disable cross-audit, add to `.env` (personal) or edit `hooks-config.sh` (team-wide):
 
 ```bash
-export ENABLE_CROSS_AUDIT=false
+ENABLE_CROSS_AUDIT=false
 ```
 
-The hook checks this first and exits immediately with zero overhead.
+Or remove your API key from `.env` — without a key, the hook silently skips.

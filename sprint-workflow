@@ -603,7 +603,7 @@ cmd_init() {
 cmd_config() {
   local key="${1:-}" value="${2:-}"
   local config_file="$_PROJECT_DIR/.claude/hooks-config.sh"
-  local local_config="$_PROJECT_DIR/.claude/hooks-config.local.sh"
+  local env_file="$_PROJECT_DIR/.env"
 
   if [[ ! -f "$config_file" ]]; then
     _fail "hooks-config.sh not found. Run 'sprint-workflow init' first."
@@ -642,28 +642,30 @@ cmd_config() {
     # Audit settings
     echo ""
     echo "  $(_bold 'Cross-LLM Audit')"
+    local has_key="false"
     if [[ -f "$_PROJECT_DIR/.env" ]]; then
-      local audit_on
-      audit_on=$(grep '^ENABLE_CROSS_AUDIT=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
-      echo "    ENABLE_CROSS_AUDIT = ${audit_on:-false}"
-    else
-      echo "    (not configured)"
+      local key_val
+      key_val=$(grep '^CROSS_AUDIT_API_KEY=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
+      [[ -n "$key_val" && "$key_val" != "your-api-key-here" ]] && has_key="true"
     fi
-    if [[ -f "$local_config" ]]; then
-      grep '^CROSS_AUDIT_' "$local_config" 2>/dev/null | while IFS= read -r line; do
+    # Source hooks-config to get ENABLE_CROSS_AUDIT value
+    local audit_enabled="true"
+    if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
+      audit_enabled=$(bash -c "source '$_PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${ENABLE_CROSS_AUDIT:-true}\"")
+    fi
+    if [[ "$audit_enabled" == "true" && "$has_key" == "true" ]]; then
+      echo "    Status: ACTIVE (enabled + API key set)"
+    elif [[ "$audit_enabled" == "true" && "$has_key" == "false" ]]; then
+      echo "    Status: ENABLED but no API key — run: bash .claude/setup-audit.sh"
+    else
+      echo "    Status: DISABLED (ENABLE_CROSS_AUDIT=false)"
+    fi
+    if [[ -f "$env_file" ]]; then
+      grep '^CROSS_AUDIT_' "$env_file" 2>/dev/null | grep -v 'API_KEY' | while IFS= read -r line; do
         local ck cv
         ck=$(echo "$line" | cut -d= -f1)
         cv=$(echo "$line" | cut -d= -f2)
         printf '    %-35s %s\n' "$ck" "$cv"
-      done
-    fi
-
-    # Local overrides
-    if [[ -f "$local_config" ]]; then
-      echo ""
-      echo "  $(_bold 'Local Overrides') ($(_dim '.claude/hooks-config.local.sh'))"
-      grep -v '^#' "$local_config" 2>/dev/null | grep -v '^\s*$' | while IFS= read -r line; do
-        echo "    $line"
       done
     fi
 
@@ -683,9 +685,7 @@ cmd_config() {
       audit.*)
         local audit_key="${key#audit.}"
         local env_key="CROSS_AUDIT_$(echo "$audit_key" | tr '[:lower:]-' '[:upper:]_')"
-        # Check local config first, then .env
-        grep "^$env_key=" "$local_config" 2>/dev/null | head -1 | cut -d= -f2 || \
-        grep "^$env_key=" "$_PROJECT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2 || \
+        grep "^$env_key=" "$env_file" 2>/dev/null | head -1 | cut -d= -f2 || \
         echo "(not set)"
         ;;
       hook.*)
@@ -710,17 +710,16 @@ cmd_config() {
         return 1
       fi
       ;;
-    audit.wave-size|audit.min-changes|audit.timeout|audit.context|audit.trigger|audit.lang|audit.model|audit.provider)
+    audit.wave-size|audit.min-changes|audit.timeout|audit.context|audit.trigger|audit.lang|audit.model|audit.provider|audit.api-base)
       local audit_key="${key#audit.}"
       local env_key="CROSS_AUDIT_$(echo "$audit_key" | tr '[:lower:]-' '[:upper:]_')"
-      mkdir -p "$_PROJECT_DIR/.claude"
-      touch "$local_config"
-      if grep -q "^$env_key=" "$local_config" 2>/dev/null; then
-        _safe_sed_replace "$local_config" "^${env_key}=.*" "${env_key}=${value}"
+      touch "$env_file"
+      if grep -q "^$env_key=" "$env_file" 2>/dev/null; then
+        _safe_sed_replace "$env_file" "^${env_key}=.*" "${env_key}=${value}"
       else
-        echo "$env_key=$value" >> "$local_config"
+        echo "$env_key=$value" >> "$env_file"
       fi
-      _check "$env_key=$value (in hooks-config.local.sh)"
+      _check "$env_key=$value (in .env)"
       ;;
     hook.*)
       local hook_key="HOOK_$(echo "${key#hook.}" | tr '[:lower:]-' '[:upper:]_')"
@@ -968,32 +967,37 @@ cmd_doctor() {
   echo "  ─────────────────"
   echo ""
 
-  local audit_enabled="false"
-  if [[ -f "$_PROJECT_DIR/.env" ]]; then
-    audit_enabled=$(grep '^ENABLE_CROSS_AUDIT=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
-    if [[ "$audit_enabled" == "true" ]]; then
-      _check ".env present, audit enabled"
+  # Cross-audit is enabled by default — check for API key
+  local audit_enabled="true"
+  if [[ -f "$_PROJECT_DIR/.claude/hooks-config.sh" ]]; then
+    audit_enabled=$(bash -c "source '$_PROJECT_DIR/.claude/hooks-config.sh' 2>/dev/null; echo \"\${ENABLE_CROSS_AUDIT:-true}\"")
+  fi
+  if [[ "$audit_enabled" == "true" ]]; then
+    _check "Cross-audit enabled (default)"
+    if [[ -f "$_PROJECT_DIR/.env" ]]; then
       local has_key
       has_key=$(grep '^CROSS_AUDIT_API_KEY=' "$_PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2)
-      if [[ -n "$has_key" && "$has_key" != "no-key-needed" ]]; then
+      if [[ -n "$has_key" && "$has_key" != "your-api-key-here" && "$has_key" != "no-key-needed" ]]; then
         _check "API key configured"
       elif [[ "$has_key" == "no-key-needed" ]]; then
         _check "Local provider (no key needed)"
       else
-        _fail "ENABLE_CROSS_AUDIT=true but no API key — run: sprint-workflow audit-setup"
-        issues=$((issues + 1))
+        _warn "No API key — cross-audit will silently skip. Run: sprint-workflow audit-setup"
       fi
     else
-      _warn "Audit disabled"
+      _warn "No .env file — cross-audit will silently skip. Run: sprint-workflow audit-setup"
     fi
+  else
+    _warn "Cross-audit explicitly disabled"
+  fi
+  # .env gitignore check (if .env exists)
+  if [[ -f "$_PROJECT_DIR/.env" ]]; then
     if [[ -f "$_PROJECT_DIR/.gitignore" ]] && grep -q '\.env' "$_PROJECT_DIR/.gitignore" 2>/dev/null; then
       _check ".env is git-ignored"
     else
       _fail ".env exists but NOT in .gitignore — secrets at risk!"
       issues=$((issues + 1))
     fi
-  else
-    _warn ".env not found (audit not configured)"
   fi
 
   if [[ "$audit_enabled" == "true" && -f "$_PROJECT_DIR/.claude/hooks/audit-health-check.sh" ]]; then

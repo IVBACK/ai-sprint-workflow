@@ -11,15 +11,14 @@
 # Updated automatically during bootstrap and upgrade — do not edit manually.
 HOOKS_VERSION="2.1"
 #
-# ── Per-Developer Overrides (Team Use) ──
+# ── Per-Developer Overrides ──
 # This file is git-tracked (shared by all team members).
-# To override settings locally without affecting the team, create:
-#   .claude/hooks-config.local.sh
-# This file is git-ignored and sourced AFTER this file + strict enforcement.
-# Example: override workflow mode for your own sessions:
-#   echo 'WORKFLOW_MODE="lite"' > .claude/hooks-config.local.sh
-# Or disable a specific hook:
-#   echo 'HOOK_ENTRY_GATE_SESSION=false' >> .claude/hooks-config.local.sh
+# To override settings locally, add them to .env (git-ignored).
+# .env is loaded AFTER this file — values there override defaults here.
+# Example: put in .env:
+#   WORKFLOW_MODE=lite
+#   HOOK_ENTRY_GATE_SESSION=false
+#   CROSS_AUDIT_MODEL=gpt-4o-mini
 #
 # ── Workflow Mode Presets ──
 # Set WORKFLOW_MODE to auto-configure hooks and audit defaults for your project.
@@ -165,10 +164,10 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 #
 # HOW TO CHANGE A SETTING:
 #   1. Edit the value in the "Defaults" table below      (applies to whole team)
-#   2. Or put it in .claude/hooks-config.local.sh         (personal, git-ignored)
+#   2. Or put it in .env                                  (personal, git-ignored)
 #   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
 #
-#   Priority: env var > hooks-config.local.sh > defaults below
+#   Priority: env var > .env > defaults below
 #
 # API key lives in .env (git-ignored) — never paste into git-tracked files.
 # Guided setup: bash .claude/setup-audit.sh
@@ -181,8 +180,10 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 #            Setting                          Value         Description
 #            ───────                          ─────         ───────────
 # Cross-LLM Audit
-_D_ENABLE_CROSS_AUDIT=false                              # Master switch
+_D_ENABLE_CROSS_AUDIT=true                               # Master switch (silently skips if no API key)
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
+_D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider (see examples below)
+_D_CROSS_AUDIT_MODEL=                                    # Empty = auto-set per provider (see examples below)
 _D_CROSS_AUDIT_TRIGGER=wave                              # "wave" (every N edits) or "item" (every edit)
 _D_CROSS_AUDIT_CONTEXT="${_D_CROSS_AUDIT_CONTEXT:-standard}"  # "minimal", "standard", "full" (mode-aware)
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
@@ -209,8 +210,11 @@ _D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count t
 # Dashboard
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (directory levels)
 
-# ── API Base & Model (auto-set per provider, uncomment to override) ──
-# Examples:
+# ── API Base & Model examples ──
+# Leave _D_CROSS_AUDIT_API_BASE and _D_CROSS_AUDIT_MODEL empty (above) to auto-set per provider.
+# Or set them to use a custom endpoint. Override per-developer in .env.
+#
+# API Base examples:
 #   OpenAI:        https://api.openai.com/v1           (auto-set when provider=openai)
 #   Anthropic:     https://api.anthropic.com            (auto-set when provider=anthropic)
 #   GitHub Models: https://models.inference.ai.azure.com
@@ -218,18 +222,18 @@ _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (di
 #   Ollama:        http://localhost:11434/v1
 #   LM Studio:     http://localhost:1234/v1
 #   Azure OpenAI:  https://{name}.openai.azure.com/openai/deployments/{deploy}
-# CROSS_AUDIT_API_BASE=https://openrouter.ai/api/v1
 #
 # Model examples:
 #   OpenAI:     gpt-4o (auto-set), gpt-4o-mini, gpt-4.1
 #   Anthropic:  claude-sonnet-4-20250514 (auto-set), claude-haiku-4-5-20251001
 #   OpenRouter: openai/gpt-4o, anthropic/claude-3.5-sonnet
 #   Ollama:     llama3, mistral, codellama
-# CROSS_AUDIT_MODEL=gpt-4o-mini
 
 # ── Apply defaults (env vars and local overrides take precedence) ─────
 ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-$_D_ENABLE_CROSS_AUDIT}"
 CROSS_AUDIT_PROVIDER="${CROSS_AUDIT_PROVIDER:-$_D_CROSS_AUDIT_PROVIDER}"
+CROSS_AUDIT_API_BASE="${CROSS_AUDIT_API_BASE:-$_D_CROSS_AUDIT_API_BASE}"
+CROSS_AUDIT_MODEL="${CROSS_AUDIT_MODEL:-$_D_CROSS_AUDIT_MODEL}"
 CROSS_AUDIT_TRIGGER="${CROSS_AUDIT_TRIGGER:-$_D_CROSS_AUDIT_TRIGGER}"
 CROSS_AUDIT_CONTEXT="${CROSS_AUDIT_CONTEXT:-$_D_CROSS_AUDIT_CONTEXT}"
 CROSS_AUDIT_LANG="${CROSS_AUDIT_LANG:-$_D_CROSS_AUDIT_LANG}"
@@ -251,11 +255,21 @@ AUDIT_HEALTH_STALE_SECONDS="${AUDIT_HEALTH_STALE_SECONDS:-$_D_AUDIT_HEALTH_STALE
 AUDIT_HEALTH_ERROR_THRESHOLD="${AUDIT_HEALTH_ERROR_THRESHOLD:-$_D_AUDIT_HEALTH_ERROR_THRESHOLD}"
 DASHBOARD_SEARCH_DEPTH="${DASHBOARD_SEARCH_DEPTH:-$_D_DASHBOARD_SEARCH_DEPTH}"
 
-# ── Per-developer local overrides (git-ignored) ──
-# Sourced here so local settings override mode defaults above,
-# but BEFORE strict enforcement (strict cannot be overridden locally).
-_LOCAL_CONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hooks-config.local.sh"
-[[ -f "$_LOCAL_CONFIG" ]] && source "$_LOCAL_CONFIG"
+# ── Per-developer overrides from .env (git-ignored) ──
+# Loaded here so .env values override defaults above,
+# but BEFORE strict enforcement (strict cannot be overridden).
+_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+if [[ -f "$_ENV_FILE" ]]; then
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ -z "$_line" || "$_line" =~ ^[[:space:]]*# ]] && continue
+    _key="${_line%%=*}"
+    _val="${_line#*=}"
+    _key=$(echo "$_key" | sed 's/^[[:space:]]*export[[:space:]]*//' | tr -d '[:space:]')
+    _val=$(echo "$_val" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
+    [[ "$_key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
+    export "$_key=$_val"
+  done < "$_ENV_FILE"
+fi
 
 # ── Strict mode enforcement ──
 # Applied AFTER local overrides — strict mode is team-wide and cannot be bypassed.
