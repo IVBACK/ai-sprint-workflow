@@ -17,12 +17,12 @@ _log_audit() {
   mkdir -p "$state_dir" 2>/dev/null
   local log_file="${state_dir}/cross-audit-log.jsonl"
 
-  # Log rotation: if log exceeds 1MB, keep last 500 lines
+  # Log rotation: if log exceeds max size, keep last N lines (configured in hooks-config.sh)
   if [[ -f "$log_file" ]]; then
     local _size
     _size=$(stat -c%s "$log_file" 2>/dev/null || stat -f%z "$log_file" 2>/dev/null || echo 0)
-    if [[ "$_size" -gt 1048576 ]]; then
-      tail -500 "$log_file" > "${log_file}.tmp" && mv "${log_file}.tmp" "$log_file"
+    if [[ "$_size" -gt "${AUDIT_LOG_MAX_BYTES:-1048576}" ]]; then
+      tail -"${AUDIT_LOG_KEEP_LINES:-500}" "$log_file" > "${log_file}.tmp" && mv "${log_file}.tmp" "$log_file"
     fi
   fi
 

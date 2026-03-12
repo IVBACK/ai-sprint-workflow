@@ -9,9 +9,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Load centralized config for default thresholds
+[[ -f "$SCRIPT_DIR/../hooks-config.sh" ]] && source "$SCRIPT_DIR/../hooks-config.sh"
+
 STATE_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}/.claude/.state"
 AUDIT_LOG="${STATE_DIR}/cross-audit-log.jsonl"
-STALE_THRESHOLD_SECONDS="${1:-3600}"  # Default: 1 hour
+STALE_THRESHOLD_SECONDS="${1:-${AUDIT_HEALTH_STALE_SECONDS:-3600}}"  # Default: 1 hour
 
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
 red()   { printf '\033[31m%s\033[0m\n' "$1"; }
@@ -72,7 +76,7 @@ fi
 
 # Recent errors
 RECENT_ERRORS=$(tail -20 "$AUDIT_LOG" | grep -c '"error"' 2>/dev/null || echo 0)
-if [[ "$RECENT_ERRORS" -gt 5 ]]; then
+if [[ "$RECENT_ERRORS" -gt "${AUDIT_HEALTH_ERROR_THRESHOLD:-5}" ]]; then
   echo ""
   red "WARNING: $RECENT_ERRORS errors in last 20 entries"
   echo "Recent errors:"

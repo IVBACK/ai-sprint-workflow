@@ -118,24 +118,97 @@ HOOK_VALIDATE_SPRINT_CLOSE="${HOOK_VALIDATE_SPRINT_CLOSE:-$_VALIDATE_SPRINT_CLOS
 # Silent if sections missing or data insufficient — zero false positives without structured data
 HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 
-# ── Cross-LLM Audit (optional, independent of workflow mode) ──
-# Sends code changes to an external LLM for independent review.
-# Disabled by default. All config lives in .env (git-ignored).
+# ══════════════════════════════════════════════════════════════
+# ── Cross-LLM Audit, Thresholds, Limits & Dashboard ──
+# ══════════════════════════════════════════════════════════════
 #
-# Guided setup:  bash .claude/setup-audit.sh   ← interactive, API key never touches the AI
-# Manual setup:  cp .env.example .env  → fill in API key → done.
-# Full guide:    Docs/CROSS-LLM-AUDIT.md
+# HOW TO CHANGE A SETTING:
+#   1. Edit the value in the "Defaults" table below      (applies to whole team)
+#   2. Or put it in .claude/hooks-config.local.sh         (personal, git-ignored)
+#   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
 #
-# IMPORTANT: Never paste API keys into an AI conversation.
-# The setup script collects keys via hidden terminal input (read -s).
+#   Priority: env var > hooks-config.local.sh > defaults below
 #
-# Master switch only — all other CROSS_AUDIT_* settings go in .env
-ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
+# API key lives in .env (git-ignored) — never paste into git-tracked files.
+# Guided setup: bash .claude/setup-audit.sh
+# Full guide:   Docs/CROSS-LLM-AUDIT.md
 
-# Mechanical enforcement: exit non-zero on BLOCK verdict (makes Claude reject the edit)
-# Requires ENABLE_CROSS_AUDIT=true. Default: false (advisory only).
-# Set to true for strict enforcement where BLOCK verdicts halt work.
-# CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-false}"
+# ── Defaults (_D_ = Default value) ────────────────────────────
+# _D_ prefix marks the default value for each setting.
+# Edit the values on the RIGHT side to change defaults.
+#
+#            Setting                          Value         Description
+#            ───────                          ─────         ───────────
+# Cross-LLM Audit
+_D_ENABLE_CROSS_AUDIT=false                              # Master switch
+_D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
+_D_CROSS_AUDIT_TRIGGER=wave                              # "wave" (every N edits) or "item" (every edit)
+_D_CROSS_AUDIT_CONTEXT=standard                          # "minimal", "standard", "full"
+_D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
+_D_CROSS_AUDIT_MIN_CHANGES=3                             # Min changed lines to trigger
+_D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
+_D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
+_D_CROSS_AUDIT_ENFORCE_BLOCK=false                       # Exit non-zero on BLOCK verdict
+# Wave Batching
+_D_CROSS_AUDIT_WAVE_SIZE=5                               # Edits before wave fires
+_D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
+# Diff Truncation (max characters sent to external LLM)
+_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE=48000                 # Close Gate (holistic sprint)
+_D_CROSS_AUDIT_MAX_DIFF_WAVE=32000                       # Wave review
+_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE=32000                 # Entry Gate (plan review)
+_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT=24000                   # Per-edit
+# Audit Signal Thresholds
+_D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (0.20 = 20%)
+_D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprint count)
+# Log & Health
+_D_AUDIT_LOG_MAX_BYTES=1048576                           # Log rotation: max size (1MB)
+_D_AUDIT_LOG_KEEP_LINES=500                              # Log rotation: lines to keep
+_D_AUDIT_HEALTH_STALE_SECONDS=3600                       # Health: stale threshold (1 hour)
+_D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count threshold
+# Dashboard
+_D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (directory levels)
+
+# ── API Base & Model (auto-set per provider, uncomment to override) ──
+# Examples:
+#   OpenAI:        https://api.openai.com/v1           (auto-set when provider=openai)
+#   Anthropic:     https://api.anthropic.com            (auto-set when provider=anthropic)
+#   GitHub Models: https://models.inference.ai.azure.com
+#   OpenRouter:    https://openrouter.ai/api/v1
+#   Ollama:        http://localhost:11434/v1
+#   LM Studio:     http://localhost:1234/v1
+#   Azure OpenAI:  https://{name}.openai.azure.com/openai/deployments/{deploy}
+# CROSS_AUDIT_API_BASE=https://openrouter.ai/api/v1
+#
+# Model examples:
+#   OpenAI:     gpt-4o (auto-set), gpt-4o-mini, gpt-4.1
+#   Anthropic:  claude-sonnet-4-20250514 (auto-set), claude-haiku-4-5-20251001
+#   OpenRouter: openai/gpt-4o, anthropic/claude-3.5-sonnet
+#   Ollama:     llama3, mistral, codellama
+# CROSS_AUDIT_MODEL=gpt-4o-mini
+
+# ── Apply defaults (env vars and local overrides take precedence) ─────
+ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-$_D_ENABLE_CROSS_AUDIT}"
+CROSS_AUDIT_PROVIDER="${CROSS_AUDIT_PROVIDER:-$_D_CROSS_AUDIT_PROVIDER}"
+CROSS_AUDIT_TRIGGER="${CROSS_AUDIT_TRIGGER:-$_D_CROSS_AUDIT_TRIGGER}"
+CROSS_AUDIT_CONTEXT="${CROSS_AUDIT_CONTEXT:-$_D_CROSS_AUDIT_CONTEXT}"
+CROSS_AUDIT_LANG="${CROSS_AUDIT_LANG:-$_D_CROSS_AUDIT_LANG}"
+CROSS_AUDIT_MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-$_D_CROSS_AUDIT_MIN_CHANGES}"
+CROSS_AUDIT_TIMEOUT="${CROSS_AUDIT_TIMEOUT:-$_D_CROSS_AUDIT_TIMEOUT}"
+CROSS_AUDIT_SKIP_SUBAGENT="${CROSS_AUDIT_SKIP_SUBAGENT:-$_D_CROSS_AUDIT_SKIP_SUBAGENT}"
+CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-$_D_CROSS_AUDIT_ENFORCE_BLOCK}"
+CROSS_AUDIT_WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-$_D_CROSS_AUDIT_WAVE_SIZE}"
+CROSS_AUDIT_LOCK_TIMEOUT="${CROSS_AUDIT_LOCK_TIMEOUT:-$_D_CROSS_AUDIT_LOCK_TIMEOUT}"
+CROSS_AUDIT_MAX_DIFF_CLOSE_GATE="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-$_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE}"
+CROSS_AUDIT_MAX_DIFF_WAVE="${CROSS_AUDIT_MAX_DIFF_WAVE:-$_D_CROSS_AUDIT_MAX_DIFF_WAVE}"
+CROSS_AUDIT_MAX_DIFF_ENTRY_GATE="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-$_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE}"
+CROSS_AUDIT_MAX_DIFF_PER_EDIT="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-$_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT}"
+AUDIT_CP1_THRESHOLD="${AUDIT_CP1_THRESHOLD:-$_D_AUDIT_CP1_THRESHOLD}"
+AUDIT_CP2_MIN_SPRINTS="${AUDIT_CP2_MIN_SPRINTS:-$_D_AUDIT_CP2_MIN_SPRINTS}"
+AUDIT_LOG_MAX_BYTES="${AUDIT_LOG_MAX_BYTES:-$_D_AUDIT_LOG_MAX_BYTES}"
+AUDIT_LOG_KEEP_LINES="${AUDIT_LOG_KEEP_LINES:-$_D_AUDIT_LOG_KEEP_LINES}"
+AUDIT_HEALTH_STALE_SECONDS="${AUDIT_HEALTH_STALE_SECONDS:-$_D_AUDIT_HEALTH_STALE_SECONDS}"
+AUDIT_HEALTH_ERROR_THRESHOLD="${AUDIT_HEALTH_ERROR_THRESHOLD:-$_D_AUDIT_HEALTH_ERROR_THRESHOLD}"
+DASHBOARD_SEARCH_DEPTH="${DASHBOARD_SEARCH_DEPTH:-$_D_DASHBOARD_SEARCH_DEPTH}"
 
 # ── Per-developer local overrides (git-ignored) ──
 # Sourced here so local settings override mode defaults above,

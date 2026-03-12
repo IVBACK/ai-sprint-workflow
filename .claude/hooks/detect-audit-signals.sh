@@ -23,6 +23,10 @@ HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOKS_DIR/../hooks-config.sh"
 
 [[ "$HOOK_DETECT_AUDIT_SIGNALS" != "true" ]] && exit 0
+
+# Thresholds from centralized config
+_CP1_THRESHOLD="${AUDIT_CP1_THRESHOLD:-0.20}"
+_CP2_MIN_SPRINTS="${AUDIT_CP2_MIN_SPRINTS:-2}"
 command -v jq >/dev/null 2>&1 || exit 0
 
 # ── PostToolUse filter: only re-run when TRACKING.md is the edited file ──
@@ -68,7 +72,7 @@ CP2_SIGNALS=""
 #   | S1     | render_time | 12    | ms   |
 # Columns (awk -F'|'): $2=sprint $3=metric $4=value $5=unit
 # ══════════════════════════════════════════════
-CP1_SIGNALS=$(awk -F'|' '
+CP1_SIGNALS=$(awk -F'|' -v cp1_thresh="$_CP1_THRESHOLD" '
   # Find section header (matches TRACKING.md template: "## Performance Baseline Log")
   /Performance Baseline Log/ { in_section=1; next }
   # Exit section on next ## heading
@@ -96,7 +100,7 @@ CP1_SIGNALS=$(awk -F'|' '
         # Guard: prev must be > 0 to avoid division by zero
         if (prev_val > 0) {
           pct=(curr_val - prev_val) / prev_val
-          if (pct >= 0.20) {
+          if (pct >= cp1_thresh) {
             printf "  %s: %s%s -> %s%s (+%.0f%%)\n", \
               key, prev_val, last_unit[key], curr_val, unit, pct*100
           }
@@ -116,7 +120,7 @@ CP1_SIGNALS=$(awk -F'|' '
 #   | S1     | null-ref  | CORE-003 | yes      |
 # Columns (awk -F'|'): $2=sprint $3=category
 # ══════════════════════════════════════════════
-CP2_SIGNALS=$(awk -F'|' '
+CP2_SIGNALS=$(awk -F'|' -v cp2_min="$_CP2_MIN_SPRINTS" '
   # Matches TRACKING.md template: "## Failure Mode History"
   /Failure Mode History/ { in_section=1; next }
   in_section && /^##/ { in_section=0 }
@@ -141,7 +145,7 @@ CP2_SIGNALS=$(awk -F'|' '
   }
   END {
     for (cat in count) {
-      if (count[cat] >= 2) {
+      if (count[cat] >= cp2_min) {
         printf "  \"%s\" -- %d sprints:%s\n", cat, count[cat], sprints[cat]
       }
     }
@@ -178,8 +182,9 @@ if [[ -n "$MISSING_SECTIONS" ]]; then
 fi
 
 if [[ -n "$CP1_SIGNALS" ]]; then
+    _CP1_PCT=$(awk "BEGIN { printf \"%.0f\", $_CP1_THRESHOLD * 100 }")
     CONTEXT+="=== ⚠ CP1 AUDIT SIGNAL (WORKFLOW.md Entry Gate Phase 1) ===\n"
-    CONTEXT+="Metric regression ≥20% detected since last sprint:\n"
+    CONTEXT+="Metric regression ≥${_CP1_PCT}% detected since last sprint:\n"
     CONTEXT+="$CP1_SIGNALS\n"
     CONTEXT+="REQUIRED: Before Entry Gate, surface to user:\n"
     CONTEXT+="  \"Metric regression detected — recommend Retroactive Audit.\"\n"

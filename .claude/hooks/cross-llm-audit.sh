@@ -121,6 +121,8 @@ CONTEXT_LEVEL="${CROSS_AUDIT_CONTEXT:-standard}"
 AUDIT_LANG="${CROSS_AUDIT_LANG:-en}"
 MIN_CHANGES="${CROSS_AUDIT_MIN_CHANGES:-3}"
 TIMEOUT="${CROSS_AUDIT_TIMEOUT:-60}"
+WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-5}"
+LOCK_TIMEOUT="${CROSS_AUDIT_LOCK_TIMEOUT:-5}"
 
 # ── Trigger control: wave vs item ──
 # For "wave" mode, we use a counter file to batch changes.
@@ -146,9 +148,9 @@ if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
     COUNT=$((COUNT + 1))
     echo "$COUNT" > "$COUNTER_FILE"
 
-    # In wave mode, only fire every 5th edit (approximating wave completion)
+    # In wave mode, only fire every Nth edit (configured via CROSS_AUDIT_WAVE_SIZE)
     # OR when explicitly signaled via CROSS_AUDIT_FIRE=true
-    if [[ "$COUNT" -lt 5 && "${CROSS_AUDIT_FIRE:-}" != "true" ]]; then
+    if [[ "$COUNT" -lt "$WAVE_SIZE" && "${CROSS_AUDIT_FIRE:-}" != "true" ]]; then
       return 7
     fi
     # Reset counter after firing
@@ -160,7 +162,7 @@ if [[ "$AUDIT_MODE" == "per-edit" && "$TRIGGER" == "wave" ]]; then
   if command -v flock >/dev/null 2>&1; then
     _wave_result=0
     (
-      flock -w 5 200 || exit 1
+      flock -w "$LOCK_TIMEOUT" 200 || exit 1
       _do_wave_count
     ) 200>"${COUNTER_FILE}.lock"
     _wave_result=$?
@@ -194,7 +196,7 @@ if [[ "$AUDIT_MODE" == "close-gate" ]]; then
     fi
   done
   # Increase truncation limit for holistic review (more context needed)
-  MAX_DIFF_CHARS=48000
+  MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-48000}"
 elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
   # Wave boundary: coordinator just merged sub-agent work and updated TRACKING.md
   # Review the recent uncommitted + last commit changes (wave merge typically just committed)
@@ -204,21 +206,29 @@ elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
   if [[ -z "$COMBINED_DIFF" ]]; then
     COMBINED_DIFF=$(git diff "$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' ':!*TRACKING*.md' 2>/dev/null || true)
   fi
-  MAX_DIFF_CHARS=32000
+  MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_WAVE:-32000}"
 elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
   # Entry Gate: send the gate report content itself, not code diff
   COMBINED_DIFF=""
   [[ -f "$FILE" ]] && COMBINED_DIFF=$(cat "$FILE" 2>/dev/null || true)
-  MAX_DIFF_CHARS=32000
+  MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-32000}"
 else
   # Per-edit: current uncommitted changes (staged + unstaged vs HEAD)
   # Exclude sensitive files from diff sent to external LLM
   COMBINED_DIFF=$(git diff "$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
-  MAX_DIFF_CHARS=24000
+  MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-24000}"
 fi
 
 # Check minimum change threshold (skip for entry-gate — always review the plan)
 if [[ -z "$COMBINED_DIFF" ]]; then
+  # One-time warning: if repo has no commits, explain why audit can't run
+  if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+    _NO_COMMIT_MARKER="${_STATE_DIR}/.no-commit-warned"
+    if [[ ! -f "$_NO_COMMIT_MARKER" ]]; then
+      echo "Cross-audit: No commits yet — git diff is empty. Make your first commit so the audit has a diff to review." >&2
+      touch "$_NO_COMMIT_MARKER" 2>/dev/null
+    fi
+  fi
   _log_audit "skip" "empty-diff"
   exit 0
 fi

@@ -75,29 +75,18 @@ Two provider modes are supported: **OpenAI-compatible** (default) and **Anthropi
 
 #### 2. Set Environment Variables
 
-**Option A: Project `.env` file (recommended)**
+**Step 1: API key in `.env`** (secrets only — git-ignored)
 
-Create a `.env` file in the project root (already git-ignored):
+Create a `.env` file in the project root:
 
 ```bash
 ENABLE_CROSS_AUDIT=true
 CROSS_AUDIT_API_KEY=your-api-key-here
-
-# Optional — defaults shown
-CROSS_AUDIT_PROVIDER=openai
-CROSS_AUDIT_MODEL=gpt-4o
-CROSS_AUDIT_TRIGGER=wave
-CROSS_AUDIT_CONTEXT=standard
-CROSS_AUDIT_LANG=en
-CROSS_AUDIT_MIN_CHANGES=3
-CROSS_AUDIT_TIMEOUT=60
 ```
 
-The hook auto-loads `CROSS_AUDIT_*` and `ENABLE_CROSS_AUDIT` vars from `.env`. No `export` needed.
+The hook auto-loads `CROSS_AUDIT_API_KEY` and `ENABLE_CROSS_AUDIT` from `.env`. No `export` needed.
 
-**Option B: Shell profile**
-
-Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`):
+Alternatively, add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`):
 
 ```bash
 export ENABLE_CROSS_AUDIT=true
@@ -106,7 +95,17 @@ export CROSS_AUDIT_API_KEY="your-api-key-here"
 
 Shell profile vars take precedence — `.env` only fills in values not already set.
 
-Either way: `.env` is git-ignored, shell profile is outside the repo. Neither enters git.
+**Step 2: All other settings in `.claude/hooks-config.sh`** (centralized config)
+
+All audit settings (provider, model, trigger, language, thresholds, diff limits, etc.) are centralized in `.claude/hooks-config.sh`. Edit that file to change defaults.
+
+For per-developer overrides, create `.claude/hooks-config.local.sh` (git-ignored):
+
+```bash
+CROSS_AUDIT_PROVIDER=anthropic
+CROSS_AUDIT_MODEL=claude-sonnet-4-20250514
+CROSS_AUDIT_LANG=tr
+```
 
 #### 3. Verify
 
@@ -116,27 +115,75 @@ Make a code change with 3+ lines. Check stderr for "Cross-audit:" messages. If t
 
 ## Configuration Reference
 
-### CROSS_AUDIT_ENFORCE_BLOCK
+All settings are centralized in `.claude/hooks-config.sh` with a `_D_*` defaults table. To change a setting:
+1. Edit `_D_*` value in `hooks-config.sh` (team-wide, git-tracked)
+2. Or override in `.claude/hooks-config.local.sh` (personal, git-ignored)
+3. Or export as env var (temporary, current shell)
 
-| Value | Behavior |
-|-------|----------|
-| `false` (default) | BLOCK verdict is advisory — injected as additionalContext, Claude decides |
-| `true` | BLOCK verdict causes hook to exit non-zero — Claude Code treats as hook failure |
+### Core Settings
 
-When enabled, a BLOCK verdict mechanically prevents the agent from continuing without user intervention. The additionalContext with findings is still emitted.
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `ENABLE_CROSS_AUDIT` | `false` | Master switch — must be `true` to enable |
+| `CROSS_AUDIT_PROVIDER` | `openai` | `openai` (OpenAI-compatible) or `anthropic` (native) |
+| `CROSS_AUDIT_TRIGGER` | `wave` | `wave` (every N edits) or `item` (every edit) |
+| `CROSS_AUDIT_CONTEXT` | `standard` | `minimal`, `standard`, or `full` (see below) |
+| `CROSS_AUDIT_LANG` | `en` | `en` (English) or `tr` (Turkish) |
+| `CROSS_AUDIT_MIN_CHANGES` | `3` | Edits smaller than this line count are skipped |
+| `CROSS_AUDIT_TIMEOUT` | `60` | API request timeout in seconds |
+| `CROSS_AUDIT_SKIP_SUBAGENT` | `true` | Skip audit in worktree sub-agents |
+| `CROSS_AUDIT_ENFORCE_BLOCK` | `false` | Exit non-zero on BLOCK verdict |
 
-### CROSS_AUDIT_TRIGGER
+### Wave Batching
 
-| Value | Behavior | Best For |
-|-------|----------|----------|
-| `wave` (default) | Fires every ~5 source file edits, batching changes | Normal workflow. Less API calls, lower cost |
-| `item` | Fires on every source file edit that meets MIN_CHANGES | Granular review. Higher cost but catches issues earlier |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CROSS_AUDIT_WAVE_SIZE` | `5` | Source file edits before wave fires |
+| `CROSS_AUDIT_LOCK_TIMEOUT` | `5` | Flock timeout in seconds |
 
 Force immediate audit in wave mode: `export CROSS_AUDIT_FIRE=true`
 
-### CROSS_AUDIT_CONTEXT
+### Diff Truncation (max characters sent to external LLM)
 
-Controls how much project context is sent to the external LLM:
+| Setting | Default | Mode |
+|---------|---------|------|
+| `CROSS_AUDIT_MAX_DIFF_PER_EDIT` | `24000` | Per-edit reviews |
+| `CROSS_AUDIT_MAX_DIFF_WAVE` | `32000` | Wave reviews |
+| `CROSS_AUDIT_MAX_DIFF_ENTRY_GATE` | `32000` | Entry Gate plan reviews |
+| `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE` | `48000` | Close Gate holistic reviews |
+
+### Audit Signal Thresholds (CP1 / CP2)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUDIT_CP1_THRESHOLD` | `0.20` | Metric regression threshold (0.20 = 20%) |
+| `AUDIT_CP2_MIN_SPRINTS` | `2` | Recurring failure: same category in N+ sprints |
+
+### Log & Health
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUDIT_LOG_MAX_BYTES` | `1048576` | Log rotation trigger (1MB) |
+| `AUDIT_LOG_KEEP_LINES` | `500` | Lines kept after rotation |
+| `AUDIT_HEALTH_STALE_SECONDS` | `3600` | Health check: stale threshold (1 hour) |
+| `AUDIT_HEALTH_ERROR_THRESHOLD` | `5` | Health check: error count threshold |
+
+### Dashboard
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DASHBOARD_SEARCH_DEPTH` | `3` | Directory depth for file search |
+
+### API Base & Model (optional overrides)
+
+Auto-set per provider. Override in `hooks-config.sh` or `hooks-config.local.sh`:
+
+```bash
+CROSS_AUDIT_API_BASE=https://openrouter.ai/api/v1
+CROSS_AUDIT_MODEL=gpt-4o-mini
+```
+
+### CROSS_AUDIT_CONTEXT Detail
 
 | Level | What's Sent | Token Cost |
 |-------|-------------|------------|
@@ -144,22 +191,13 @@ Controls how much project context is sent to the external LLM:
 | `standard` (default) | Minimal + CODING_GUARDRAILS.md + Entry Gate failure modes | Medium (~4-8k) |
 | `full` | Standard + full content of changed files | High (~8-16k) |
 
-### CROSS_AUDIT_LANG
-
-- `en` — Review in English (default)
-- `tr` — Review in Turkish
-
 ### Internal / Testing Variables
-
-These are not typically set by users but are available for testing and advanced use:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `CLAUDE_PROJECT_DIR` | Project root directory | `.` (current dir) |
 | `CROSS_AUDIT_COUNTER_FILE` | Override wave counter file path | `.claude/.state/cross-audit-counter-<user>` |
 | `CROSS_AUDIT_FIRE` | Force immediate audit in wave mode | unset |
-| `CROSS_AUDIT_SKIP_SUBAGENT` | Skip audit in worktree sub-agents (parallel execution) | `true` |
-| `CROSS_AUDIT_ENFORCE_BLOCK` | Exit non-zero on BLOCK verdict (mechanical enforcement) | `false` |
 
 ---
 
@@ -167,7 +205,7 @@ These are not typically set by users but are available for testing and advanced 
 
 ### Per-Edit (default)
 
-Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at ~24k chars). Reviews for bugs, security issues, AC coverage, coding rule violations, and **integration risk** (could this change conflict with other active items?).
+Fires on source file changes. Sends uncommitted `git diff` (staged + unstaged, truncated at `CROSS_AUDIT_MAX_DIFF_PER_EDIT`, default ~24k chars). Reviews for bugs, security issues, AC coverage, coding rule violations, and **integration risk** (could this change conflict with other active items?).
 
 Subject to wave/item trigger mode and `MIN_CHANGES` threshold.
 
@@ -193,7 +231,7 @@ Bypasses wave counting — always fires immediately. Subject to `MIN_CHANGES` th
 
 ### Close Gate (holistic sprint review)
 
-Fires automatically when `S*_CLOSE_GATE.md` is written. Sends the full sprint diff (`git diff main...HEAD`, truncated at ~48k chars). Reviews for:
+Fires automatically when `S*_CLOSE_GATE.md` is written. Sends the full sprint diff (`git diff main...HEAD`, truncated at `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE`, default ~48k chars). Reviews for:
 - Cross-item consistency and API contract mismatches
 - Naming and pattern consistency across all changed files
 - Architectural coherence
@@ -205,7 +243,7 @@ Bypasses wave counting — always fires immediately.
 
 ### Entry Gate (plan review)
 
-Fires automatically when `S*_ENTRY_GATE.md` is written. Sends the gate report content itself (truncated at ~32k chars). Reviews for:
+Fires automatically when `S*_ENTRY_GATE.md` is written. Sends the gate report content itself (truncated at `CROSS_AUDIT_MAX_DIFF_ENTRY_GATE`, default ~32k chars). Reviews for:
 - Missing failure modes and obvious risks
 - Scope realism (too many must items?)
 - Dependency gaps
@@ -219,23 +257,23 @@ Bypasses wave counting — always fires immediately.
 ## What Gets Sent to the External LLM
 
 ### Per-Edit Mode
-- Git diff (`git diff HEAD` — staged + unstaged combined, truncated at ~24k chars)
+- Git diff (`git diff HEAD` — staged + unstaged combined, truncated at `CROSS_AUDIT_MAX_DIFF_PER_EDIT`)
 - Active items from TRACKING.md (items with status `in_progress` or `fixed`)
 - Critical axis from CLAUDE.md (single line)
 - In `standard`/`full`: CODING_GUARDRAILS.md + Entry Gate failure modes
 - In `full`: Full content of the currently edited file (first 8000 chars). Note: in close-gate mode, `$FILE` is the gate report itself, not source files — so this layer is most useful in per-edit mode
 
 ### Wave Review Mode
-- Last commit diff (`git diff HEAD~1`, ~32k chars max), excluding TRACKING.md and config files
+- Last commit diff (`git diff HEAD~1`, `CROSS_AUDIT_MAX_DIFF_WAVE` max), excluding TRACKING.md and config files
 - Falls back to uncommitted changes if no previous commit
 - Active items, critical axis, guardrails, failure modes (same context layers as per-edit)
 
 ### Close Gate Mode
-- Full sprint diff against main branch (`git diff main...HEAD`, auto-detects main/master, ~48k chars max)
+- Full sprint diff against main branch (`git diff main...HEAD`, auto-detects main/master, `CROSS_AUDIT_MAX_DIFF_CLOSE_GATE` max)
 - Active items, critical axis, guardrails, failure modes (same context layers)
 
 ### Entry Gate Mode
-- The gate report content (~32k chars max)
+- The gate report content (`CROSS_AUDIT_MAX_DIFF_ENTRY_GATE` max)
 - Critical axis from CLAUDE.md
 - Active items from TRACKING.md (items with status `in_progress` or `fixed`)
 - In `standard`/`full`: CODING_GUARDRAILS.md (AC quality evaluated against project standards)
@@ -349,11 +387,13 @@ Large prompts (up to 48KB for holistic sprint reviews) are written to a temporar
 
 ## Integration with Workflow Modes
 
-The cross-LLM audit is **independent of workflow mode** (Lite/Standard/Strict):
+The cross-LLM audit hook (`cross-llm-audit.sh`) is **independent of workflow mode** — `ENABLE_CROSS_AUDIT` is not affected by Lite/Standard/Strict presets:
 
 - Can be enabled in Lite mode for extra safety on fast iterations
 - Can be disabled in Strict mode if team prefers internal review only
 - `hooks-config.sh` strict mode enforcement does NOT force cross-audit on
+
+**Note:** The audit _signal_ hooks (CP1 metric regression, CP2 recurring failures via `detect-audit-signals.sh`) **are** controlled by workflow mode — Lite mode disables them by default. Override with `HOOK_DETECT_AUDIT_SIGNALS=true` in `hooks-config.local.sh` if needed
 
 ---
 
@@ -402,7 +442,7 @@ Every hook invocation (skip, success, or error) is logged to `.claude/.state/cro
 {"ts":"2026-03-12T10:35:00Z","status":"error","reason":"api-network-error","verdict":"","file":"src/api.ts","mode":"per-edit"}
 ```
 
-**Log rotation:** When the log exceeds 1MB, it's automatically truncated to the last 500 entries.
+**Log rotation:** When the log exceeds `AUDIT_LOG_MAX_BYTES` (default: 1MB), it's automatically truncated to the last `AUDIT_LOG_KEEP_LINES` entries (default: 500). Both are configurable in `hooks-config.sh`.
 
 ### Health Check
 

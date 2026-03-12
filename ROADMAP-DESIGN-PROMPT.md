@@ -4,12 +4,15 @@
 Goal: produce `Docs/Planning/Roadmap.md` rich enough to guide the full project — not a minimal skeleton.
 
 **Usage flow:**
+1. Run `sprint-workflow init` — Step 5 asks "Design a roadmap before bootstrap?" → say yes.
+2. Have the conversation. Agent writes `Docs/Planning/Roadmap.md` and asks for approval.
+3. When done, the CLI continues to bootstrap automatically.
+   Bootstrap detects the existing `Roadmap.md` → skips Initial Planning.
+
+**Manual (without CLI):**
 1. Start an AI session. Tell the agent:
    *"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/ROADMAP-DESIGN-PROMPT.md and design the roadmap."*
-2. Have the conversation. Agent writes `Docs/Planning/Roadmap.md` and asks for approval.
-3. Then bootstrap — in the same or a new session:
-   *"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."*
-   Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically.
+2. Then bootstrap: *"Read WORKFLOW.md and bootstrap this project."*
 
 ---
 

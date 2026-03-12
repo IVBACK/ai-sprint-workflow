@@ -13,7 +13,7 @@ project size, team structure, and risk tolerance.
 | **Sprint Close** | Steps 1-3, 14 (checkmarks, status, checkpoint, handoff) | Full (steps 1-15) | Full + team review |
 | **Failure mode analysis** | Skipped | Per item (3 categories) | Per item + Critical Axis depth |
 | **Metric sufficiency** | Basic (9b-lite) | Full (9c) | Full + threshold review |
-| **Hooks (Claude Code)** | Core safety only (5/10) | All hooks (10/10) | All hooks, overrides disabled |
+| **Hooks (Claude Code)** | Core safety only (5/11) | All hooks (11/11) | All hooks, overrides disabled |
 | **sprint-audit.sh** | Optional | Recommended | Mandatory (exit code 1 blocks gate) |
 | **Checkpoints (CP1-4)** | Disabled | Enabled | Enabled + no signal suppression |
 | **Parallel execution** | Not recommended | Optional (if agent supports) | Recommended (if agent supports) |

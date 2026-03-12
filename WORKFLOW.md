@@ -163,6 +163,11 @@ Call the existing build commands instead. Do not modify CI pipeline files withou
 Ask these before creating project files. Skip any that can be inferred from
 existing project files (e.g., `package.json` reveals language + test framework).
 
+**Presentation rules:**
+- Group output into two sections: (1) **Auto-detected** — inferred values shown as `Q#: value ✓`, no user input needed; (2) **Questions** — only the ones that need answers.
+- Within "Questions", group by category (Project Shape / Infrastructure / Workflow).
+- If `sprint-workflow init` already configured workflow mode or cross-LLM audit, skip Q15 and do not re-ask the mode question — read the value from `hooks-config.sh` instead.
+
 **Project Shape:**
 
 | # | Question | Why it matters | Default if unanswered |
@@ -299,9 +304,10 @@ project-root/
 ├── Tools/
 │   └── sprint-audit.sh                # Automated close gate checks
 └── .claude/                           # Claude Code hooks (Step 8.5, skip for other agents)
-    ├── hooks-config.sh                # Feature flags (lite/standard/strict mode)
+    ├── hooks-config.sh                # Centralized config (hooks, audit, thresholds, limits)
+    ├── hooks-config.local.sh          # Personal overrides (git-ignored, optional)
     ├── settings.json                  # Hook registrations
-    ├── setup-audit.sh                 # Interactive cross-LLM audit setup (always create)
+    ├── setup-audit.sh                 # Interactive cross-LLM audit setup
     └── hooks/
         ├── session-start.sh           # Session start protocol injection
         ├── protect-claude.sh          # Block Write to CLAUDE.md
@@ -2480,38 +2486,62 @@ This file starts empty on greenfield projects. Add entries when:
 **Only create these if the project uses Claude Code.** Other agents do not read `.claude/`.
 Run `chmod +x .claude/hooks/*.sh` after creating the scripts.
 
-**`.claude/hooks-config.sh`** — feature flags; set to `"false"` to disable a hook without touching `settings.json`:
+**`.claude/hooks-config.sh`** — centralized configuration for all hooks, audit, thresholds, and dashboard settings:
 
 ```bash
 # Claude Code Hooks — Feature Flags
 # Toggle individual hooks on/off without touching settings.json
-# Set WORKFLOW_MODE to auto-configure: "lite", "standard" (default), or "strict"
+#
+# HOW TO CHANGE A SETTING:
+#   1. Edit the value in the "Defaults" table below      (applies to whole team)
+#   2. Or put it in .claude/hooks-config.local.sh         (personal, git-ignored)
+#   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
 
 # Version — tracks which WORKFLOW.md version these hooks were generated from.
-# Updated automatically during bootstrap and upgrade — do not edit manually.
 HOOKS_VERSION="2.1"
 
-WORKFLOW_MODE="standard"
+WORKFLOW_MODE="standard"  # "lite", "standard", or "strict"
 
 # Mode-based defaults are set automatically (see actual file for case block).
-# Individual overrides — uncomment to override the mode preset:
+# Hook flags use mode preset; individual HOOK_* overrides are below the case block.
 
-HOOK_PROTECT_CLAUDE_MD="${HOOK_PROTECT_CLAUDE_MD:-true}"
-HOOK_PROTECT_SECRETS="${HOOK_PROTECT_SECRETS:-true}"
-HOOK_VALIDATE_TRACKING="${HOOK_VALIDATE_TRACKING:-true}"
-HOOK_SESSION_START_PROTOCOL="${HOOK_SESSION_START_PROTOCOL:-true}"
-HOOK_VALIDATE_ID_UNIQUENESS="${HOOK_VALIDATE_ID_UNIQUENESS:-true}"
-HOOK_ENTRY_GATE_SESSION="${HOOK_ENTRY_GATE_SESSION:-true}"
-HOOK_DETECT_TEST_REGRESSION="${HOOK_DETECT_TEST_REGRESSION:-true}"
-HOOK_VALIDATE_CLOSE_GATE="${HOOK_VALIDATE_CLOSE_GATE:-true}"
-HOOK_VALIDATE_SPRINT_CLOSE="${HOOK_VALIDATE_SPRINT_CLOSE:-true}"
-HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-true}"
+# ── Defaults ──────────────────────────────────────────────────
+# Edit the values on the RIGHT side to change defaults.
+#
+#            Setting                          Value         Description
+#            ───────                          ─────         ───────────
+# Cross-LLM Audit
+_D_ENABLE_CROSS_AUDIT=false                              # Master switch
+_D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
+_D_CROSS_AUDIT_TRIGGER=wave                              # "wave" or "item"
+_D_CROSS_AUDIT_CONTEXT=standard                          # "minimal", "standard", "full"
+_D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
+_D_CROSS_AUDIT_MIN_CHANGES=3                             # Min changed lines to trigger
+_D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
+_D_CROSS_AUDIT_SKIP_SUBAGENT=true                        # Skip in worktree sub-agents
+_D_CROSS_AUDIT_ENFORCE_BLOCK=false                       # Exit non-zero on BLOCK verdict
+# Wave Batching
+_D_CROSS_AUDIT_WAVE_SIZE=5                               # Edits before wave fires
+_D_CROSS_AUDIT_LOCK_TIMEOUT=5                            # Flock timeout (seconds)
+# Diff Truncation (max characters sent to external LLM)
+_D_CROSS_AUDIT_MAX_DIFF_CLOSE_GATE=48000                 # Close Gate
+_D_CROSS_AUDIT_MAX_DIFF_WAVE=32000                       # Wave review
+_D_CROSS_AUDIT_MAX_DIFF_ENTRY_GATE=32000                 # Entry Gate
+_D_CROSS_AUDIT_MAX_DIFF_PER_EDIT=24000                   # Per-edit
+# Audit Signal Thresholds
+_D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (20%)
+_D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprints)
+# Log & Health
+_D_AUDIT_LOG_MAX_BYTES=1048576                           # Log rotation: max size (1MB)
+_D_AUDIT_LOG_KEEP_LINES=500                              # Log rotation: lines to keep
+_D_AUDIT_HEALTH_STALE_SECONDS=3600                       # Health: stale threshold (1 hour)
+_D_AUDIT_HEALTH_ERROR_THRESHOLD=5                        # Health: error count threshold
+# Dashboard
+_D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (dir levels)
 
-# Cross-LLM Audit (optional, independent of workflow mode)
-# Disabled by default. Requires CROSS_AUDIT_API_KEY env var.
-# See Docs/CROSS-LLM-AUDIT.md for setup.
-ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-false}"
-# CROSS_AUDIT_PROVIDER="openai"    # "openai" (default) or "anthropic"
+# ── Apply defaults (env vars and local overrides take precedence) ──
+ENABLE_CROSS_AUDIT="${ENABLE_CROSS_AUDIT:-$_D_ENABLE_CROSS_AUDIT}"
+# ... (all variables follow this pattern — see actual file for full list)
 
 # Strict mode enforcement (overrides all individual flags to true)
 ```
@@ -2578,9 +2608,11 @@ INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 if [[ "$TOOL" == "Write" ]] && [[ "$FILE" == *"CLAUDE.md"* ]]; then
-    echo "BLOCKED: Writing to CLAUDE.md is not allowed (would overwrite existing content)." >&2
-    echo "Use the Edit tool to append or modify specific sections." >&2
-    exit 2
+    if [[ -f "$FILE" ]]; then
+        echo "BLOCKED: Writing to CLAUDE.md is not allowed (would overwrite existing content)." >&2
+        echo "Use the Edit tool to append or modify specific sections." >&2
+        exit 2
+    fi
 fi
 exit 0
 ```

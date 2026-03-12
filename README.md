@@ -11,7 +11,7 @@ Works with existing projects and greenfield (empty) projects alike.
 
 | Agent | Status | Notes |
 |-------|--------|-------|
-| **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) (10 hooks, secret protection, cross-LLM audit) |
+| **Claude Code** | Tested | Full support + optional [hook enforcement layer](#claude-code-hook-enforcement-optional) (11 hooks, secret protection, cross-LLM audit) |
 | Cursor | Playbook available | [Adaptation guide](examples/cursor-playbook/) with `.cursor/rules/` |
 | GitHub Copilot | Playbook available | [Adaptation guide](examples/copilot-playbook/) with `copilot-instructions.md` |
 | Windsurf | Playbook available | [Adaptation guide](examples/windsurf-playbook/) with `.windsurf/rules/` |
@@ -98,29 +98,70 @@ Every session starts from zero. This workflow solves three problems:
 
 ## Quick Start
 
-**Rewrite or complex project with prior experience?** Design the roadmap first — see [Want a richer roadmap?](#want-a-richer-roadmap-design-it-first) below. Otherwise:
+**Any agent** — one command, interactive setup:
 
-**Claude Code** — clone the repo to get pre-built hooks:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/sprint-workflow) init
+```
+
+The CLI walks you through:
+1. **Install** — copies `WORKFLOW.md`, hooks, reference docs, dashboard (skips repo infrastructure)
+2. **Agent selection** — Claude Code, Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI
+3. **Workflow mode** — Lite / Standard / Strict
+4. **Cross-LLM audit** — optional second AI code reviewer (Claude Code only)
+5. **Launch** — optionally design a [roadmap](#want-a-richer-roadmap-design-it-first) first, then bootstrap. Choose CLI or Editor launch; extension-only agents get the prompt copied to clipboard
+
+<details>
+<summary>Alternative: clone and run locally</summary>
 
 ```bash
 git clone https://github.com/IVBACK/ai-sprint-workflow.git /tmp/ai-sprint-workflow
-cp /tmp/ai-sprint-workflow/WORKFLOW.md .
-cp -r /tmp/ai-sprint-workflow/.claude .
-cp /tmp/ai-sprint-workflow/.env.example .
+bash /tmp/ai-sprint-workflow/sprint-workflow init
 rm -rf /tmp/ai-sprint-workflow
 ```
+</details>
 
-Then tell Claude Code: `"Read WORKFLOW.md and bootstrap this project."`
+After setup, the agent bootstraps your project: scans your codebase, asks discovery questions, creates `CLAUDE.md` + tracking files, and sets up the first sprint. Existing `.claude/` hooks are detected and preserved — you get the exact tested implementations (11 hooks including secret protection, cross-LLM audit, validation gates).
 
-The agent detects the pre-existing `.claude/` hooks and skips regeneration — you get the exact tested hook implementations (11 hooks including secret protection, cross-LLM audit, validation gates).
+### CLI Reference
 
-**Other agents** (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI) — one line:
+The `sprint-workflow` CLI manages the full lifecycle. Install it locally for ongoing use:
 
+```bash
+ln -s "$(pwd)/sprint-workflow" ~/.local/bin/sprint-workflow
 ```
-"Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/WORKFLOW.md and bootstrap this project."
+
+| Command | Description |
+|---------|-------------|
+| `sprint-workflow init` | Install + interactive onboarding + launch AI bootstrap |
+| `sprint-workflow config` | View all settings |
+| `sprint-workflow config mode lite` | Set workflow mode (lite/standard/strict) |
+| `sprint-workflow config hook.protect-claude true` | Toggle a specific hook |
+| `sprint-workflow config audit.wave-size 10` | Set audit wave size |
+| `sprint-workflow log` | View last 10 audit log entries |
+| `sprint-workflow log --errors` | Filter to errors only |
+| `sprint-workflow log --success -n 5` | Last 5 successful audits |
+| `sprint-workflow audit-setup` | Configure cross-LLM audit (interactive) |
+| `sprint-workflow status` | Sprint dashboard (alias for `sprint-status`) |
+| `sprint-workflow upgrade` | Update workflow to latest version |
+| `sprint-workflow doctor` | Health check (hooks, config, permissions, version) |
+| `sprint-workflow completions bash` | Generate shell completions (bash/zsh/fish) |
+
+**Non-interactive mode** (CI, scripting, automated setup):
+
+```bash
+sprint-workflow init --auto                              # defaults: claude-code, standard, no audit
+sprint-workflow init --agent cursor --mode lite --no-audit  # explicit options
+sprint-workflow init --lang tr                            # Turkish UI
 ```
 
-No clone needed — these agents don't use `.claude/` hooks. The workflow is plain markdown.
+**Shell completion** (add to your shell rc file):
+
+```bash
+eval "$(sprint-workflow completions bash)"    # bash → ~/.bashrc
+eval "$(sprint-workflow completions zsh)"     # zsh  → ~/.zshrc
+sprint-workflow completions fish > ~/.config/fish/completions/sprint-workflow.fish
+```
 
 **Either way, the agent will:**
 - Detect whether this is a greenfield or existing project (Step 0)
@@ -147,13 +188,14 @@ For subsequent sessions: tell the agent `"Continue sprint N"` or `"Resume"`.
 ### Want a richer roadmap? Design it first.
 
 The bootstrap produces a lean roadmap skeleton. For complex projects (rewrites, large scope, prior
-lessons to capture), design the roadmap in a separate focused session before bootstrapping:
+lessons to capture), design the roadmap in a separate focused session before bootstrapping.
 
+**Via `sprint-workflow init` (recommended):** Step 5 asks "Design a roadmap before bootstrap?" — say yes. The CLI launches a guided roadmap session (3-batch conversation: foundation → domain knowledge → plan). When done, it continues to bootstrap automatically. Bootstrap detects the existing `Roadmap.md` → skips Initial Planning.
+
+**Manual (without CLI):**
 1. Tell the agent:
    > "Fetch https://raw.githubusercontent.com/IVBACK/ai-sprint-workflow/master/ROADMAP-DESIGN-PROMPT.md and design the roadmap."
-   — Agent asks about goals, prior learnings, locked contracts, performance targets, phases
-   — Produces a rich `Docs/Planning/Roadmap.md` through conversation
-2. Then bootstrap (follow your agent's setup from [Quick Start](#quick-start) above):
+2. Then bootstrap: *"Read WORKFLOW.md and bootstrap this project."*
    — Bootstrap detects the existing `Roadmap.md` → skips Initial Planning automatically
 
 ### Bootstrap Steps (10 total: Step 0 + steps 1–9)
@@ -192,7 +234,7 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 | `validate-id-uniqueness.sh` | After `TRACKING.md` edit | Duplicate `CORE-###` IDs |
 | `session-start.sh` | Every session start | Injects "read TRACKING.md first" protocol into agent context |
 | `entry-gate-session.sh` | After Entry Gate report written | Injects mandatory session boundary recommendation |
-| `detect-audit-signals.sh` | Session start + TRACKING.md edit (CP1-CP2) | Metric regression ≥20% between sprints; repeated failure categories across sprints; warns when structured tables are missing |
+| `detect-audit-signals.sh` | Session start + TRACKING.md edit (CP1-CP2) | Metric regression ≥`AUDIT_CP1_THRESHOLD` (default 20%) between sprints; repeated failure categories across ≥`AUDIT_CP2_MIN_SPRINTS` (default 2) sprints; warns when structured tables are missing |
 | `detect-test-regression.sh` | After `Bash` (test runs) (CP3) | Surfaces test failure signals instead of silently continuing |
 | `validate-close-gate.sh` | After Close Gate report written (CP4) | Unverified items, 8-point pre-verdict checklist, all-DEFERRED guard |
 | `validate-sprint-close.sh` | After Sprint Close report written | Failure mode retrospective, performance baseline, user handoff presence |
@@ -200,7 +242,12 @@ If you use Claude Code, the bootstrap (step 8.5) creates a `.claude/` hook layer
 
 All hooks are individually toggleable via `.claude/hooks-config.sh`. Set any flag to `"false"` to disable a specific hook, or set `WORKFLOW_MODE` to `lite`/`standard`/`strict` to apply a preset (see [Workflow Modes](#workflow-modes)).
 
-**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
+**Changing settings (3 ways):**
+1. Edit `_D_*` defaults in `.claude/hooks-config.sh` — applies to whole team (git-tracked)
+2. Put overrides in `.claude/hooks-config.local.sh` — personal, git-ignored
+3. Export as env var: `export CROSS_AUDIT_WAVE_SIZE=10` — temporary, current shell
+
+**Cross-LLM Audit (optional, Claude Code only):** Send code changes to a second LLM for independent review. Supports OpenAI-compatible APIs (OpenAI, GitHub Models, Ollama, etc.) and native Anthropic API. Four audit modes: per-edit (source changes), wave-review (parallel merge checkpoint — fires when TRACKING.md is updated after wave merge, reviews cross-item integration), Close Gate (holistic sprint review), Entry Gate (plan review). Sub-agents in worktrees are auto-skipped (coordinator reviews the merged result instead). Disabled by default — setup: `bash .claude/setup-audit.sh` (interactive, collects API key securely via hidden input). API key stored in `.env` (git-ignored), mechanically protected by `protect-secrets.sh` hook — the AI never sees the key. Optional `CROSS_AUDIT_ENFORCE_BLOCK=true` mechanically blocks commits when the reviewer returns a BLOCK verdict (default: advisory only). See [Docs/CROSS-LLM-AUDIT.md](Docs/CROSS-LLM-AUDIT.md).
 
 Other agents (Cursor, Copilot, Windsurf, Cline, Codex CLI, Gemini CLI, etc.) are unaffected — `.claude/` is Claude Code-specific and invisible to them.
 
@@ -266,9 +313,10 @@ your-project/
 │   ├── sprint-status             # Bash wrapper (symlink target for ~/.local/bin/)
 │   └── sprint-status.py          # CLI + web dashboard (zero dependencies, stdlib only)
 └── .claude/                      # Claude Code hooks (Step 8.5, skip for other agents)
-    ├── hooks-config.sh           # Feature flags (lite/standard/strict mode)
+    ├── hooks-config.sh           # Centralized config (hooks, audit, thresholds, limits)
+    ├── hooks-config.local.sh     # Personal overrides (git-ignored, optional)
     ├── settings.json             # Hook registrations
-    ├── setup-audit.sh            # Interactive cross-LLM audit setup (always create)
+    ├── setup-audit.sh            # Interactive cross-LLM audit setup
     └── hooks/
         ├── session-start.sh           # Session start protocol injection
         ├── protect-claude.sh          # Block Write to CLAUDE.md
@@ -385,8 +433,8 @@ The same template supports three rigor levels:
 
 | Mode | Target | Entry Gate | Hooks | Overhead |
 |------|--------|-----------|-------|----------|
-| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (5/10) | ~5 min/gate |
-| **Standard** | Most projects (default) | Full or abbreviated | All hooks (10/10) | ~15 min/gate |
+| **Lite** | Solo dev, small projects | Abbreviated only | Core safety (5/11) | ~5 min/gate |
+| **Standard** | Most projects (default) | Full or abbreviated | All hooks (11/11) | ~15 min/gate |
 | **Strict** | Teams, critical systems | Full always | All, overrides disabled | ~25 min/gate |
 
 Set `WORKFLOW_MODE` in `.claude/hooks-config.sh`. For non-Claude agents, state the mode at session start.

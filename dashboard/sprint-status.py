@@ -37,7 +37,8 @@ def find_project_root(start: str = ".") -> Optional[Path]:
 
 
 def find_file(root: Path, name: str) -> Optional[Path]:
-    for depth in range(3):
+    search_depth = int(os.environ.get("DASHBOARD_SEARCH_DEPTH", "3"))
+    for depth in range(search_depth):
         for p in root.glob("/".join(["*"] * depth + [name])):
             if p.is_file():
                 return p
