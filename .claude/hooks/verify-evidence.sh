@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Script: verify-evidence.sh
 # Purpose: Verify sub-agent AC exit check evidence (file:line references).
 # Usage: bash .claude/hooks/verify-evidence.sh < agent-report.txt

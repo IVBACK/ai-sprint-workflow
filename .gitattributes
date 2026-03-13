@@ -1,0 +1,11 @@
+# Enforce LF line endings for shell and Python files on all platforms.
+# Prevents #!/usr/bin/env bash scripts from breaking with \r: command not found
+# on Windows clones where core.autocrlf=true is the default.
+
+* text=auto
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf

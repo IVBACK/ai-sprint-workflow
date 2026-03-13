@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: validate-id-uniqueness.sh
 # Event: PostToolUse — Edit, Write
 # Purpose: After TRACKING.md is edited, detect duplicate CORE-### IDs.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: session-start.sh
 # Event: SessionStart
 # Purpose: Inject session start protocol context so the agent reads

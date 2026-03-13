@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: validate-sprint-close.sh
 # Event: PostToolUse — Write
 # Purpose: After a Sprint Close report (S<N>_SPRINT_CLOSE.md) is written,

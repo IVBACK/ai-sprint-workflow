@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: validate-close-gate.sh
 # Event: PostToolUse — Write
 # Purpose: After a Close Gate report (S<N>_CLOSE_GATE.md) is written:

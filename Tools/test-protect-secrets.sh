@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test suite for protect-secrets.sh hook
 # Run: bash Tools/test-protect-secrets.sh
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: protect-claude.sh
 # Event: PreToolUse — Edit, Write
 # Purpose: Block CLAUDE.md from being overwritten without explicit user intent.

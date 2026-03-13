@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # setup-audit.sh — Interactive Cross-LLM Audit Setup
 # Run this script directly in your terminal: bash .claude/setup-audit.sh
 #

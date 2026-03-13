@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Script: audit-health-check.sh
 # Purpose: Check cross-LLM audit system health by reading the audit log.
 # Usage: bash .claude/hooks/audit-health-check.sh

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: cross-llm-audit.sh
 # Event: PostToolUse — Edit|Write
 # Purpose: After wave/item implementation, send changes to an external LLM

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: protect-secrets.sh
 # Event: PreToolUse — Read, Bash
 # Purpose: Prevent the AI from reading files that contain secrets.

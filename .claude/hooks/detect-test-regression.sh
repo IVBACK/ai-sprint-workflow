@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: detect-test-regression.sh
 # Event: PostToolUse — Bash
 # Purpose: After a test runner Bash call, scan stdout for failure signals.

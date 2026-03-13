@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: detect-audit-signals.sh
 # Event: SessionStart + PostToolUse (Edit|Write on TRACKING.md)
 # Purpose: Self-activating CP1 and CP2 detector.

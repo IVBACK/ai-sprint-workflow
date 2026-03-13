@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: validate-tracking.sh
 # Event: PostToolUse — Edit, Write
 # Purpose: After TRACKING.md is edited, check that:

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Script: pre-merge-audit.sh
 # Purpose: Audit sub-agent work BEFORE coordinator merges it into sprint branch.
 # Usage: bash .claude/hooks/pre-merge-audit.sh <worktree-path-or-branch>

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Shared library for cross-LLM audit scripts.
 # Sourced by cross-llm-audit.sh, pre-merge-audit.sh, verify-evidence.sh, audit-health-check.sh
 # Not a standalone hook — prefix with _ to indicate library status.

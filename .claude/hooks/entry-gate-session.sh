@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Hook: entry-gate-session.sh
 # Event: PostToolUse — Write
 # Purpose: When an Entry Gate report (S<N>_ENTRY_GATE.md) is created:

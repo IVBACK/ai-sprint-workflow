@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test script for cross-llm-audit.sh
 # Usage:
 #   bash .claude/hooks/test-cross-audit.sh              # Mock test (no API call)
