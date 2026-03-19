@@ -36,6 +36,9 @@ source "$HOOKS_DIR/_audit-lib.sh"
 # ── Load config (hooks-config.sh loads .env automatically) ──
 source "$HOOKS_DIR/../hooks-config.sh"
 
+# ── Toggle check ──
+[[ "$HOOK_CROSS_LLM_AUDIT" != "true" ]] && exit 0
+
 # ── Sub-agent detection: skip cross-audit in worktree-based sub-agents ──
 # Sub-agents run in isolated worktrees (CLAUDE_PROJECT_DIR differs from git toplevel).
 # Cross-audit in sub-agents is wasteful (narrow scope, results don't reach coordinator).
@@ -52,7 +55,7 @@ fi
 
 # ── Dependencies ──
 if ! command -v jq >/dev/null 2>&1; then
-  echo "Cross-audit: DISABLED — 'jq' is not installed. Install jq to enable cross-LLM audit." >&2
+  echo "jq not found, skipping. Install: apt/brew/pacman/choco install jq" >&2
   _log_audit "skip" "missing-jq"; exit 0
 fi
 if ! command -v curl >/dev/null 2>&1; then
@@ -700,6 +703,29 @@ CONFLICT_RULE="COMPARISON RULES:
 - When disagreeing, specify the category: FACTUAL (not a real issue), SEVERITY (real but lower impact), or MITIGATION (already handled).
 - PARTIAL: the issue is real but the fix is wrong/incomplete — propose your own fix.
 - Log all auto-fixes and disagreements."
+
+# ── Persist WARN/BLOCK findings to durable log (append-only) ──
+if [[ "$VERDICT" == "WARN" || "$VERDICT" == "BLOCK" ]]; then
+  _FINDINGS_TRACKING=$(find "$PROJECT_DIR" -maxdepth 2 -name "TRACKING*.md" 2>/dev/null | sort | head -1)
+  if [[ -f "$_FINDINGS_TRACKING" ]]; then
+    _FINDINGS_DIR="$(dirname "$_FINDINGS_TRACKING")"
+    _FINDINGS_LOG="$_FINDINGS_DIR/.findings-log"
+    _FINDINGS_NOW=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date -Iseconds)
+    _FINDINGS_TAG="AUDIT-${VERDICT}"
+    # Extract individual findings from JSON response
+    _FINDING_LINES=$(echo "$CONTENT" | jq -r '.findings[]? | "\(.file // .item // "?"):\(.line // "?") \(.issue // "")"' 2>/dev/null || true)
+    if [[ -n "$_FINDING_LINES" ]]; then
+      echo "$_FINDING_LINES" | while IFS= read -r _fline; do
+        [[ -z "$_fline" ]] && continue
+        echo "[$_FINDINGS_NOW] ${_FINDINGS_TAG}: ${_fline} | model: ${MODEL}" >> "$_FINDINGS_LOG"
+      done
+    else
+      # Fallback: log summary if findings array not parseable
+      _SUMMARY=$(echo "$CONTENT" | jq -r '.summary // empty' 2>/dev/null || true)
+      echo "[$_FINDINGS_NOW] ${_FINDINGS_TAG}: ${_SUMMARY:-unparseable response} | model: ${MODEL}" >> "$_FINDINGS_LOG"
+    fi
+  fi
+fi
 
 jq -n \
   --arg content "$CONTENT" \

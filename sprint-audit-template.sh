@@ -39,7 +39,7 @@ TEST_DIR="$ROOT/tests"      # ← adjust to your test directory
 EXT="*"                     # ← adjust: "cs", "ts", "py", "java", "go", "rs", "cpp"
 
 # ── Modular adapter settings ──
-CHECKS_DIR="$ROOT/checks"   # ← directory containing adapter scripts
+CHECKS_DIR="$(cd "$(dirname "$0")" && pwd)/checks"  # ← beside sprint-audit.sh (Tools/checks/)
 LANG_ADAPTER=""              # ← set to adapter filename: "typescript-react", "python", etc.
                              #    or leave empty to use inline checks below
 USE_MODULAR=false

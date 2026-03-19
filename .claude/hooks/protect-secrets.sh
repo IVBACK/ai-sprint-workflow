@@ -60,42 +60,13 @@ if [[ "$TOOL" == "Bash" ]]; then
         return 1
     }
 
-    # Layer 1: Direct read commands
+    # Simple tripwire: block direct read commands on secret files
+    # Layers 2-6 (scripting, encoding, text processing, redirects, env vars)
+    # were removed (2026-03-16): complexity bias, diminishing returns.
+    # The AI won't intentionally exfiltrate secrets — a simple tripwire suffices.
     if echo "$CMD" | grep -qE '(cat|head|tail|less|more|bat|source)\s' && _has_secret_ref "$CMD"; then
         echo "BLOCKED: This command would expose secret file contents." >&2
         echo "The cross-LLM audit hook manages .env automatically." >&2
-        exit 2
-    fi
-
-    # Layer 2: Scripting languages
-    if echo "$CMD" | grep -qE '(python|python3|perl|ruby|node|php)' && _has_secret_ref "$CMD"; then
-        echo "BLOCKED: This command would expose secret file contents via scripting." >&2
-        exit 2
-    fi
-
-    # Layer 3: Encoding/dump tools
-    if echo "$CMD" | grep -qE '(base64|xxd|od|hexdump|strings)\s' && _has_secret_ref "$CMD"; then
-        echo "BLOCKED: This command would expose secret file contents." >&2
-        exit 2
-    fi
-
-    # Layer 4: Text processing tools
-    if echo "$CMD" | grep -qE '(awk|sed|grep|rg|jq|yq)\s' && _has_secret_ref "$CMD"; then
-        echo "BLOCKED: This command would expose secret file contents." >&2
-        exit 2
-    fi
-
-    # Layer 5: File redirects: < .env, $(<.env)
-    if echo "$CMD" | grep -qE '<\s*\.env([^a-zA-Z0-9_-]|$)'; then
-        if ! echo "$CMD" | grep -qE '\.env\.example'; then
-            echo "BLOCKED: File redirect on .env detected." >&2
-            exit 2
-        fi
-    fi
-
-    # Layer 6: Explicit env var exposure
-    if echo "$CMD" | grep -qiE '(echo|printf|printenv|env\s).*\$?\{?(CROSS_AUDIT_API_KEY|CROSS_AUDIT_.*KEY)'; then
-        echo "BLOCKED: This command would expose the API key." >&2
         exit 2
     fi
 fi

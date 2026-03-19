@@ -58,6 +58,20 @@ if [[ -n "$MISSING_REASON" ]]; then
     done <<< "$MISSING_REASON"
 fi
 
+# Check 4: Sprint Board edited manually — remind to use sprint-tools
+# sprint-tools writes TRACKING.md via Python Path.write_text(), not Edit/Write tool.
+# If we're here, an Edit/Write tool was used → likely manual edit.
+# Check if Sprint Board status columns were touched without [via sprint-tools] in changelog.
+HAS_STATUS_ROWS=$(grep -cE '^\| CORE-[0-9]+' "$TRACKING_FILE" 2>/dev/null || true)
+HAS_STATUS_ROWS=${HAS_STATUS_ROWS:-0}
+HAS_VIA_TAG=$(grep -c '\[via sprint-tools' "$TRACKING_FILE" 2>/dev/null || true)
+HAS_VIA_TAG=${HAS_VIA_TAG:-0}
+
+if [[ "$HAS_STATUS_ROWS" -gt 0 && "$HAS_VIA_TAG" -eq 0 ]]; then
+    ERRORS+=("Sprint Board edited without sprint-tools. Use: sprint-tools item CORE-NNN <status> \"evidence\"")
+    ERRORS+=("  Working Context edits are OK manually. Status/Changelog/Evidence should use sprint-tools.")
+fi
+
 if [[ ${#ERRORS[@]} -gt 0 ]]; then
     echo "TRACKING.md validation warnings:" >&2
     for err in "${ERRORS[@]}"; do

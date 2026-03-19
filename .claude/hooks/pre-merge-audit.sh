@@ -37,7 +37,7 @@ fi
 SOURCE="$1"
 
 # ── Check prerequisites ──
-command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "jq is required. Install: apt/brew/pacman/choco install jq" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
 [[ -z "${CROSS_AUDIT_API_KEY:-}" ]] && { echo "CROSS_AUDIT_API_KEY not set" >&2; exit 1; }
 

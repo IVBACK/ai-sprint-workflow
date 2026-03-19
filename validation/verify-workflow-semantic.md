@@ -11,8 +11,8 @@ intent correctness, dead-end escalation paths, data provenance, user gate enforc
 | F1/F2/F3 — State machine | `validate-model.sh` | FSM transitions, reachability, no trapped states |
 | C1/C2/C3 — Loop termination | `validate-model.sh` | Max iterations, escalation paths, fallback defined |
 | A (location + count) | `validate-model.sh` | Decision point exists in WORKFLOW.md, option count ≥ 2 |
-| E — Cross-references | `validate-workflow.sh` | §Section refs, step/phase number refs |
-| J3 — Metric gate scope | `validate-workflow.sh` | All item types get metric gates |
+| E — Cross-references | `validate-structure.sh` | §Section refs, step/phase number refs |
+| J3 — Metric gate scope | `validate-structure.sh` | All item types get metric gates |
 
 Run these first. If any fail, fix before running this prompt.
 
@@ -20,9 +20,7 @@ Run these first. If any fail, fix before running this prompt.
 
 ```
 First run the deterministic checks:
-  bash validation/validate-workflow.sh
-  bash validation/validate-paths.sh
-  bash validation/validate-paths.sh --self-test
+  bash validation/validate-structure.sh
   bash validation/validate-model.sh
   bash validation/validate-model.sh --self-test
 

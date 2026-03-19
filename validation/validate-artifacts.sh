@@ -74,7 +74,7 @@ check_section() {
   fi
 }
 
-check_section "ART-S01" '##?\s*Sprint Board|Sprint Board' "§Sprint Board"
+check_section "ART-S01" '^##+ Sprint Board' "§Sprint Board"
 check_section "ART-S02" '##?\s*Change Log|Change Log' "§Change Log"
 check_section "ART-S03" '##?\s*(Predicted )?Failure Mode|Failure Mode History' "§Failure Mode History"
 echo ""

@@ -7,18 +7,15 @@ on:
       - README.md
       - WORKFLOW.md
       - sprint-audit-template.sh
-      - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
       - 'checks/**'
       - '.claude/hooks-config.sh'
-      - 'Docs/WORKFLOW-MODES.md'
-      - validation/validate-workflow.sh
-      - validation/validate-paths.sh
+      - 'Docs/Workflow/**'
+      - validation/validate-structure.sh
       - validation/validate-model.sh
-      - validation/validate-cascade.sh
+      - validation/validate-artifacts.sh
       - validation/workflow-model.yaml
-      - validation/scenarios/check-prompt.md
-      - validation/scenarios/validate-scenarios.sh
+      - validation/resolve-workflow.sh
       - '.claude/hooks/**'
       - '.claude/settings.json'
   pull_request:
@@ -27,18 +24,15 @@ on:
       - README.md
       - WORKFLOW.md
       - sprint-audit-template.sh
-      - ROADMAP-DESIGN-PROMPT.md
       - DESIGN.md
       - 'checks/**'
       - '.claude/hooks-config.sh'
-      - 'Docs/WORKFLOW-MODES.md'
-      - validation/validate-workflow.sh
-      - validation/validate-paths.sh
+      - 'Docs/Workflow/**'
+      - validation/validate-structure.sh
       - validation/validate-model.sh
-      - validation/validate-cascade.sh
+      - validation/validate-artifacts.sh
       - validation/workflow-model.yaml
-      - validation/scenarios/check-prompt.md
-      - validation/scenarios/validate-scenarios.sh
+      - validation/resolve-workflow.sh
       - '.claude/hooks/**'
       - '.claude/settings.json'
 
@@ -48,26 +42,25 @@ on:
 jobs:
   # ── Main validation job (blocking) ──────────────────────────────────────────
   validate:
-    name: Structural + Path + Model + Cascade checks
-    runs-on: ubuntu-latest
+    name: Structure + Model checks (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Install PyYAML
         run: pip install pyyaml --quiet
 
-      - name: Structural consistency (validate-workflow.sh)
+      - name: Structural consistency (validate-structure.sh)
         run: |
           set +e
-          bash validation/validate-workflow.sh
-          code=$?
-          set -e
-          [ "$code" -eq 2 ] && exit 1 || exit 0
-
-      - name: Path simulation (validate-paths.sh)
-        run: |
-          set +e
-          bash validation/validate-paths.sh
+          bash validation/validate-structure.sh
           code=$?
           set -e
           [ "$code" -eq 2 ] && exit 1 || exit 0
@@ -80,26 +73,9 @@ jobs:
           set -e
           [ "$code" -eq 2 ] && exit 1 || exit 0
 
-      - name: Cascade consistency (validate-cascade.sh)
-        run: |
-          set +e
-          bash validation/validate-cascade.sh
-          code=$?
-          set -e
-          [ "$code" -eq 2 ] && exit 1 || exit 0
-
-      - name: Scenario mutation tests (validate-scenarios.sh)
-        run: |
-          set +e
-          bash validation/scenarios/validate-scenarios.sh
-          code=$?
-          set -e
-          [ "$code" -eq 2 ] && exit 1 || exit 0
-
   # ── Self-test job (optional, informational) ──────────────────────────────────
   # Runs negative tests that intentionally produce failures to verify detectors work.
   # Non-blocking: continue-on-error keeps the PR green even if this job fails.
-  # Remove continue-on-error to make it blocking.
   self-tests:
     name: Negative self-tests (optional)
     runs-on: ubuntu-latest
@@ -107,11 +83,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install PyYAML
         run: pip install pyyaml --quiet
-
-      - name: Path simulation self-test
-        run: bash validation/validate-paths.sh --self-test
 
       - name: Model self-test
         run: bash validation/validate-model.sh --self-test

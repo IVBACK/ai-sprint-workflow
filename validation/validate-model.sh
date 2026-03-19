@@ -19,7 +19,7 @@
 #   C1/C2/C3 — Loop termination: max iterations, escalation, fallback, resolved
 #   A (partial) — Decision point location + option count
 #
-# Dependencies: bash 4+, python3 with PyYAML (stdlib on most distros)
+# Dependencies: bash 4+, python3 with PyYAML (pip install pyyaml)
 
 set -uo pipefail
 LC_ALL=C
@@ -28,7 +28,10 @@ export LC_ALL
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODEL="$SCRIPT_DIR/workflow-model.yaml"
-WORKFLOW="$REPO_ROOT/WORKFLOW.md"
+source "$REPO_ROOT/validation/resolve-workflow.sh"
+WORKFLOW=$(resolve_workflow "$REPO_ROOT")
+_WORKFLOW_TMP="$WORKFLOW"
+[[ "$_WORKFLOW_TMP" != "$REPO_ROOT/WORKFLOW.md" ]] && trap 'rm -f "$_WORKFLOW_TMP"' EXIT
 
 passes=0
 warnings=0
@@ -286,6 +289,7 @@ print("")
 # ─── CHECK 7: Loop termination ────────────────────────────────────────────────
 print("── CHECK 7: Loop Termination ──")
 
+# Smoke test: keyword heuristic — verifies termination/blocking language exists, not semantic correctness
 ESCALATION_PATTERN = r"escalat|[Mm]ax\s+[0-9]|fallback|abort|known gap|protocol violation"
 
 for loop in model.get("loops", []):
@@ -325,6 +329,7 @@ print("")
 # ─── CHECK 8: Guard blocking text ────────────────────────────────────────────
 print("── CHECK 8: Guard Conditions ──")
 
+# Smoke test: keyword heuristic — verifies termination/blocking language exists, not semantic correctness
 BLOCKING_PATTERN = r"block|cannot proceed|gate blocked|must not proceed|protocol violation|mandatory"
 
 for guard in model.get("guards", []):
@@ -353,6 +358,82 @@ for guard in model.get("guards", []):
             ok(f"GUARD_PROTOCOL_VIOLATION_{gid}")
         else:
             fail(f"GUARD_PROTOCOL_VIOLATION_{gid}", f"skip_is_protocol_violation=true but 'protocol violation' not near: {hint_display(hint)}")
+
+print("")
+
+# ─── CHECK 9: Concept SSOT — canonical definitions and references ─────────
+print("── CHECK 9: Concept SSOT ──")
+
+repo_root = sys.argv[2].rsplit("/", 1)[0] if "/" in sys.argv[2] else "."
+# Try to find the repo root by looking for WORKFLOW.md's parent
+import os
+repo_root = os.path.dirname(os.path.abspath(template_path))
+# If template is assembled (tmp), use MODEL's parent's parent
+if "/tmp" in repo_root or not os.path.isdir(os.path.join(repo_root, "Docs")):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(model_path)))
+
+for concept in model.get("concepts", []):
+    cid = concept["id"]
+    canonical = concept.get("canonical_file", "")
+    defn_pat = concept.get("definition_pattern", "")
+    ref_files = concept.get("reference_files", [])
+
+    # Check canonical file contains definition
+    canonical_path = os.path.join(repo_root, canonical)
+    if not os.path.isfile(canonical_path):
+        fail(f"CONCEPT_CANONICAL_{cid}", f"Canonical file not found: {canonical}")
+        continue
+
+    with open(canonical_path) as cf:
+        canonical_text = cf.read()
+
+    if defn_pat and re.search(defn_pat, canonical_text):
+        ok(f"CONCEPT_CANONICAL_{cid}")
+    else:
+        fail(f"CONCEPT_CANONICAL_{cid}", f"Definition pattern not found in {canonical}: {defn_pat[:50]}")
+
+    # Check reference files exist and mention the concept
+    for ref_file in ref_files:
+        ref_path = os.path.join(repo_root, ref_file)
+        ref_tag = f"CONCEPT_REF_{cid}_{os.path.basename(ref_file).replace('.md','').replace('-','_').upper()}"
+        if not os.path.isfile(ref_path):
+            warn(ref_tag, f"Reference file not found: {ref_file}")
+            continue
+
+        with open(ref_path) as rf:
+            ref_text = rf.read()
+
+        # Reference files should mention the concept (loosely — any keyword from definition)
+        # Use a simpler check: the canonical file's basename or key terms
+        concept_desc = concept.get("description", "")
+        # Extract key terms from description (first significant word after the colon)
+        key_terms = [t.strip().rstrip(")") for t in cid.lower().replace("_", " ").split()]
+        found = False
+        if defn_pat:
+            # Try the definition pattern first
+            try:
+                if re.search(defn_pat, ref_text):
+                    found = True
+            except re.error:
+                pass
+        if not found:
+            # Fallback: check if any state/concept keyword appears
+            simple_terms = {
+                "ITEM_LIFECYCLE": r"open|in_progress|fixed|verified|blocked|deferred",
+                "SCOPE_LIMITS": r"Must|Should|Could|scope",
+                "FAILURE_MODE_CATEGORIES": r"failure mode|Direct.*Interaction|Stress",
+                "METRIC_GATES": r"metric|threshold|measurable",
+                "DOC_UPDATE_TRIGGERS": r"TRACKING\.md|Change Log|update.*trigger",
+                "GATE_PROCEDURES": r"Entry Gate|Close Gate|Sprint Close",
+            }
+            term = simple_terms.get(cid, "")
+            if term and re.search(term, ref_text):
+                found = True
+
+        if found:
+            ok(ref_tag)
+        else:
+            warn(ref_tag, f"Concept '{cid}' not referenced in {ref_file}")
 
 print("")
 
@@ -452,15 +533,15 @@ INNERPY
   }
 
   # EG_08 uses dict anchor+pattern: remove anchor line to break two-stage lookup
-  self_test_negative "ST_EG08"   '^8\. Strategic alignment'                                    "DP_LOCATION_EG_08"
-  self_test_negative "ST_EG12E"  'return to the relevant phase'                               "DP_LOCATION_EG_12E"
+  self_test_negative "ST_EG08"   '### 8\. Strategic Alignment'                                  "DP_LOCATION_EG_08"
+  self_test_negative "ST_EG12E"  'rejected.*return to relevant phase'                          "DP_LOCATION_EG_12E"
   self_test_negative "ST_CG_MET" '[Uu]nmet metric escalation|DEFERRED.*escalation'            "DP_LOCATION_CG_MET"
   # MS_SC3 uses dict anchor+pattern: remove anchor heading
-  self_test_negative "ST_MS_SC3" '^### Mid-Sprint Scope Change'                               "DP_LOCATION_MS_SC3"
+  self_test_negative "ST_MS_SC3" '^## 1\. Mid-Sprint Scope Change'                            "DP_LOCATION_MS_SC3"
   self_test_negative "ST_IL_SVR" 'Max 3 rounds|escalate.*user before continuing'             "LOOP_LOCATION_IL_SVR"
-  self_test_negative "ST_IL_VIS" 'Max 3 attempts.*if still failing.*log visual gap'            "LOOP_LOCATION_IL_VIS"
-  self_test_negative "ST_CG_AMD" 'ALL metrics.*DEFERRED.*gate blocked|[Gg]uard.*ALL metrics' "GUARD_LOCATION_CG_AMD"
-  self_test_negative "ST_CG_PM1" 'mandatory.*run before every Close Gate|AI must not proceed to Phase 0 without' "GUARD_LOCATION_CG_PM1"
+  self_test_negative "ST_IL_VIS" 'Max 3 attempts.*still failing.*visual unconfirmed'          "LOOP_LOCATION_IL_VIS"
+  self_test_negative "ST_CG_AMD" 'at least one item must be verified|all-DEFERRED verdict'   "GUARD_LOCATION_CG_AMD"
+  self_test_negative "ST_CG_BLK" 'BLOCKER.*cannot pass Close Gate|Partial fix.*BLOCKER'     "GUARD_LOCATION_CG_BLOCKER"
 
   echo ""
   echo "══════════════════════════════════════════════════════"

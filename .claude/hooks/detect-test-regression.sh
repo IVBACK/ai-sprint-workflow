@@ -13,7 +13,7 @@ HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOKS_DIR/../hooks-config.sh"
 
 [[ "$HOOK_DETECT_TEST_REGRESSION" != "true" ]] && exit 0
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { echo "jq not found, skipping. Install: apt/brew/pacman/choco install jq" >&2; exit 0; }
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')

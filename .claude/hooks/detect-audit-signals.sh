@@ -27,7 +27,7 @@ source "$HOOKS_DIR/../hooks-config.sh"
 # Thresholds from centralized config
 _CP1_THRESHOLD="${AUDIT_CP1_THRESHOLD:-0.20}"
 _CP2_MIN_SPRINTS="${AUDIT_CP2_MIN_SPRINTS:-2}"
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { echo "jq not found, skipping. Install: apt/brew/pacman/choco install jq" >&2; exit 0; }
 
 # ── PostToolUse filter: only re-run when TRACKING.md is the edited file ──
 # On SessionStart, stdin is empty or has no tool_name → always run.
@@ -163,6 +163,26 @@ if [[ -n "$CP2_SIGNALS" ]]; then
     CP2_SIGNALS=$(echo "$CP2_SIGNALS" | while IFS= read -r line; do
         echo "$line" | tr -cd 'a-zA-Z0-9 _\-+%->:./()\n'
     done)
+fi
+
+# ══════════════════════════════════════════════
+# Persist findings to durable log (append-only)
+# ══════════════════════════════════════════════
+SNAPSHOT_DIR="$(dirname "$TRACKING")"
+FINDINGS_LOG="$SNAPSHOT_DIR/.findings-log"
+_NOW=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date -Iseconds)
+
+if [[ -n "$CP1_SIGNALS" ]]; then
+  echo "$CP1_SIGNALS" | while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "[$_NOW] CP1:$line" >> "$FINDINGS_LOG"
+  done
+fi
+if [[ -n "$CP2_SIGNALS" ]]; then
+  echo "$CP2_SIGNALS" | while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "[$_NOW] CP2:$line" >> "$FINDINGS_LOG"
+  done
 fi
 
 # ══════════════════════════════════════════════

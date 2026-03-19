@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.yaml
+secrets.yml
+
+# Sprint workflow backups
+.sprint-migrate-backup-*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# FILL: Add stack-specific patterns below (node_modules/, __pycache__/, etc.)

@@ -14,9 +14,21 @@ __pycache__/
 *.swo
 *~
 
+# Virtual environments
+.venv/
+
+# Test cache
+.pytest_cache/
+
+# Backup files
+*.bak
+
 # Legacy local config (replaced by .env overrides)
 .claude/hooks-config.local.sh
 .claude/hooks/*.local.sh
+
+# Dev-only CLAUDE.md (auto-loaded by Claude Code, bootstrap creates user's own)
+.claude/CLAUDE.md
 
 # Hook runtime state (counters, timestamps — per-developer, not shared)
 .claude/.state/
@@ -34,3 +46,25 @@ secrets.yml
 
 # Planning docs (local drafts)
 Docs/Planning/
+
+# Dev-only: telemetry benchmarks, session memory, backups
+telemetry/
+telemetry-output/
+.claude/projects/
+.claude/settings.json.bak
+
+# WIP examples (will be rebuilt from scratch before release)
+examples/demo-finance-tracker/
+
+# Dogfooding: internal sprint artifacts (not part of the template)
+.dev/
+
+# User project files (not part of the workflow template)
+app/
+tests/
+data/
+
+# E2E test results
+results-*/
+results-combined-*/
+results-parallel-*/

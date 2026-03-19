@@ -9,7 +9,7 @@
 # Tracks which WORKFLOW.md version these hooks were generated from.
 # session-start.sh compares this against WORKFLOW.md's workflow-version.
 # Updated automatically during bootstrap and upgrade — do not edit manually.
-HOOKS_VERSION="2.1"
+HOOKS_VERSION="3.1"
 #
 # ── Per-Developer Overrides ──
 # This file is git-tracked (shared by all team members).
@@ -25,30 +25,37 @@ HOOKS_VERSION="2.1"
 # Individual overrides below still take precedence over the mode preset.
 #
 #   freestyle — Hackathon, experiments, learning. Safety only, zero workflow enforcement.
-#               Enables: protect-claude, protect-secrets, validate-tracking, session-start, id-uniqueness (5/11)
-#               Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression
+#               Enables: protect-claude, protect-secrets, validate-tracking, session-start, id-uniqueness, memory-sync (6/12)
+#               Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression, cross-llm-audit
 #               Gates: none enforced (AI follows WORKFLOW.md voluntarily)
 #               Cross-audit defaults: N/A (not recommended)
 #
 #   lite     — Solo dev, small projects. Lightweight gates with basic enforcement.
-#              Enables: 5 core + close-gate + test-regression (7/11)
+#              Enables: 6 core + close-gate + test-regression + cross-audit (9/12)
 #              Disables: entry-gate-session, sprint-close, audit-signals (CP1/CP2)
 #              Gates: abbreviated Entry Gate, basic Close Gate (sprint-audit.sh + verdict)
-#              Cross-audit defaults: wave-size 8, context minimal, min-changes 5
+#              Cross-audit defaults: wave-size 8
 #
 #   standard — Default. Full workflow with all hooks.
-#              Enables: all hooks (11/11)
-#              Cross-audit defaults: wave-size 5, context standard, min-changes 3
+#              Enables: all hooks (12/12)
+#              Cross-audit defaults: wave-size 5
 #
 #   strict   — Team + critical systems. All hooks mandatory, no individual overrides.
 #              Enables: all hooks (overrides ignored — see note below)
-#              Cross-audit defaults: wave-size 3, context full, min-changes 1, enforce-block true
+#              Cross-audit defaults: wave-size 3, enforce-block true
 #
 # Usage: set WORKFLOW_MODE and leave individual flags commented out to use the preset.
 #        Or set WORKFLOW_MODE and override specific flags below.
 #        strict mode ignores individual overrides — all hooks are forced on.
 
 WORKFLOW_MODE="standard"  # ← "freestyle", "lite", "standard", or "strict"
+
+# Allow .env to override WORKFLOW_MODE before the case block runs
+_ENV_FILE_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+if [[ -f "$_ENV_FILE_EARLY" ]]; then
+  _env_mode=$(grep -E '^[[:space:]]*(export[[:space:]]+)?WORKFLOW_MODE=' "$_ENV_FILE_EARLY" 2>/dev/null | tail -1 | sed -E 's/.*=//; s/^[[:space:]]*["'"'"']?//; s/["'"'"']?[[:space:]]*$//')
+  [[ -n "$_env_mode" ]] && WORKFLOW_MODE="$_env_mode"
+fi
 
 # ── Mode-based defaults ──
 case "${WORKFLOW_MODE}" in
@@ -64,7 +71,8 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=false
     _VALIDATE_SPRINT_CLOSE=false
     _DETECT_AUDIT_SIGNALS=false
-    # Cross-audit: not tuned (use global defaults if enabled manually)
+    _MEMORY_SYNC=true
+    _CROSS_LLM_AUDIT=false
     ;;
   lite)
     # Core safety + close gate + test regression
@@ -78,7 +86,8 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=true
     _VALIDATE_SPRINT_CLOSE=false
     _DETECT_AUDIT_SIGNALS=false
-    # Cross-audit: relaxed defaults for small projects
+    _MEMORY_SYNC=true
+    _CROSS_LLM_AUDIT=true
     _D_CROSS_AUDIT_WAVE_SIZE=8
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
@@ -94,7 +103,8 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=true
     _VALIDATE_SPRINT_CLOSE=true
     _DETECT_AUDIT_SIGNALS=true
-    # Cross-audit: tighter defaults for critical projects
+    _MEMORY_SYNC=true
+    _CROSS_LLM_AUDIT=true
     _D_CROSS_AUDIT_WAVE_SIZE=3
     _D_CROSS_AUDIT_ENFORCE_BLOCK=true
     ;;
@@ -109,7 +119,8 @@ case "${WORKFLOW_MODE}" in
     _VALIDATE_CLOSE_GATE=true
     _VALIDATE_SPRINT_CLOSE=true
     _DETECT_AUDIT_SIGNALS=true
-    # Cross-audit: balanced defaults
+    _MEMORY_SYNC=true
+    _CROSS_LLM_AUDIT=true
     _D_CROSS_AUDIT_WAVE_SIZE=5
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
@@ -152,6 +163,12 @@ HOOK_VALIDATE_SPRINT_CLOSE="${HOOK_VALIDATE_SPRINT_CLOSE:-$_VALIDATE_SPRINT_CLOS
 # Silent if sections missing or data insufficient — zero false positives without structured data
 HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 
+# Persist session context across compaction and session boundaries
+HOOK_MEMORY_SYNC="${HOOK_MEMORY_SYNC:-$_MEMORY_SYNC}"
+
+# Cross-LLM audit: external model reviews code changes (requires API key in .env)
+HOOK_CROSS_LLM_AUDIT="${HOOK_CROSS_LLM_AUDIT:-$_CROSS_LLM_AUDIT}"
+
 # ══════════════════════════════════════════════════════════════
 # ── Cross-LLM Audit, Thresholds, Limits & Dashboard ──
 # ══════════════════════════════════════════════════════════════
@@ -165,7 +182,7 @@ HOOK_DETECT_AUDIT_SIGNALS="${HOOK_DETECT_AUDIT_SIGNALS:-$_DETECT_AUDIT_SIGNALS}"
 #
 # API key lives in .env (git-ignored) — never paste into git-tracked files.
 # Guided setup: bash .claude/setup-audit.sh
-# Full guide:   Docs/CROSS-LLM-AUDIT.md
+# Full guide:   Docs/Workflow/CROSS-LLM-AUDIT.md
 
 # ── Defaults (_D_ = Default value) ────────────────────────────
 # _D_ prefix marks the default value for each setting.
@@ -256,4 +273,6 @@ if [[ "${WORKFLOW_MODE}" == "strict" ]]; then
   HOOK_VALIDATE_CLOSE_GATE=true
   HOOK_VALIDATE_SPRINT_CLOSE=true
   HOOK_DETECT_AUDIT_SIGNALS=true
+  HOOK_MEMORY_SYNC=true
+  HOOK_CROSS_LLM_AUDIT=true
 fi

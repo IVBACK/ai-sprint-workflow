@@ -7,10 +7,9 @@ in their real projects.
 
 ### Language/Framework Patterns
 
-The `sprint-audit-template.sh` and `WORKFLOW.md` include patterns for 7 languages.
+The `sprint-audit-template.sh` includes patterns for 7 languages.
 If your stack isn't covered, add it:
 
-- Add grep patterns to the Language-Specific Pattern Examples table in `WORKFLOW.md`
 - Add commented examples to `sprint-audit-template.sh`
 - Add a modular adapter to `checks/` (see below)
 - Languages we'd love to see: Swift/iOS, Flutter/Dart, Kotlin, PHP/Laravel, Ruby/Rails, Elixir
@@ -27,10 +26,10 @@ can load with `--modular`. To add a new adapter:
 
 ### Agent Playbooks
 
-Adaptation guides for specific AI agents live in `examples/[agent]-playbook/`.
+Adaptation guides for specific AI agents live in `playbooks/[agent]-playbook/`.
 To contribute a playbook:
 
-1. Create `examples/your-agent-playbook/README.md`
+1. Create `playbooks/your-agent-playbook/README.md`
 2. Include: setup steps, hook equivalents table, session prompts, known limitations
 3. Include the agent's native rule file (e.g., `.cursor/rules/*.mdc`, `.clinerules`, `.windsurfrules`)
 4. Add "Read CLAUDE.md" to the session start protocol in the rule file
@@ -54,7 +53,7 @@ Add your project as an anonymized example in `examples/`:
 
 ```
 examples/
-├── unity-csharp/        # existing
+├── demo-todo-app/       # end-to-end sprint walkthrough (TypeScript/Express)
 ├── your-stack/          # new
 │   └── README.md        # discovery answers, guardrail examples, adaptations
 ```

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Sprint workflow automation dispatcher — routes to single-responsibility tools.
+# Zero logic here. Routes and exits.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CMD="${1:-help}"; shift 2>/dev/null || true
+
+case "$CMD" in
+  state)      exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-state.py"      "$@" ;;
+  item)       exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-item.py"       "$@" ;;
+  index)      exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-index.py"      "$@" ;;
+  metrics)    exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-metrics.py"    "$@" ;;
+  git)        exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-git.py"        "$@" ;;
+  checkpoint) exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-checkpoint.py" "$@" ;;
+  baseline)   exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-baseline.py"   "$@" ;;
+  close)      exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-close.py"      "$@" ;;
+  note)       exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-note.py"      "$@" ;;
+  learn)      exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-learn.py"    "$@" ;;
+  review)     exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-review.py"    "$@" ;;
+  migrate)    exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-migrate.py"  "$@" ;;
+  help|--help|-h)
+    echo "Usage: sprint-tools <command> [args...]"
+    echo ""
+    echo "Commands:"
+    echo "  state       Sprint digest (≤23 lines, replaces Phase -1 file reads)"
+    echo "  item        Status transition + changelog (ID[,ID,...] status [note])"
+    echo "  checkpoint  Update CLAUDE.md checkpoint + TRACKING.md Working Context"
+    echo "  baseline    Append to TRACKING.md §Performance Baseline Log"
+    echo "  metrics     Extract metrics from Entry Gate report"
+    echo "  close       Sprint-end chores (archive, cleanup)"
+    echo "  index       Rebuild SPRINT-INDEX.md from HTML tags"
+    echo "  git         Git ceremony wrapper (init/commit/push/merge/abort)"
+    echo "  note        Session journal — append-only notes (decision/attempt/observation)"
+    echo "  learn       Knowledge classification + routing (guardrail/index/risk)"
+    echo "  review      Blind review via external LLM (file or stdin)"
+    echo "  migrate     Migrate from older workflow version (v2.1 → v3.1)"
+    ;;
+  *)
+    echo "Unknown command: $CMD" >&2
+    echo "Run 'sprint-tools help' for available commands." >&2
+    exit 1
+    ;;
+esac

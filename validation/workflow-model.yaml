@@ -17,12 +17,12 @@
 
 meta:
   workflow_file: WORKFLOW.md
-  model_version: "2.0"
+  model_version: "2.1"
   # SHA-256 of WORKFLOW.md at the time this model was last validated.
   # validate-model.sh recomputes and fails if mismatch — forces conscious review on WORKFLOW.md changes.
   # To update after WORKFLOW.md changes:
   #   python3 -c "import hashlib; print(hashlib.sha256(open('WORKFLOW.md','rb').read()).hexdigest())"
-  workflow_hash: b1ca1c388440f2ddffb503e6279852bc48dda11621d4356f3c6589aabc882329
+  workflow_hash: e8fbfac4e9218a830b389b5e6fe8d9191b2ac066ba977221dbf06b8bf80e9fac
 
 # ─── STATE MACHINE ────────────────────────────────────────────────────────────
 # required: true  → BFS reachability is checked (normal-flow states)
@@ -78,8 +78,8 @@ decision_points:
   - id: EG_08
     description: "Entry Gate step 8 — 4-option response to strategic alignment failure"
     location_hint:
-      anchor: '^8\. Strategic alignment'
-      pattern: 'keep.*unchanged|modify.*update.*Roadmap|defer.*deferred|remove.*delete'
+      anchor: '### 8\. Strategic Alignment'
+      pattern: 'keep.*modify.*defer.*remove|options.*keep.*modify.*defer.*remove'
       window: 20
     options: [keep, modify, defer, remove]
     all_branches_required: true
@@ -87,14 +87,14 @@ decision_points:
 
   - id: EG_12E
     description: "Entry Gate step 12e — user does not approve final sprint plan"
-    location_hint: 'return to the relevant phase'
+    location_hint: 'rejected.*return to relevant phase'
     options: [rework_phase0, rework_phase3, sprint_abort]
     all_branches_required: true
     requires_user_approval: true
 
   - id: EG_0E
     description: "Entry Gate phase 0e — user does not approve scope"
-    location_hint: 'does not approve.*identify concerns.*rework'
+    location_hint: 'rejected.*rework 0b-0d.*re-present'
     options: [rework_scope, rework_metrics]
     all_branches_required: true
     requires_user_approval: true
@@ -107,8 +107,8 @@ decision_points:
   - id: MS_SC3
     description: "Mid-Sprint scope change step 3 — 4 options presented to user"
     location_hint:
-      anchor: '^### Mid-Sprint Scope Change'
-      pattern: 'hotfix outside sprint scope|Defer to next sprint'
+      anchor: '## 1\. Mid-Sprint Scope Change'
+      pattern: 'Add as hotfix.*no ID|Defer to next sprint'
       window: 30
     options: [add_must, add_must_defer_existing, hotfix, defer_to_next]
     all_branches_required: true
@@ -116,22 +116,15 @@ decision_points:
     requires_tracking_update: true
     requires_roadmap_update: true
 
-  - id: EG_SOS
-    description: "Entry Gate phase 0 — AI flags Must item as potentially Should"
-    location_hint: 'should it be Should[?]'
-    options: [demote_to_should, keep_as_must]
-    all_branches_required: true
-    requires_user_approval: true
-
   - id: EG_10
     description: "Entry Gate step 10 — 0 Must items: sprint is empty"
-    location_hint: '0 Must.*sprint is empty.*Present options|sprint is empty.*Sprint Abort'
+    location_hint: '0 Must.*Return to Phase 0.*Sprint Abort'
     options: [redesign_scope, sprint_abort]
     all_branches_required: true
 
   - id: CG_1B
     description: "Close Gate phase 1b — abbreviated gate skips failure mode step"
-    location_hint: '[Ee]ntry Gate.*abbreviated.*skip|abbreviated.*[Pp]redicted [Ff]ailure'
+    location_hint: 'Entry Gate.*abbreviated.*Skip step b|Change Log shows.*Entry Gate.*abbreviated'
     options: [run_full, skip_failure_modes]
     all_branches_required: true
 
@@ -150,9 +143,9 @@ loops:
 
   - id: IL_VIS
     description: "Implementation Loop step D.5 — user visual confirmation loop"
-    location_hint: 'Max 3 attempts.*if still failing.*log visual gap|still failing.*log visual gap'
+    location_hint: 'Max 3 attempts.*still failing.*visual unconfirmed'
     max_iterations: 3
-    resolved_defined: true
+    resolved_defined: false
     fallback_required: true
 
   - id: IL_ITR
@@ -163,7 +156,7 @@ loops:
 
   - id: CG_RRN
     description: "Close Gate — fix-and-rerun loop after findings"
-    location_hint: 'fix.*before.*closing|[Ss]print looks done.*protocol violation'
+    location_hint: 'Return to Phase 2.*treat as new finding|fix before closing'
     escalation_required: true
 
 # ─── GUARDS ──────────────────────────────────────────────────────────────────
@@ -172,18 +165,67 @@ loops:
 
 guards:
   - id: CG_AMD
-    description: "Close Gate phase 0 — gate blocked if ALL metrics are DEFERRED"
-    location_hint: 'Guard.*ALL metrics.*DEFERRED|ALL metrics.*DEFERRED.*gate blocked'
+    description: "Close Gate — guards against all-DEFERRED verdict (at least one item must be verified)"
+    location_hint: 'at least one item must be verified|all-DEFERRED verdict'
     must_block_gate: true
 
-  - id: CG_PM1
-    description: "Close Gate phase -1 — state recovery is mandatory before every Close Gate"
-    location_hint: 'mandatory.*run before every Close Gate|AI must not proceed to Phase 0 without'
+  - id: CG_BLOCKER
+    description: "Close Gate — partial fix is a BLOCKER, item cannot pass Close Gate"
+    location_hint: 'Partial fix = BLOCKER'
     must_block_gate: true
-    skip_is_protocol_violation: true
 
-  - id: CG_VRD
-    description: "Close Gate verdict — pre-verdict 7-point checklist must pass"
-    location_hint: 'sprint looks done.*protocol violation|ready to close.*protocol violation'
-    must_block_gate: true
-    skip_is_protocol_violation: true
+# ─── CONCEPTS (SSOT) ────────────────────────────────────────────────────────
+# Each concept has ONE canonical source file. Other files may reference it
+# but must not redefine it. validate-model.sh checks:
+#   1. canonical_file contains the definition_pattern
+#   2. reference_files contain the reference_pattern (linking back)
+# This prevents concept drift after v3.0 split into 11 files.
+
+concepts:
+  - id: ITEM_LIFECYCLE
+    description: "Item state machine: open → in_progress → fixed → verified (+ blocked, deferred, sprint_abort)"
+    canonical_file: "Docs/Workflow/STATE-TRANSITIONS.md"
+    definition_pattern: 'open.*in_progress|Item Lifecycle'
+    reference_files:
+      - "Docs/Workflow/CLOSE-GATE.md"
+      - "Docs/Workflow/IMPL-LOOP.md"
+      - "Docs/Workflow/SPRINT-CLOSE.md"
+
+  - id: SCOPE_LIMITS
+    description: "Must/Should/Could classification with size-based limits (small=5, medium=8, large=12)"
+    canonical_file: "Docs/Workflow/ENTRY-GATE.md"
+    definition_pattern: 'small.*5.*medium.*8.*large.*12|scope limit'
+    reference_files:
+      - "Docs/Workflow/PROCEDURES.md"
+
+  - id: FAILURE_MODE_CATEGORIES
+    description: "Three failure mode categories: Direct, Interaction, Stress/Edge"
+    canonical_file: "Docs/Workflow/ENTRY-GATE.md"
+    definition_pattern: 'Direct.*Interaction.*Stress|[Dd]irect.*item breaks'
+    reference_files:
+      - "Docs/Workflow/CLOSE-GATE.md"
+      - "Docs/Workflow/AGENT-RULES.md"
+
+  - id: METRIC_GATES
+    description: "Per-item metric thresholds defined at Entry Gate, verified at Close Gate"
+    canonical_file: "Docs/Workflow/ENTRY-GATE.md"
+    definition_pattern: '[Mm]easurable.*sprint end|metric.*threshold'
+    reference_files:
+      - "Docs/Workflow/CLOSE-GATE.md"
+
+  - id: DOC_UPDATE_TRIGGERS
+    description: "State change → required file update mapping table"
+    canonical_file: "Docs/Workflow/STATE-TRANSITIONS.md"
+    definition_pattern: 'Document Update Triggers|event.*update.*file'
+    reference_files:
+      - "Docs/Workflow/AGENT-RULES.md"
+      - "Docs/Workflow/IMPL-LOOP.md"
+
+  - id: GATE_PROCEDURES
+    description: "Entry Gate / Close Gate / Sprint Close as the three formal gates"
+    canonical_file: "Docs/Workflow/ENTRY-GATE.md"
+    definition_pattern: 'Entry Gate|Phase 0'
+    reference_files:
+      - "Docs/Workflow/CLOSE-GATE.md"
+      - "Docs/Workflow/SPRINT-CLOSE.md"
+      - "Docs/Workflow/AGENT-RULES.md"

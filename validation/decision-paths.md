@@ -124,8 +124,8 @@ Reference for logic review — each row can be challenged with "is this correct?
 | SC-01 | Step 1: Roadmap checkmarks | [ ] items exist? | Apply unmet-metric escalation (explain, trace, propose, user decides) | user | Can a new Sprint Abort be triggered at this point? Procedure doesn't say. |
 | SC-02 | Step 2: `fixed → verified` | Evidence column empty? | Empty → cannot mark verified, return to Phase 4b | AI | Where does the Close Gate process resume when returning to Phase 4b? |
 | SC-03 | Step 5: Performance baseline | Measurable metric exists? | Yes → record + compare for regression / No → log "not yet established" | AI | What if regression is detected? Is Sprint Close blocked? Not specified. |
-| SC-04 | Step 7e: Unpredicted failure | Unpredicted failure discovered | Write new guardrail rule (7-step Update Rule) | AI | Does this step extend Sprint Close? Is user approval part of the 7-step process? |
-| SC-05 | Step 7f: Escalation trigger | Same category 2+ times / Same user-visual 2+ times | Record "Architecture Review Required" / "Proxy test?" flag in §Open Risks | AI | Is this flag only written to §Open Risks? Will next Entry Gate step 3 catch it? ✓ |
+| SC-04 | Step 7 (retrospective): Unpredicted failure | Unpredicted failure discovered | Write new guardrail rule (7-step Update Rule) | AI | Does this step extend Sprint Close? Is user approval part of the 7-step process? |
+| SC-05 | Step 7a: Escalation trigger | Same category 2+ times / Same user-visual 2+ times | Record "Architecture Review Required" / "Proxy test?" flag in §Open Risks | AI | Is this flag only written to §Open Risks? Will next Entry Gate step 3 catch it? ✓ |
 
 ---
 
@@ -234,7 +234,7 @@ Reference for logic review — each row can be challenged with "is this correct?
 | §Dismissed Signals | Audit dismissal | Entry Gate — CP1/CP2/CP3/CP4 checkpoints | CP3 and CP4 are never suppressed. ✓ |
 | CORE-### metric gate | Entry Gate step 9c → Roadmap | Close Gate Phase 0 | Metric gate change requires step 12c approval. ✓ |
 | §Domain Research | Entry Gate (conditional block) | Implementation Loop A.5 + Entry Gate report 12a | Findings recorded in Entry Gate report; consumed by A.5 before coding. |
-| §Open Risks R-### | Entry Gate Phase 1 / Sprint Close step 7f | Entry Gate step 3 (Architecture Review flag) | |
+| §Open Risks R-### | Entry Gate Phase 1 / Sprint Close step 7a | Entry Gate step 3 (Architecture Review flag) | |
 
 ---
 

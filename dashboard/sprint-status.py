@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -133,7 +134,120 @@ def extract_table_from_section(text: str, heading: str) -> List[Dict[str, str]]:
 
 # ─── Data Parsers ─────────────────────────────────────────────────────────────
 
+def _init_sprint_lib():
+    """Add Tools/ to sys.path so sprint_lib is importable; return True on success."""
+    tools_dir = Path(__file__).resolve().parent.parent / "Tools"
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+
+
 def parse_tracking(path: Path) -> Dict[str, Any]:
+    """Parse TRACKING.md — uses sprint_lib if available, falls back to local regex."""
+    try:
+        _init_sprint_lib()
+        from sprint_lib.tracking_parser import parse as _parse
+        from sprint_lib.models import TrackingData
+
+        td = _parse(path)
+
+        # Convert Item dataclasses to dicts matching the original format
+        items = [
+            {"id": i.id, "summary": i.summary, "status": i.status,
+             "sprint": i.sprint, "priority": i.priority, "evidence": i.evidence}
+            for i in td.items
+        ]
+        statuses = [it["status"] for it in items]
+        # Risks as dicts
+        risks = [
+            {"id": r.id, "risk": r.risk, "mitigation": r.mitigation, "sprint": r.sprint}
+            for r in td.risks
+        ]
+        # Failure history as dicts
+        failure_history = [
+            {"sprint": fh.sprint, "category": fh.category, "predicted": fh.predicted,
+             "detection": fh.detection, "mode": fh.mode, "impact": fh.impact,
+             "root_cause": fh.root_cause, "guardrail": fh.guardrail, "escalate": fh.escalate}
+            for fh in td.failure_history
+        ]
+        # Baselines as dicts
+        performance = [
+            {"sprint": b.sprint, "metric": b.metric, "value": b.value,
+             "unit": b.unit, "method": b.method}
+            for b in td.baselines
+        ]
+        # Predicted failures as dicts
+        predicted_failures = [
+            {"item": pf.item, "category": pf.category,
+             "predicted_mode": pf.predicted_mode, "detection_plan": pf.detection_plan}
+            for pf in td.predicted_failures
+        ]
+        # Failure encounters as dicts
+        failure_encounters = [
+            {"item": fe.item, "category": fe.category, "failure_description": fe.description,
+             "detection": fe.detection, "date": fe.date}
+            for fe in td.failure_encounters
+        ]
+        # Dismissed signals as dicts
+        dismissed_signals = [
+            {"date": ds.date, "checkpoint": ds.checkpoint, "system_metric": ds.system_metric,
+             "signal_summary": ds.signal_summary, "user_decision": ds.user_decision,
+             "dismissal": ds.dismissal_num, "suppressed": ds.suppressed,
+             "revisit_sprint": ds.revisit_sprint}
+            for ds in td.dismissed_signals
+        ]
+        # Changelog: flatten all entries into a single list + by-sprint dict
+        changelog_lines = []
+        changelog_by_sprint: Dict[str, List[str]] = {}
+        for key, entries in td.changelog_entries.items():
+            changelog_lines.extend(entries)
+            # Normalise key: "Sprint 1" -> "S1"
+            sm = re.match(r"Sprint\s+(\d+)", key)
+            sprint_key = f"S{sm.group(1)}" if sm else key
+            changelog_by_sprint[sprint_key] = entries
+
+        # Working context (only include if any field has real content)
+        wc = td.working_context
+        if wc and any([wc.task, wc.doing, wc.decisions, wc.blockers]):
+            working_context = {
+                "task": wc.task, "doing": wc.doing,
+                "decisions": wc.decisions, "blockers": wc.blockers,
+            }
+        else:
+            working_context = {}
+
+        # Session notes
+        session_notes = [
+            {"seq": n.seq, "type": n.note_type, "text": n.text,
+             "item": n.item, "timestamp": n.timestamp}
+            for n in td.session_notes
+        ]
+
+        return {
+            "current_focus": td.current_focus or "Unknown",
+            "working_context": working_context,
+            "session_notes": session_notes,
+            "items": items,
+            "status_counts": {
+                "open": statuses.count("open"), "in_progress": statuses.count("in_progress"),
+                "fixed": statuses.count("fixed"), "verified": statuses.count("verified"),
+                "blocked": statuses.count("blocked"), "deferred": statuses.count("deferred"),
+            },
+            "total_items": len(items),
+            "completed_items": statuses.count("verified"),
+            "sprints": sorted(set(it["sprint"] for it in items if it.get("sprint"))),
+            "risks": risks,
+            "failure_history": failure_history,
+            "performance": performance,
+            "predicted_failures": predicted_failures,
+            "failure_encounters": failure_encounters,
+            "dismissed_signals": dismissed_signals,
+            "changelog_lines": changelog_lines,
+            "changelog_by_sprint": changelog_by_sprint,
+        }
+    except ImportError:
+        pass  # Fall through to original implementation
+
+    # ── Fallback: original regex implementation ──
     text = path.read_text(encoding="utf-8")
     data: Dict[str, Any] = {}
     focus_match = re.search(r"^##\s+Current Focus\s*\n+(.+)", text, re.MULTILINE)
@@ -156,9 +270,23 @@ def parse_tracking(path: Path) -> Dict[str, Any]:
     data["predicted_failures"] = extract_table_from_section(text, "Predicted Failure Modes")
     data["failure_encounters"] = extract_table_from_section(text, "Failure Encounters")
     data["dismissed_signals"] = extract_table_from_section(text, "Dismissed Signals")
+    # Working context (fallback regex)
+    wc_section = extract_section(text, "Working Context")
+    wc: Dict[str, str] = {}
+    for wc_key in ("Task", "Doing", "Decisions", "Blockers"):
+        m = re.search(rf"^{wc_key}:\s*(.+)$", wc_section, re.MULTILINE)
+        wc[wc_key.lower()] = m.group(1).strip() if m else ""
+    data["working_context"] = wc if any(wc.values()) else {}
+    # Session notes (fallback regex)
+    notes_section = extract_section(text, "Session Notes")
+    session_notes: List[Dict[str, str]] = []
+    for nm in re.finditer(r"^\|\s*(\d+)\s*\|\s*(\w[\w-]*)\s*\|\s*(.+?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|",
+                          notes_section, re.MULTILINE):
+        session_notes.append({"seq": int(nm.group(1)), "type": nm.group(2),
+                              "text": nm.group(3), "item": nm.group(4), "timestamp": nm.group(5)})
+    data["session_notes"] = session_notes
     changelog = extract_section(text, "Change Log")
     data["changelog_lines"] = [l.strip("- ").strip() for l in changelog.splitlines() if l.strip().startswith("- ")]
-    # Parse per-sprint changelog sections (e.g. "### Sprint 1")
     changelog_by_sprint: Dict[str, List[str]] = {}
     current_sprint_key = None
     for line in changelog.splitlines():
@@ -173,11 +301,39 @@ def parse_tracking(path: Path) -> Dict[str, Any]:
 
 
 def parse_roadmap(path: Path) -> Dict[str, Any]:
+    """Parse Roadmap.md — uses sprint_lib if available, falls back to local regex."""
+    try:
+        _init_sprint_lib()
+        from sprint_lib.roadmap_parser import parse as _parse
+
+        rd = _parse(path)
+
+        # Convert overview to list of dicts matching the original table format
+        overview = [
+            {"sprint": s.sprint_key, "theme": s.title, "status": s.status}
+            for s in rd.overview
+        ]
+
+        # Convert sprint items to the dict format the rest of the code expects
+        sprint_items: Dict[str, Dict[str, Any]] = {}
+        for s in rd.overview:
+            items = [
+                {"id": i.id, "description": i.description,
+                 "status": i.checkbox, "priority": i.priority}
+                for i in s.items
+            ]
+            sprint_items[s.sprint_key] = {"title": s.title, "items": items}
+
+        return {"overview": overview, "sprints": sprint_items}
+    except ImportError:
+        pass  # Fall through to original implementation
+
+    # ── Fallback: original regex implementation ──
     text = path.read_text(encoding="utf-8")
     data: Dict[str, Any] = {}
     data["overview"] = extract_table_from_section(text, "Sprint Overview")
     sprint_pattern = re.findall(r"^##\s+Sprint\s+(\d+)\s*[—–-]\s*(.+)$", text, re.MULTILINE)
-    sprint_items: Dict[str, Dict[str, Any]] = {}
+    sprint_items_fb: Dict[str, Dict[str, Any]] = {}
     for sprint_num, title in sprint_pattern:
         key = f"S{sprint_num}"
         section_match = re.search(rf"^##\s+Sprint\s+{sprint_num}\s", text, re.MULTILINE)
@@ -198,25 +354,57 @@ def parse_roadmap(path: Path) -> Dict[str, Any]:
                 checkbox, core_id, desc = cm.groups()
                 status = {"x": "verified", "~": "deferred", " ": "pending"}[checkbox]
                 items.append({"id": core_id, "description": desc.strip(), "status": status, "priority": current_priority})
-        sprint_items[key] = {"title": title.strip(), "items": items}
-    data["sprints"] = sprint_items
+        sprint_items_fb[key] = {"title": title.strip(), "items": items}
+    data["sprints"] = sprint_items_fb
     return data
 
 
 def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
+    """Parse gate report — uses sprint_lib for header/approval detection, local regex for detail tables."""
     text = path.read_text(encoding="utf-8")
     data: Dict[str, Any] = {"exists": True, "path": str(path)}
-    date_match = re.search(r"\*\*Date:\*\*\s*(.+)", text)
-    data["date"] = date_match.group(1).strip() if date_match else ""
-    sprint_match = re.search(r"\*\*Sprint:\*\*\s*(.+)", text)
-    data["sprint_raw"] = sprint_match.group(1).strip() if sprint_match else ""
-    # Extract sprint label (e.g. "S1" from "S1 — Basic CRUD...")
-    sn = re.search(r"S(\d+)", data["sprint_raw"])
-    data["sprint_label"] = f"S{sn.group(1)}" if sn else ""
-    data["approved"] = bool(
-        re.search(r"Approved\s*✓", text) or re.search(r"steps?\s+\d+-\d+\s*✓", text)
-        or re.search(r"Gate passed", text) or re.search(r"Complete\s*✓", text, re.IGNORECASE)
-    )
+
+    # Try sprint_lib for header metadata and approval detection
+    _used_sprint_lib = False
+    try:
+        _init_sprint_lib()
+        if gate_type == "close":
+            from sprint_lib.gate_parser import parse_close_gate
+            gd = parse_close_gate(path)
+            data["date"] = gd.get("date", "")
+            data["sprint_label"] = gd.get("sprint_label", "")
+            data["sprint_raw"] = gd.get("sprint_label", "")
+            data["approved"] = gd.get("verdict", "") == "PASS"
+            if gd.get("tests_passed"):
+                data["tests_passed"] = gd["tests_passed"]
+                data["tests_total"] = gd["tests_total"]
+            _used_sprint_lib = True
+        elif gate_type == "entry":
+            from sprint_lib.gate_parser import parse_entry_gate
+            gd = parse_entry_gate(path)
+            data["date"] = gd.get("date", "")
+            data["sprint_label"] = gd.get("sprint_label", "")
+            data["sprint_raw"] = gd.get("sprint_label", "")
+            data["approved"] = gd.get("approved", False)
+            _used_sprint_lib = True
+    except ImportError:
+        pass
+
+    # Fallback header parsing if sprint_lib wasn't available
+    if not _used_sprint_lib:
+        date_match = re.search(r"\*\*Date:\*\*\s*(.+)", text)
+        data["date"] = date_match.group(1).strip() if date_match else ""
+        sprint_match = re.search(r"\*\*Sprint:\*\*\s*(.+)", text)
+        data["sprint_raw"] = sprint_match.group(1).strip() if sprint_match else ""
+        sn = re.search(r"S(\d+)", data["sprint_raw"])
+        data["sprint_label"] = f"S{sn.group(1)}" if sn else ""
+        data["approved"] = bool(
+            re.search(r"Approved\s*✓", text) or re.search(r"steps?\s+\d+-\d+\s*✓", text)
+            or re.search(r"Gate passed", text) or re.search(r"Complete\s*✓", text, re.IGNORECASE)
+        )
+
+    # Gate-type-specific detail tables (always use local regex — sprint_lib
+    # doesn't extract these detailed phase tables)
     if gate_type == "close":
         metrics = extract_table_from_section(text, "Metric Verification")
         if not metrics:
@@ -230,7 +418,6 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
         supplemental = extract_table_from_section(text, "Supplemental Findings")
         if supplemental:
             for sf in supplemental:
-                # Normalize column names to match Phase 1a format
                 normalized = {}
                 for k, v in sf.items():
                     kl = k.lower()
@@ -247,12 +434,12 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
         data["fitness"] = fitness
         data["fitness_pass"] = sum(1 for f in fitness if "PASS" in f.get("verdict", "").upper())
         data["fitness_total"] = len(fitness)
-        regression_section = extract_section(text, "Phase 3")
-        tests_match = re.search(r"Tests:\s*(\d+)\s*passed.*?(\d+)\s*total", regression_section)
-        if tests_match:
-            data["tests_passed"] = int(tests_match.group(1))
-            data["tests_total"] = int(tests_match.group(2))
-        # Phase 4 — Coverage Gaps
+        if "tests_passed" not in data:
+            regression_section = extract_section(text, "Phase 3")
+            tests_match = re.search(r"Tests:\s*(\d+)\s*passed.*?(\d+)\s*total", regression_section)
+            if tests_match:
+                data["tests_passed"] = int(tests_match.group(1))
+                data["tests_total"] = int(tests_match.group(2))
         data["file_coverage"] = extract_table_from_section(text, "4a") or extract_table_from_section(text, "File-Level Coverage")
         data["item_coverage"] = extract_table_from_section(text, "4b") or extract_table_from_section(text, "Item-Level Coverage")
     elif gate_type == "entry":
@@ -316,6 +503,14 @@ def build_sprint_failure_analysis(gates: Dict[str, Any], tracking_fh: List[Dict]
     close_gate = gates.get("close", {})
     analysis["close_gate_findings"] = len(close_gate.get("findings", []))
     return analysis
+
+
+def _safe_float(v: str) -> float:
+    """Convert string to float, returning 0 on failure (handles negatives, empty strings)."""
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return 0.0
 
 
 def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_history: List[Dict]) -> Dict[str, Any]:
@@ -385,7 +580,7 @@ def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_histo
             perf_by_metric[key] = []
         perf_by_metric[key].append({
             "sprint": p.get("sprint", ""),
-            "value": float(p.get("value", 0)) if p.get("value", "").replace(".", "").isdigit() else 0,
+            "value": _safe_float(p.get("value", "")),
             "unit": p.get("unit", ""),
         })
     trends["performance_trend"] = perf_by_metric
@@ -447,6 +642,145 @@ def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_histo
     return trends
 
 
+# ─── v3.1 Data Collectors ────────────────────────────────────────────────────
+
+def collect_hooks_status(root: Path) -> Dict[str, Any]:
+    """Collect hook health: which hooks exist, which are enabled via hooks-config."""
+    hooks_dir = root / ".claude" / "hooks"
+    config_path = root / ".claude" / "hooks-config.sh"
+    hooks: List[Dict[str, Any]] = []
+    if hooks_dir.is_dir():
+        for f in sorted(hooks_dir.iterdir()):
+            if f.suffix == ".sh" and not f.name.startswith("_"):
+                hooks.append({"name": f.stem, "path": str(f.relative_to(root))})
+    # Parse config for enabled/disabled
+    config_flags: Dict[str, bool] = {}
+    if config_path.is_file():
+        text = config_path.read_text(encoding="utf-8")
+        for m in re.finditer(r'^HOOK_(\w+)=.*\$\{HOOK_\1:-\$_(\w+)\}', text, re.MULTILINE):
+            config_flags[m.group(1).lower()] = True
+        # Read resolved values (mode-based defaults)
+        for m in re.finditer(r'_(\w+)=(true|false)', text):
+            key = m.group(1).lower()
+            config_flags[key] = m.group(2) == "true"
+    # Map hook files to config flags
+    flag_map = {
+        "protect-claude": "protect_claude_md", "protect-secrets": "protect_secrets",
+        "validate-tracking": "validate_tracking", "session-start": "session_start_protocol",
+        "validate-id-uniqueness": "validate_id_uniqueness",
+        "entry-gate-session": "entry_gate_session",
+        "detect-test-regression": "detect_test_regression",
+        "validate-close-gate": "validate_close_gate",
+        "validate-sprint-close": "validate_sprint_close",
+        "detect-audit-signals": "detect_audit_signals",
+        "memory-sync": "memory_sync", "cross-llm-audit": "cross_llm_audit",
+    }
+    for h in hooks:
+        flag_key = flag_map.get(h["name"], "")
+        h["enabled"] = config_flags.get(flag_key, True) if flag_key else True
+    return {
+        "total": len(hooks),
+        "enabled": sum(1 for h in hooks if h["enabled"]),
+        "hooks": hooks,
+    }
+
+
+def collect_workflow_config(root: Path) -> Dict[str, str]:
+    """Read WORKFLOW_MODE and SPRINT_TYPE from hooks-config.sh."""
+    config_path = root / ".claude" / "hooks-config.sh"
+    result = {"workflow_mode": "standard", "sprint_type": "feature", "hooks_version": ""}
+    if config_path.is_file():
+        text = config_path.read_text(encoding="utf-8")
+        m = re.search(r'^WORKFLOW_MODE="(\w+)"', text, re.MULTILINE)
+        if m:
+            result["workflow_mode"] = m.group(1)
+        m = re.search(r'^SPRINT_TYPE="(\w+)"', text, re.MULTILINE)
+        if m:
+            result["sprint_type"] = m.group(1)
+        m = re.search(r'^HOOKS_VERSION="([^"]+)"', text, re.MULTILINE)
+        if m:
+            result["hooks_version"] = m.group(1)
+    return result
+
+
+def collect_knowledge(root: Path) -> Dict[str, int]:
+    """Count guardrails in CODING_GUARDRAILS.md and entries in SPRINT-INDEX.md."""
+    result = {"guardrails": 0, "index_entries": 0}
+    for name in ("CODING_GUARDRAILS.md", "Docs/CODING_GUARDRAILS.md"):
+        p = root / name
+        if p.is_file():
+            text = p.read_text(encoding="utf-8")
+            result["guardrails"] = len(re.findall(r"^(?:##?\s+G-?\d+|^-\s+\*\*G)", text, re.MULTILINE))
+            if result["guardrails"] == 0:
+                result["guardrails"] = len(re.findall(r"^[-*]\s+", text, re.MULTILINE))
+            break
+    for name in ("SPRINT-INDEX.md", "Docs/SPRINT-INDEX.md"):
+        p = root / name
+        if p.is_file():
+            text = p.read_text(encoding="utf-8")
+            result["index_entries"] = len(re.findall(r"^\|\s*\w", text, re.MULTILINE)) - 1  # minus header
+            if result["index_entries"] < 0:
+                result["index_entries"] = 0
+            break
+    return result
+
+
+def collect_validation(root: Path) -> Dict[str, Any]:
+    """Run validate-structure.sh if available and parse results."""
+    script = root / "validation" / "validate-structure.sh"
+    if not script.is_file():
+        return {"available": False, "checks": [], "passed": 0, "failed": 0, "total": 0}
+    try:
+        result = subprocess.run(
+            ["bash", str(script)], capture_output=True, text=True,
+            timeout=15, cwd=str(root),
+            env={**os.environ, "NO_COLOR": "1"},
+        )
+        output = result.stdout + result.stderr
+        passed = len(re.findall(r"(?:PASS|CHECK|OK|✓)", output))
+        failed = len(re.findall(r"(?:FAIL|ERROR|✗)", output))
+        checks: List[Dict[str, str]] = []
+        for line in output.splitlines():
+            m = re.match(r"\s*(PASS|FAIL|CHECK|OK|ERROR|WARN|SKIP)\b[:\s]*(.*)", line, re.IGNORECASE)
+            if m:
+                checks.append({"status": m.group(1).upper(), "detail": m.group(2).strip()})
+        return {
+            "available": True, "checks": checks,
+            "passed": passed, "failed": failed,
+            "total": passed + failed,
+            "exit_code": result.returncode,
+        }
+    except (subprocess.TimeoutExpired, OSError):
+        return {"available": True, "checks": [], "passed": 0, "failed": 0, "total": 0, "error": "timeout"}
+
+
+def infer_sprint_phase(items: List[Dict], gates: Dict, changelog_lines: List[str]) -> str:
+    """Infer sprint phase from items, gates, and changelog — mirrors sprint-state.py logic."""
+    all_cl = " ".join(changelog_lines).lower()
+    if "sprint close" in all_cl and "complete" in all_cl:
+        return "done"
+    cg = gates.get("close", {})
+    if cg.get("exists"):
+        if cg.get("approved"):
+            return "sprint_close"
+        return "close_gate"
+    must_items = [i for i in items if (i.get("priority") or "").lower() == "must"]
+    has_wip = any(i.get("status") in ("in_progress", "fixed") for i in items)
+    all_must_done = must_items and all(
+        i.get("status") in ("verified", "deferred") for i in must_items
+    )
+    if has_wip:
+        return "impl_loop"
+    if all_must_done:
+        return "impl_done"
+    eg = gates.get("entry", {})
+    if eg.get("exists"):
+        return "impl_loop"
+    if any(i.get("status") != "open" for i in items):
+        return "impl_loop"
+    return "planned"
+
+
 def collect_data(root: Path) -> Dict[str, Any]:
     """Build project-level + per-sprint data model."""
     tracking_path = find_file(root, "TRACKING.md")
@@ -454,7 +788,9 @@ def collect_data(root: Path) -> Dict[str, Any]:
         "items": [], "status_counts": {}, "total_items": 0, "completed_items": 0,
         "sprints": [], "risks": [], "failure_history": [], "performance": [],
         "predicted_failures": [], "failure_encounters": [], "dismissed_signals": [],
-        "changelog_lines": [], "current_focus": "No TRACKING.md found",
+        "changelog_lines": [], "changelog_by_sprint": {},
+        "working_context": {}, "session_notes": [],
+        "current_focus": "No TRACKING.md found",
     }
     roadmap_path = find_file(root, "Roadmap.md")
     roadmap = parse_roadmap(roadmap_path) if roadmap_path else {"overview": [], "sprints": {}}
@@ -499,12 +835,14 @@ def collect_data(root: Path) -> Dict[str, Any]:
         # Performance for this sprint
         s_perf = [p for p in tracking.get("performance", []) if p.get("sprint", "").strip() == s_label]
 
+        # Item IDs for this sprint (used by changelog, predicted_failures, failure_encounters)
+        s_item_ids = {i.get("id", "") for i in s_items}
+
         # Changelog for this sprint — prefer structured per-sprint sections, fallback to keyword matching
         changelog_by_sprint = tracking.get("changelog_by_sprint", {})
         if s_label in changelog_by_sprint:
             s_changelog = changelog_by_sprint[s_label]
         else:
-            s_item_ids = {i.get("id", "") for i in s_items}
             s_changelog = []
             for line in tracking.get("changelog_lines", []):
                 for item_id in s_item_ids:
@@ -518,7 +856,7 @@ def collect_data(root: Path) -> Dict[str, Any]:
         # Roadmap data for this sprint
         s_roadmap = roadmap.get("sprints", {}).get(s_label, {})
 
-        # Determine sprint status
+        # Determine sprint status (basic 4-state for backward compat)
         if all(s == "verified" for s in s_statuses) and s_statuses:
             s_status = "complete"
         elif any(s in ("in_progress", "fixed") for s in s_statuses):
@@ -530,6 +868,9 @@ def collect_data(root: Path) -> Dict[str, Any]:
         else:
             s_status = "unknown"
 
+        # v3.1 granular phase (7-state)
+        s_phase = infer_sprint_phase(s_items, s_gates, s_changelog)
+
         sprints[s_label] = {
             "label": s_label,
             "theme": next(
@@ -538,6 +879,7 @@ def collect_data(root: Path) -> Dict[str, Any]:
                 s_roadmap.get("title", "")
             ),
             "status": s_status,
+            "phase": s_phase,
             "items": s_items,
             "status_counts": {
                 "open": s_statuses.count("open"), "in_progress": s_statuses.count("in_progress"),
@@ -575,10 +917,18 @@ def collect_data(root: Path) -> Dict[str, Any]:
         all_sprint_changelogs.update(sd["changelog_lines"])
     project_changelog = tracking.get("changelog_lines", [])
 
+    # v3.1 data sources
+    hooks_status = collect_hooks_status(root)
+    workflow_config = collect_workflow_config(root)
+    knowledge = collect_knowledge(root)
+    validation = collect_validation(root)
+
     return {
         "root": str(root),
         "project": {
             "current_focus": tracking.get("current_focus", "Unknown"),
+            "working_context": tracking.get("working_context", {}),
+            "session_notes": tracking.get("session_notes", []),
             "total_items": tracking["total_items"],
             "completed_items": tracking["completed_items"],
             "status_counts": tracking["status_counts"],
@@ -587,10 +937,14 @@ def collect_data(root: Path) -> Dict[str, Any]:
             "risks": tracking.get("risks", []),
             "dismissed_signals": tracking.get("dismissed_signals", []),
             "changelog_lines": project_changelog,
+            "workflow_config": workflow_config,
         },
         "sprints": sprints,
         "roadmap": roadmap,
         "trends": trends,
+        "hooks": hooks_status,
+        "knowledge": knowledge,
+        "validation": validation,
     }
 
 
@@ -632,13 +986,47 @@ def render_cli(data):
     for s, (c, i) in icons.items():
         if sc.get(s, 0) > 0:
             status_parts.append(f"{c}{sc[s]}{s[0].upper()}{C.R}")
-    L.append(f"{C.B}{proj.get('current_focus', '')}{C.R}")
+    # ── Workflow mode + version badge ──
+    wc_cfg = proj.get("workflow_config", {})
+    mode_str = wc_cfg.get("workflow_mode", "")
+    ver_str = wc_cfg.get("hooks_version", "")
+    badge_parts = []
+    if mode_str:
+        mode_c = {"strict": C.RE, "standard": C.GR, "lite": C.YE, "freestyle": C.MA}.get(mode_str, C.D)
+        badge_parts.append(f"{mode_c}{mode_str}{C.R}")
+    if ver_str:
+        badge_parts.append(f"{C.D}v{ver_str}{C.R}")
+    badge_line = f"  [{' '.join(badge_parts)}]" if badge_parts else ""
+
+    L.append(f"{C.B}{proj.get('current_focus', '')}{C.R}{badge_line}")
     L.append(f"{color}{'█' * filled}{'░' * (bar_w - filled)}{C.R} {pct}%  {' '.join(status_parts)}")
+
+    # ── Working Context ──
+    wctx = proj.get("working_context", {})
+    _wc_empty = {"", "—", "-"}
+    if wctx:
+        ctx_parts = []
+        doing = wctx.get("doing", "")
+        if doing and doing not in _wc_empty:
+            ctx_parts.append(f"{C.CY}doing:{C.R} {doing}")
+        blockers = wctx.get("blockers", "")
+        if blockers and blockers not in _wc_empty:
+            ctx_parts.append(f"{C.RE}blocked:{C.R} {blockers}")
+        if ctx_parts:
+            L.append(f"  {' | '.join(ctx_parts)}")
 
     # ── Sprint overview (one line per sprint) ──
     L.append("")
+    phase_icons = {
+        "planned": f"{C.D}plan{C.R}", "entry_gate": f"{C.BL}gate{C.R}",
+        "impl_loop": f"{C.YE}impl{C.R}", "impl_done": f"{C.CY}done{C.R}",
+        "close_gate": f"{C.MA}cgate{C.R}", "sprint_close": f"{C.BL}close{C.R}",
+        "done": f"{C.GR}done{C.R}",
+    }
     for s_label, sd in sprints.items():
         si = {"complete": f"{C.GR}✓", "active": f"{C.YE}▶", "planned": f"{C.D}◌"}.get(sd["status"], f"{C.D}?")
+        phase = sd.get("phase", "")
+        phase_str = phase_icons.get(phase, "")
         theme = sd.get("theme", "")
         ti, di = sd["total_items"], sd["completed_items"]
         # Gates inline
@@ -655,10 +1043,10 @@ def render_cli(data):
         if ti:
             sp = int(di / ti * 100)
             sp_bar = int(sp / 100 * 10)
-            item_str = f"{color if sp == 100 else C.YE}{'█' * sp_bar}{'░' * (10 - sp_bar)}{C.R} {di}/{ti}"
+            item_str = f"{C.GR if sp == 100 else C.YE}{'█' * sp_bar}{'░' * (10 - sp_bar)}{C.R} {di}/{ti}"
         else:
             item_str = f"{C.D}sketch{C.R}"
-        L.append(f"  {si}{C.R} {C.B}{s_label}{C.R} {theme[:30]:<30} {gate_str} {item_str}")
+        L.append(f"  {si}{C.R} {C.B}{s_label}{C.R} {phase_str} {theme[:25]:<25} {gate_str} {item_str}")
 
     # ── Current sprint items (compact) ──
     current = proj.get("current_sprint")
@@ -737,6 +1125,38 @@ def render_cli(data):
         if t_parts:
             L.append(f"\n{C.B}trends:{C.R} {'  '.join(t_parts)}")
 
+    # ── Session Notes (last 3) ──
+    notes = proj.get("session_notes", [])
+    if notes:
+        note_icons = {"decision": f"{C.BL}D{C.R}", "attempt": f"{C.YE}A{C.R}",
+                       "observation": f"{C.CY}O{C.R}", "side-effect": f"{C.RE}S{C.R}",
+                       "artifact": f"{C.MA}F{C.R}"}
+        L.append(f"\n{C.B}notes:{C.R} {C.D}({len(notes)} total){C.R}")
+        for n in notes[-3:]:
+            ni = note_icons.get(n.get("type", ""), f"{C.D}?{C.R}")
+            txt = n.get("text", "")
+            if len(txt) > 60:
+                txt = txt[:57] + "..."
+            L.append(f"  {ni} {txt}")
+
+    # ── Hooks + Knowledge + Validation (compact) ──
+    infra_parts = []
+    hooks_data = data.get("hooks", {})
+    if hooks_data.get("total"):
+        hc = C.GR if hooks_data["enabled"] == hooks_data["total"] else C.YE
+        infra_parts.append(f"{hc}{hooks_data['enabled']}/{hooks_data['total']} hooks{C.R}")
+    know = data.get("knowledge", {})
+    if know.get("guardrails"):
+        infra_parts.append(f"{C.CY}{know['guardrails']} guardrails{C.R}")
+    if know.get("index_entries"):
+        infra_parts.append(f"{C.BL}{know['index_entries']} index{C.R}")
+    val = data.get("validation", {})
+    if val.get("available") and val.get("total"):
+        vc = C.GR if val["failed"] == 0 else C.RE
+        infra_parts.append(f"{vc}{val['passed']}/{val['total']} validation{C.R}")
+    if infra_parts:
+        L.append(f"\n{C.B}infra:{C.R} {'  '.join(infra_parts)}")
+
     # ── Recent (last 3) ──
     cl = proj.get("changelog_lines", [])
     if cl:
@@ -745,7 +1165,7 @@ def render_cli(data):
             L.append(f"  {C.D}•{C.R} {e}")
 
     # ── Footer: HTML hint ──
-    L.append(f"\n{C.D}Run with --html or --serve for full interactive dashboard{C.R}")
+    L.append(f"\n{C.D}Run with --serve for full interactive dashboard{C.R}")
 
     return "\n".join(L)
 
@@ -873,11 +1293,46 @@ tr:last-child td{border-bottom:none}
 .sm td,.sm th{padding:.35rem .5rem}
 .dim{color:var(--text2);font-size:.8rem}
 .empty{color:var(--text2);font-size:.85rem;padding:.5rem 0}
+/* Working Context banner */
+.wc-banner{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.75rem 1.25rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;font-size:.85rem}
+.wc-item{display:flex;align-items:center;gap:.35rem}
+.wc-label{font-weight:600;font-size:.75rem;text-transform:uppercase;color:var(--text2)}
+
+/* Mode/version badge */
+.mode-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .6rem;border-radius:12px;font-size:.75rem;font-weight:500;border:1px solid var(--border)}
+.mode-standard{border-color:var(--green);color:var(--green)}
+.mode-strict{border-color:var(--red);color:var(--red)}
+.mode-lite{border-color:var(--yellow);color:var(--yellow)}
+.mode-freestyle{border-color:var(--magenta);color:var(--magenta)}
+
+/* Phase badge */
+.phase-badge{display:inline-block;padding:.1rem .4rem;border-radius:8px;font-size:.65rem;font-weight:500;letter-spacing:.03em}
+.ph-planned{background:var(--bg3);color:var(--text2)}
+.ph-entry_gate{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
+.ph-impl_loop{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
+.ph-impl_done{background:color-mix(in srgb,var(--cyan) 15%,transparent);color:var(--cyan)}
+.ph-close_gate{background:color-mix(in srgb,var(--magenta) 15%,transparent);color:var(--magenta)}
+.ph-sprint_close{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
+.ph-done{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
+
+/* Note type badges */
+.note-badge{display:inline-block;padding:.1rem .35rem;border-radius:6px;font-size:.65rem;font-weight:500;margin-right:.35rem}
+.nt-decision{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
+.nt-attempt{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
+.nt-observation{background:color-mix(in srgb,var(--cyan) 15%,transparent);color:var(--cyan)}
+.nt-side-effect{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
+.nt-artifact{background:color-mix(in srgb,var(--magenta) 15%,transparent);color:var(--magenta)}
+
+/* Hook status */
+.hook-row{display:flex;align-items:center;gap:.5rem;padding:.25rem 0;font-size:.8rem}
+.hook-dot{width:8px;height:8px;border-radius:50%}
+
 .footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);font-size:.75rem;color:var(--text2);text-align:center}
 </style></head>
 <body>
 <h1 id="title">Loading...</h1>
-<div class="subtitle"><span class="live-dot"></span><span id="sub"></span></div>
+<div class="subtitle"><span class="live-dot"></span><span id="sub"></span><span id="mode-badges" style="margin-left:.5rem"></span></div>
+<div id="wc-banner" class="wc-banner" style="display:none"></div>
 <div class="layout">
   <div class="sidebar">
     <div class="card">
@@ -900,6 +1355,7 @@ tr:last-child td{border-bottom:none}
       <div class="card" id="checkmark-card" style="display:none"><div class="card-title">Consistency Check</div><div id="checkmarks"></div></div>
       <div class="card full"><div class="card-title" id="board-title">Sprint Board</div><div id="board"></div></div>
       <div class="card full"><div class="card-title">Recent Activity</div><div id="activity"></div></div>
+      <div class="card full" id="notes-card" style="display:none"><div class="card-title">Session Notes</div><div id="notes"></div></div>
     </div></div>
     <div id="tab-quality" class="tab-panel"><div class="grid">
       <div class="card"><div class="card-title">Metrics</div><div id="metrics"></div></div>
@@ -912,6 +1368,9 @@ tr:last-child td{border-bottom:none}
       <div class="card full"><div class="card-title">Close Gate — Audit Detail</div><div id="cgdetail"></div></div>
       <div class="card"><div class="card-title">Test Coverage — Files</div><div id="coverage-files"></div></div>
       <div class="card"><div class="card-title">Test Coverage — Items</div><div id="coverage-items"></div></div>
+      <div class="card"><div class="card-title">Hook Status</div><div id="hooks"></div></div>
+      <div class="card"><div class="card-title">Knowledge Base</div><div id="knowledge"></div></div>
+      <div class="card full"><div class="card-title">Validation</div><div id="validation"></div></div>
     </div></div>
     <div id="tab-trends" class="tab-panel"><div id="trends"></div></div>
   </div>
@@ -960,18 +1419,41 @@ function renderAll(D){
   $('title').textContent=proj.current_focus||'No active sprint';
   $('sub').textContent=D.root||'';
 
+  // Mode badges
+  const wc_cfg=proj.workflow_config||{};
+  let mb='';
+  if(wc_cfg.workflow_mode){mb+=`<span class="mode-badge mode-${wc_cfg.workflow_mode}">${E(wc_cfg.workflow_mode)}</span> `}
+  if(wc_cfg.hooks_version){mb+=`<span style="font-size:.75rem;color:var(--text2)">v${E(wc_cfg.hooks_version)}</span>`}
+  $('mode-badges').innerHTML=mb;
+
+  // Working context banner
+  const wctx=proj.working_context||{};
+  const _wcEmpty=new Set(['','\u2014','-']);
+  const _wcVal=v=>v&&!_wcEmpty.has(v);
+  if(_wcVal(wctx.task)||_wcVal(wctx.doing)||_wcVal(wctx.blockers)){
+    let wh='';
+    if(_wcVal(wctx.task))wh+=`<div class="wc-item"><span class="wc-label">Task</span>${E(wctx.task)}</div>`;
+    if(_wcVal(wctx.doing))wh+=`<div class="wc-item"><span class="wc-label">Doing</span>${E(wctx.doing)}</div>`;
+    if(_wcVal(wctx.decisions))wh+=`<div class="wc-item"><span class="wc-label">Decisions</span>${E(wctx.decisions)}</div>`;
+    if(_wcVal(wctx.blockers))wh+=`<div class="wc-item"><span class="wc-label" style="color:var(--red)">Blocked</span><span style="color:var(--red)">${E(wctx.blockers)}</span></div>`;
+    $('wc-banner').innerHTML=wh;$('wc-banner').style.display='flex';
+  } else {$('wc-banner').style.display='none'}
+
   // Sidebar sprint list
   const labels=proj.sprint_labels||[];
   let sh='';
   labels.forEach(s=>{
     const sd=sprints[s]||{};
     const st=sd.status||'unknown';
+    const phase=sd.phase||'';
+    const phaseLabels={planned:'Plan',entry_gate:'Entry',impl_loop:'Impl',impl_done:'Done',close_gate:'CG',sprint_close:'SC',done:'Done'};
     const dotColor=st==='complete'?'var(--green)':st==='active'?'var(--yellow)':'var(--bg3)';
     const border=st==='complete'||st==='active'?'none':'2px solid var(--border)';
     const done=sd.completed_items||0;const tot=sd.total_items||0;
     const meta=tot>0?`${done}/${tot} items`:sd.theme?'sketch':'';
+    const phBadge=phase?` <span class="phase-badge ph-${phase}">${phaseLabels[phase]||phase}</span>`:'';
     const act=currentView===s?' active':'';
-    sh+=`<div class="s-node${act}" data-sprint="${E(s)}"><div class="s-dot" style="background:${dotColor};border:${border}"></div><div class="s-info"><div class="s-label">${E(s)}${sd.theme?' — '+E(sd.theme):''}</div><div class="s-meta">${E(meta)}</div></div></div>`;
+    sh+=`<div class="s-node${act}" data-sprint="${E(s)}"><div class="s-dot" style="background:${dotColor};border:${border}"></div><div class="s-info"><div class="s-label">${E(s)}${phBadge}${sd.theme?' — '+E(sd.theme):''}</div><div class="s-meta">${E(meta)}</div></div></div>`;
   });
   $('sidebar-sprints').innerHTML=sh;
   // Re-attach click handlers
@@ -1039,6 +1521,8 @@ function renderProjectView(D){
   // For metrics/coverage, show latest close gate that exists
   const aggCGates=latestCloseGate?{close:latestCloseGate,entry:(cur&&sprints[cur]?sprints[cur].gates||{}:{}).entry||{}}:(cur&&sprints[cur]?sprints[cur].gates||{}:{});
   renderQuality(aggCGates,aggFA,aggPerf,proj.risks||[],proj.dismissed_signals||[],aggPF,aggFE);
+  renderSessionNotes(proj.session_notes||[]);
+  renderInfra(D);
 }
 
 function renderSprintView(D, sprintLabel){
@@ -1057,6 +1541,8 @@ function renderSprintView(D, sprintLabel){
   renderActivity(sd.changelog_lines||[]);
   renderCheckmarks(sd.gates||{});
   renderQuality(sd.gates||{},sd.failure_analysis||{},sd.performance||[],(D.project||{}).risks||[],(D.project||{}).dismissed_signals||[],sd.predicted_failures||[],sd.failure_encounters||[]);
+  renderSessionNotes((D.project||{}).session_notes||[]);
+  renderInfra(D);
 }
 
 function renderProgress(pct,sc){
@@ -1287,7 +1773,7 @@ function renderQuality(gates,fa,perf,risks,ds,predictedFailures,failureEncounter
     let h='<div class="scroll-box">';
     if(fe.length){
       h+='<div style="margin-bottom:.75rem"><div style="font-size:.8rem;font-weight:600;color:var(--red);margin-bottom:.35rem">Encountered</div>';
-      fe.forEach(f=>{h+=`<div style="padding:.2rem 0;font-size:.8rem"><span style="color:var(--red)">!</span> ${E(f.mode||f.predicted_mode||'')} <span class="dim">(${E(f.item||'')})</span></div>`});
+      fe.forEach(f=>{h+=`<div style="padding:.2rem 0;font-size:.8rem"><span style="color:var(--red)">!</span> ${E(f.failure_description||f.mode||f.predicted_mode||'')} <span class="dim">(${E(f.item||'')})</span></div>`});
       h+='</div>';
     }
     if(pf.length){
@@ -1365,7 +1851,7 @@ function renderQuality(gates,fa,perf,risks,ds,predictedFailures,failureEncounter
   // Dismissed Signals
   if(ds.length){
     let h='<table class="sm"><thead><tr><th>CP</th><th>System</th><th>Signal</th><th>Decision</th><th>#</th></tr></thead><tbody>';
-    ds.forEach(d=>{h+=`<tr><td>${E(d.checkpoint||'')}</td><td>${E(d['system___metric']||d.system||'')}</td><td>${E(d.signal_summary||'')}</td><td>${E(d.user_decision||'')}</td><td>${E(d['dismissal_#']||d.dismissal||'')}</td></tr>`});
+    ds.forEach(d=>{h+=`<tr><td>${E(d.checkpoint||'')}</td><td>${E(d.system_metric||d['system___metric']||d.system||'')}</td><td>${E(d.signal_summary||'')}</td><td>${E(d.user_decision||'')}</td><td>${E(d['dismissal_#']||d.dismissal||'')}</td></tr>`});
     h+='</tbody></table>';$('dismissed').innerHTML=h;
   } else $('dismissed').innerHTML='<div class="empty">No dismissed signals</div>';
 }
@@ -1499,6 +1985,81 @@ function renderTrends(tr){
   $('trends').innerHTML=h||'<div class="empty">No trend data yet</div>';
 }
 
+// ── v3.1 renderers ──
+
+function renderSessionNotes(notes){
+  const card=$('notes-card');
+  if(!notes||!notes.length){card.style.display='none';return}
+  card.style.display='';
+  let h='<div class="scroll-box" style="max-height:300px">';
+  notes.slice(-15).forEach(n=>{
+    const t=n.type||'observation';
+    h+=`<div style="padding:.3rem 0;font-size:.82rem;border-bottom:1px solid var(--border)">`;
+    h+=`<span class="note-badge nt-${t}">${E(t)}</span>`;
+    if(n.item)h+=`<span style="font-weight:600;font-size:.75rem;margin-right:.35rem">${E(n.item)}</span>`;
+    h+=`${E(n.text||'')}`;
+    if(n.timestamp)h+=` <span class="dim">${E(n.timestamp)}</span>`;
+    h+=`</div>`;
+  });
+  h+='</div>';
+  if(notes.length>15)h+=`<div style="font-size:.75rem;color:var(--text2);padding-top:.35rem">${notes.length} notes total</div>`;
+  $('notes').innerHTML=h;
+}
+
+function renderInfra(D){
+  const hooks=D.hooks||{};
+  const know=D.knowledge||{};
+  const val=D.validation||{};
+
+  // Hooks
+  if(hooks.total>0){
+    const pct=Math.round(hooks.enabled/hooks.total*100);
+    const col=pct===100?'var(--green)':'var(--yellow)';
+    let h=`<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">`;
+    h+=`<span style="font-size:1.25rem;font-weight:700;color:${col}">${hooks.enabled}/${hooks.total}</span>`;
+    h+=`<span class="dim">hooks enabled</span></div>`;
+    h+='<div class="scroll-box" style="max-height:200px">';
+    (hooks.hooks||[]).forEach(hk=>{
+      const dc=hk.enabled?'var(--green)':'var(--border)';
+      h+=`<div class="hook-row"><span class="hook-dot" style="background:${dc}"></span><span>${E(hk.name)}</span></div>`;
+    });
+    h+='</div>';
+    $('hooks').innerHTML=h;
+  } else $('hooks').innerHTML='<div class="empty">No hooks directory</div>';
+
+  // Knowledge
+  if(know.guardrails>0||know.index_entries>0){
+    let h='<div style="display:flex;gap:1.5rem">';
+    if(know.guardrails>0)h+=`<div class="fstat"><div class="n" style="color:var(--cyan)">${know.guardrails}</div><div class="l">Guardrails</div></div>`;
+    if(know.index_entries>0)h+=`<div class="fstat"><div class="n" style="color:var(--blue)">${know.index_entries}</div><div class="l">Index Entries</div></div>`;
+    h+='</div>';
+    $('knowledge').innerHTML=h;
+  } else $('knowledge').innerHTML='<div class="empty">No knowledge files</div>';
+
+  // Validation
+  if(val.available){
+    if(val.error){
+      $('validation').innerHTML=`<div class="empty">Validation timed out</div>`;
+    } else if(val.total>0){
+      const col=val.failed===0?'var(--green)':'var(--red)';
+      let h=`<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">`;
+      h+=`<span style="font-size:1.25rem;font-weight:700;color:${col}">${val.passed}/${val.total}</span>`;
+      h+=`<span class="dim">checks passed</span>`;
+      if(val.failed>0)h+=`<span style="color:var(--red);font-weight:600">${val.failed} failed</span>`;
+      h+=`</div>`;
+      if(val.checks&&val.checks.length){
+        h+='<div class="scroll-box" style="max-height:200px">';
+        val.checks.forEach(c=>{
+          const ic=c.status==='PASS'||c.status==='OK'||c.status==='CHECK'?'<span style="color:var(--green)">✓</span>':'<span style="color:var(--red)">✗</span>';
+          h+=`<div style="padding:.2rem 0;font-size:.8rem">${ic} ${E(c.detail)}</div>`;
+        });
+        h+='</div>';
+      }
+      $('validation').innerHTML=h;
+    } else $('validation').innerHTML='<div class="empty">No validation output</div>';
+  } else $('validation').innerHTML='<div class="empty">validate-structure.sh not found</div>';
+}
+
 // Data loading
 const EMBEDDED=/*DATA_JSON*/null/*END_DATA*/;
 
@@ -1510,7 +2071,7 @@ if(EMBEDDED){
   async function poll(){
     try{
       const r=await fetch('/api/data');const d=await r.json();
-      const h=JSON.stringify(d).length.toString();
+      const h=JSON.stringify(d);
       if(h!==lastHash){lastHash=h;renderAll(d)}
     }catch(e){}
     setTimeout(poll,2000);
@@ -1531,10 +2092,26 @@ def render_html() -> str:
 def find_watched_files(root: Path) -> List[Path]:
     """Return only the files that matter for dashboard data (not all *.md)."""
     files = []
-    for name in ["TRACKING.md", "Roadmap.md"]:
-        f = find_file(root, name)
-        if f:
+    for name in ["TRACKING.md", "Roadmap.md", "CODING_GUARDRAILS.md",
+                  "SPRINT-INDEX.md", "Docs/CODING_GUARDRAILS.md", "Docs/SPRINT-INDEX.md"]:
+        f = root / name
+        if f.is_file():
             files.append(f)
+        else:
+            found = find_file(root, name.split("/")[-1])
+            if found:
+                files.append(found)
+    # hooks-config + individual hook scripts
+    hc = root / ".claude" / "hooks-config.sh"
+    if hc.is_file():
+        files.append(hc)
+    hooks_dir = root / ".claude" / "hooks"
+    if hooks_dir.is_dir():
+        files.extend(f for f in hooks_dir.iterdir() if f.suffix == ".sh")
+    # validation script
+    vs = root / "validation" / "validate-structure.sh"
+    if vs.is_file():
+        files.append(vs)
     for p in root.glob("**/*GATE*.md"):
         files.append(p)
     for p in root.glob("**/*SPRINT_CLOSE*.md"):

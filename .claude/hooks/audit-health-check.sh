@@ -34,7 +34,7 @@ fi
 
 # Check if jq is available
 if ! command -v jq >/dev/null 2>&1; then
-  red "jq is required for health check. Install: sudo pacman -S jq"
+  red "jq is required for health check. Install jq: apt/brew/pacman/choco install jq"
   exit 1
 fi
 
