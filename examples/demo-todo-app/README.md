@@ -10,11 +10,27 @@ A solo developer uses the workflow to build a Todo API (TypeScript/Express/SQLit
 
 | Phase | Date | What happened | Files affected |
 |-------|------|---------------|----------------|
-| Bootstrap | 2025-01-15 | Project scanned, files created | CLAUDE.md, TRACKING.md, Roadmap.md, CODING_GUARDRAILS.md |
-| Entry Gate | 2025-01-15 | Sprint plan reviewed, failure modes analyzed | S1_ENTRY_GATE.md, TRACKING.md |
+| Bootstrap | 2025-01-15 | Project scanned, files created | CLAUDE.md, TRACKING.md, Docs/Planning/Roadmap.md, Docs/CODING_GUARDRAILS.md |
+| Entry Gate | 2025-01-15 | Sprint plan reviewed, failure modes analyzed | Docs/Planning/S1_ENTRY_GATE.md, TRACKING.md |
 | Implementation | 2025-01-15-17 | 4 items implemented and tested | TRACKING.md |
-| Close Gate | 2025-01-17 | Automated + manual audit passed | S1_CLOSE_GATE.md, TRACKING.md |
-| Sprint Close | 2025-01-17 | Retrospective, baseline, archive | SPRINT_CLOSE_REPORT.md, CLAUDE.md, Roadmap.md, TRACKING.md |
+| Close Gate | 2025-01-17 | Automated + manual audit passed | Docs/Planning/S1_CLOSE_GATE.md, TRACKING.md |
+| Sprint Close | 2025-01-17 | Retrospective, baseline, archive | Docs/Planning/SPRINT_CLOSE_REPORT.md, CLAUDE.md, Docs/Planning/Roadmap.md, TRACKING.md |
+
+## Directory Structure
+
+```
+project-root/
+├── CLAUDE.md                            # AI session context — project summary, rules, checkpoint
+├── TRACKING.md                          # Single source of truth — item statuses, failure log, baselines
+├── Docs/
+│   ├── CODING_GUARDRAILS.md             # Engineering rules the AI checks before writing code
+│   └── Planning/
+│       ├── Roadmap.md                   # Sprint plan with priorities and metric gates
+│       ├── S1_ENTRY_GATE.md             # Entry gate report — failure modes, implementation order
+│       ├── S1_CLOSE_GATE.md             # Close gate report — audit results, metric verification
+│       └── SPRINT_CLOSE_REPORT.md       # User handoff — before/after per item, retrospective
+└── src/                                 # (your source code)
+```
 
 ## File Guide
 
@@ -22,23 +38,23 @@ A solo developer uses the workflow to build a Todo API (TypeScript/Express/SQLit
 |------|---------|
 | `CLAUDE.md` | AI session context — project summary, rules, last checkpoint |
 | `TRACKING.md` | Single source of truth — item statuses, failure log, baselines, change log |
-| `Roadmap.md` | Sprint plan with priorities and metric gates |
-| `CODING_GUARDRAILS.md` | Engineering rules the AI checks before writing code |
-| `S1_ENTRY_GATE.md` | Entry gate report — failure mode analysis, implementation order |
-| `S1_CLOSE_GATE.md` | Close gate report — audit results, metric verification, verdict |
-| `SPRINT_CLOSE_REPORT.md` | User handoff — before/after per item, retrospective, baselines |
+| `Docs/Planning/Roadmap.md` | Sprint plan with priorities and metric gates |
+| `Docs/CODING_GUARDRAILS.md` | Engineering rules the AI checks before writing code |
+| `Docs/Planning/S1_ENTRY_GATE.md` | Entry gate report — failure mode analysis, implementation order |
+| `Docs/Planning/S1_CLOSE_GATE.md` | Close gate report — audit results, metric verification, verdict |
+| `Docs/Planning/SPRINT_CLOSE_REPORT.md` | User handoff — before/after per item, retrospective, baselines |
 
 ## Important Notes
 
 **Gate report retention:** In a real project, `S1_ENTRY_GATE.md` is deleted at Sprint Close (TRACKING.md's gate log section is the permanent record). It is kept here for demonstration purposes so you can see what an entry gate report looks like.
 
-**Flat structure:** These files live in a single directory — the same structure your project will have. There are no stage subfolders. A real project has these files at the repository root (or in the configured docs directory), alongside your source code.
+**Directory structure:** v3.1 uses a `Docs/` subdirectory for guardrails and planning artifacts. Only `CLAUDE.md` and `TRACKING.md` live at the project root — this keeps the root clean while keeping the two most-accessed files immediately visible.
 
 ## How to Use This Example
 
 1. Read the files in timeline order (Bootstrap -> Entry Gate -> Close Gate -> Sprint Close) to understand the workflow progression.
 2. Notice how TRACKING.md's Change Log tells the full story of the sprint.
-3. See how a failure (SQLite WAL mode) flows through the system: Failure Encounters -> Failure Mode History -> Guardrail added -> CODING_GUARDRAILS.md updated.
+3. See how a failure (SQLite WAL mode) flows through the system: Failure Encounters -> Failure Mode History -> Guardrail added -> Docs/CODING_GUARDRAILS.md updated.
 4. Compare the Entry Gate's predicted failure modes against the Sprint Close retrospective.
 
 For the full workflow documentation, see the `Docs/Workflow/` directory in the main repository.

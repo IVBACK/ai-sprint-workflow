@@ -31,7 +31,7 @@ To contribute a playbook:
 
 1. Create `playbooks/your-agent-playbook/README.md`
 2. Include: setup steps, hook equivalents table, session prompts, known limitations
-3. Include the agent's native rule file (e.g., `.cursor/rules/*.mdc`, `.clinerules`, `.windsurfrules`)
+3. Include the agent's native rule file (e.g., `.cursor/rules/*.mdc`, `.clinerules/`, `.windsurf/rules/*.md`)
 4. Add "Read CLAUDE.md" to the session start protocol in the rule file
 5. Update the compatibility table in `README.md`
 

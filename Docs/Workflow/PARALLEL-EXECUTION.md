@@ -244,7 +244,7 @@ ELIF false positive -> merge, document in commit message
 
 ## 6. Close Gate -- Parallel Pattern
 
-Phase -1 sequential: `git checkout sprint-N-impl` + state recovery (TRACKING.md + Entry Gate).
+Preamble (sequential): `git checkout sprint-N-impl` + state recovery (TRACKING.md + Entry Gate).
 
 ### Wave 1 -- Automated Checks (parallel)
 
@@ -306,7 +306,7 @@ IMPLEMENTATION (sprint-N-impl branch)
   Wave N+1 -- checklist -> launch (forks from committed state)
 
 CLOSE GATE (sprint-N-impl branch)
-  Phase -1 -- sequential (checkout + state recovery)
+  Preamble -- sequential (checkout + state recovery)
   Wave 1   -- parallel: sprint-audit.sh + per-item metrics
   Merge    -- metric table + audit summary -> user
   Wave 2   -- parallel: per-item FM/fitness + cross-cut review

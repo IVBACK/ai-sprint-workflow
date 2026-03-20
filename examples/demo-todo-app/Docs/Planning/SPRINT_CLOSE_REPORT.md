@@ -54,7 +54,7 @@
 
 ## Guardrail Added
 
-- **G-SQL:** "Enable WAL mode at DB init" — added to CODING_GUARDRAILS.md after CORE-002 failure encounter.
+- **G-SQL:** "Enable WAL mode at DB init" — added to Docs/CODING_GUARDRAILS.md after CORE-002 failure encounter.
 
 ## Git
 

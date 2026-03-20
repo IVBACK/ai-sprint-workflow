@@ -57,8 +57,9 @@ Four [workflow modes](Docs/Workflow/WORKFLOW-MODES.md) from zero-overhead to ful
 | Sprint Close (finalization) | [Docs/Workflow/SPRINT-CLOSE.md](Docs/Workflow/SPRINT-CLOSE.md) |
 | Scope change, abort, audit | [Docs/Workflow/PROCEDURES.md](Docs/Workflow/PROCEDURES.md) |
 | AI agent rules | [Docs/Workflow/AGENT-RULES.md](Docs/Workflow/AGENT-RULES.md) |
-| Hook enforcement (Claude Code) | [Docs/Systems/HOOKS.md](Docs/Systems/HOOKS.md) |
-| Automation tools (Claude Code) | [Docs/Systems/TOOLS.md](Docs/Systems/TOOLS.md) |
+| Agent setup (non-Claude platforms) | [Docs/Workflow/AGENT-SETUP.md](Docs/Workflow/AGENT-SETUP.md) |
+| Hook enforcement | [Docs/Systems/HOOKS.md](Docs/Systems/HOOKS.md) |
+| Automation tools | [Docs/Systems/TOOLS.md](Docs/Systems/TOOLS.md) |
 | Cross-LLM audit | [Docs/Workflow/CROSS-LLM-AUDIT.md](Docs/Workflow/CROSS-LLM-AUDIT.md) |
 | Parallel execution | [Docs/Workflow/PARALLEL-EXECUTION.md](Docs/Workflow/PARALLEL-EXECUTION.md) |
 | Team topologies | [Docs/Workflow/TEAM-GUIDE.md](Docs/Workflow/TEAM-GUIDE.md) |
@@ -74,23 +75,19 @@ Four [workflow modes](Docs/Workflow/WORKFLOW-MODES.md) from zero-overhead to ful
 
 ## Agent Support
 
-**Works with:** Claude Code (tested) | Cursor | GitHub Copilot | Windsurf | Cline | Codex CLI | Gemini CLI | any markdown-reading agent.
+**Works with any markdown-reading AI agent.** The core methodology is documented in markdown — any agent can read and follow it. Enforcement tooling (hooks, CLI, audit scripts) is additional. What varies is how much this project provides out of the box for each platform.
 
-| Capability | Claude Code | Other Agents |
-|-----------|:-----------:|:------------:|
-| Core workflow (gates, tracking, audit) | Full | Full (untested) |
-| Sprint-tools CLI | Full | Full* (untested) |
-| Sprint dashboard | Full | Full* (untested) |
-| Hook enforcement (mechanical) | Full | — |
-| Parallel execution (sub-agents) | Full | — |
-| Workflow mode enforcement | Full | — |
-| Cross-session memory | Full | Varies** (untested) |
+| Platform | Integration | What's Provided |
+|---|---|---|
+| **Claude Code** | Full (tested) | 14 hook scripts + 4 support scripts, sprint-tools CLI (13 commands), dashboard, cross-LLM audit, auto-memory sync |
+| **Cursor** | [Playbook](playbooks/cursor-playbook/) | Adaptation guide, rule file examples. Platform supports hooks — community hook scripts welcome |
+| **Windsurf** | [Playbook](playbooks/windsurf-playbook/) | Adaptation guide, rule file examples. Platform supports hooks — community hook scripts welcome |
+| **Cline** | [Playbook](playbooks/cline-playbook/) | Adaptation guide, rule file examples. Platform supports hooks — community hook scripts welcome |
+| **GitHub Copilot** | [Playbook](playbooks/copilot-playbook/) | Adaptation guide. No hook support on platform |
+| **Codex CLI** | [Playbook](playbooks/codex-playbook/) | Adaptation guide |
+| **Gemini CLI** | [Playbook](playbooks/gemini-playbook/) | Adaptation guide |
 
-All agents get the full sprint methodology. Claude Code adds mechanical enforcement — rules that are advisory for other agents become hard gates. See agent-specific adaptation guides in [`playbooks/`](playbooks/) for native rule files and hook-mapping workarounds.
-
-\* Requires shell/terminal access. GitHub Copilot has limited terminal integration.
-\** Windsurf/Cline/Codex/Gemini: partial (file-based). Copilot: none (session-scoped only).
-Adaptation guides: [Cursor](playbooks/cursor-playbook/) · [Copilot](playbooks/copilot-playbook/) · [Windsurf](playbooks/windsurf-playbook/) · [Cline](playbooks/cline-playbook/) · [Codex](playbooks/codex-playbook/) · [Gemini](playbooks/gemini-playbook/)
+All agents get the full sprint methodology via markdown documentation. Claude Code is the only platform with ready-to-use mechanical enforcement (hook scripts that block gate violations). Cursor, Windsurf, and Cline support hooks natively — their hook scripts are not yet provided but [contributions are welcome](CONTRIBUTING.md).
 
 ## Measured Performance
 

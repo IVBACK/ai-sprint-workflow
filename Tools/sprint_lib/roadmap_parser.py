@@ -12,7 +12,7 @@ from sprint_lib.models import RoadmapData, RoadmapItem, RoadmapSprint
 # ---------------------------------------------------------------------------
 
 _OVERVIEW_ROW = re.compile(
-    r"^\|\s*(?P<key>\S+)\s*\|\s*(?P<theme>.+?)\s*\|\s*(?P<status>.+?)\s*\|$"
+    r"^\|\s*(?P<key>\S+)\s*\|\s*(?P<theme>.+?)\s*\|(?:.*\|)?\s*(?P<status>\w[\w\s]*?)\s*\|?\s*$"
 )
 
 _SPRINT_HEADING = re.compile(
@@ -20,11 +20,11 @@ _SPRINT_HEADING = re.compile(
 )
 
 _PRIORITY_HEADING = re.compile(
-    r"^###\s+(Must|Should|Could)\s*$", re.IGNORECASE
+    r"^(?:###\s+|\*\*)(Must|Should|Could):?(?:\*\*)?\s*$", re.IGNORECASE
 )
 
 _ITEM_LINE = re.compile(
-    r"^- \[(?P<cb>[ x~])\]\s+(?P<id>CORE-\d+):\s*(?P<desc>.+)$"
+    r"^- \[(?P<cb>[ x~])\]\s+(?P<id>[A-Z]+-\d+):?\s+(?P<desc>.+)$"
 )
 
 _METRIC_LINE = re.compile(

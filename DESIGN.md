@@ -305,7 +305,7 @@ AI reads this file
                          │ only (optional)  │     │  hooks-config.sh    │
                          │ Create hook      │     │  settings.json      │
                          │ infrastructure   │     │  setup-audit.sh     │
-                         │                  │     │  hooks/*.sh (×11)   │
+                         │                  │     │  hooks/*.sh (×14)   │
                          └────────┬─────────┘     └─────────────────────┘
                                   │
                                   ▼

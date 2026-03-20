@@ -38,7 +38,10 @@ def find_project_root(start: str = ".") -> Optional[Path]:
 
 
 def find_file(root: Path, name: str) -> Optional[Path]:
-    search_depth = int(os.environ.get("DASHBOARD_SEARCH_DEPTH", "3"))
+    try:
+        search_depth = max(1, min(10, int(os.environ.get("DASHBOARD_SEARCH_DEPTH", "3"))))
+    except (ValueError, TypeError):
+        search_depth = 3
     for depth in range(search_depth):
         for p in root.glob("/".join(["*"] * depth + [name])):
             if p.is_file():
@@ -55,7 +58,7 @@ def find_all_gate_reports(root: Path) -> List[Tuple[str, Path]]:
     for search_dir in search_dirs:
         for p in sorted(search_dir.glob("**/S*_ENTRY_GATE.md")):
             results.append(("entry", p))
-        for p in sorted(search_dir.glob("**/CLOSE_GATE*.md")):
+        for p in sorted(search_dir.glob("**/*CLOSE_GATE*.md")):
             results.append(("close", p))
         for p in sorted(search_dir.glob("**/SPRINT_CLOSE*.md")):
             results.append(("sprint_close", p))
@@ -206,8 +209,9 @@ def parse_tracking(path: Path) -> Dict[str, Any]:
             changelog_by_sprint[sprint_key] = entries
 
         # Working context (only include if any field has real content)
+        _wc_placeholders = {"", "\u2014", "-"}
         wc = td.working_context
-        if wc and any([wc.task, wc.doing, wc.decisions, wc.blockers]):
+        if wc and any(v and v not in _wc_placeholders for v in [wc.task, wc.doing, wc.decisions, wc.blockers]):
             working_context = {
                 "task": wc.task, "doing": wc.doing,
                 "decisions": wc.decisions, "blockers": wc.blockers,
@@ -244,11 +248,14 @@ def parse_tracking(path: Path) -> Dict[str, Any]:
             "changelog_lines": changelog_lines,
             "changelog_by_sprint": changelog_by_sprint,
         }
-    except ImportError:
+    except (ImportError, UnicodeDecodeError, KeyError, AttributeError):
         pass  # Fall through to original implementation
 
     # ── Fallback: original regex implementation ──
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="utf-8", errors="replace")
     data: Dict[str, Any] = {}
     focus_match = re.search(r"^##\s+Current Focus\s*\n+(.+)", text, re.MULTILINE)
     data["current_focus"] = focus_match.group(1).strip() if focus_match else "Unknown"
@@ -276,7 +283,8 @@ def parse_tracking(path: Path) -> Dict[str, Any]:
     for wc_key in ("Task", "Doing", "Decisions", "Blockers"):
         m = re.search(rf"^{wc_key}:\s*(.+)$", wc_section, re.MULTILINE)
         wc[wc_key.lower()] = m.group(1).strip() if m else ""
-    data["working_context"] = wc if any(wc.values()) else {}
+    _wc_placeholders = {"", "\u2014", "-"}
+    data["working_context"] = wc if any(v and v not in _wc_placeholders for v in wc.values()) else {}
     # Session notes (fallback regex)
     notes_section = extract_section(text, "Session Notes")
     session_notes: List[Dict[str, str]] = []
@@ -325,11 +333,14 @@ def parse_roadmap(path: Path) -> Dict[str, Any]:
             sprint_items[s.sprint_key] = {"title": s.title, "items": items}
 
         return {"overview": overview, "sprints": sprint_items}
-    except ImportError:
+    except (ImportError, UnicodeDecodeError, KeyError, AttributeError):
         pass  # Fall through to original implementation
 
     # ── Fallback: original regex implementation ──
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="utf-8", errors="replace")
     data: Dict[str, Any] = {}
     data["overview"] = extract_table_from_section(text, "Sprint Overview")
     sprint_pattern = re.findall(r"^##\s+Sprint\s+(\d+)\s*[—–-]\s*(.+)$", text, re.MULTILINE)
@@ -346,10 +357,10 @@ def parse_roadmap(path: Path) -> Dict[str, Any]:
         items = []
         current_priority = "unknown"
         for line in section.splitlines():
-            pm = re.match(r"^###\s+(Must|Should|Could)", line)
+            pm = re.match(r"^(?:###\s+|\*\*)(Must|Should|Could)", line)
             if pm:
                 current_priority = pm.group(1).lower()
-            cm = re.match(r"^-\s+\[([x~ ])\]\s+(CORE-\d+):\s*(.+?)$", line)
+            cm = re.match(r"^-\s+\[([x~ ])\]\s+([A-Z]+-\d+):?\s+(.+?)$", line)
             if cm:
                 checkbox, core_id, desc = cm.groups()
                 status = {"x": "verified", "~": "deferred", " ": "pending"}[checkbox]
@@ -361,7 +372,10 @@ def parse_roadmap(path: Path) -> Dict[str, Any]:
 
 def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
     """Parse gate report — uses sprint_lib for header/approval detection, local regex for detail tables."""
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="utf-8", errors="replace")
     data: Dict[str, Any] = {"exists": True, "path": str(path)}
 
     # Try sprint_lib for header metadata and approval detection
@@ -374,7 +388,9 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
             data["date"] = gd.get("date", "")
             data["sprint_label"] = gd.get("sprint_label", "")
             data["sprint_raw"] = gd.get("sprint_label", "")
-            data["approved"] = gd.get("verdict", "") == "PASS"
+            data["approved"] = gd.get("verdict", "") == "PASS" or bool(
+                re.search(r"\*\*PASS\*\*", text) or re.search(r"Verdict:\s*PASS", text, re.IGNORECASE)
+            )
             if gd.get("tests_passed"):
                 data["tests_passed"] = gd["tests_passed"]
                 data["tests_total"] = gd["tests_total"]
@@ -387,7 +403,16 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
             data["sprint_raw"] = gd.get("sprint_label", "")
             data["approved"] = gd.get("approved", False)
             _used_sprint_lib = True
-    except ImportError:
+        # Fallback sprint_label from filename or title if sprint_lib didn't extract it
+        if _used_sprint_lib and not data.get("sprint_label"):
+            sn = re.search(r'S(\d+)', path.name)
+            if sn:
+                data["sprint_label"] = f"S{sn.group(1)}"
+            else:
+                title_match = re.search(r'Sprint\s+(\d+)', text[:200])
+                if title_match:
+                    data["sprint_label"] = f"S{title_match.group(1)}"
+    except (ImportError, UnicodeDecodeError, KeyError, AttributeError):
         pass
 
     # Fallback header parsing if sprint_lib wasn't available
@@ -398,9 +423,20 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
         data["sprint_raw"] = sprint_match.group(1).strip() if sprint_match else ""
         sn = re.search(r"S(\d+)", data["sprint_raw"])
         data["sprint_label"] = f"S{sn.group(1)}" if sn else ""
+        # C2: Fallback sprint_label from filename or title
+        if not data["sprint_label"]:
+            sn2 = re.search(r'S(\d+)', path.name)
+            if sn2:
+                data["sprint_label"] = f"S{sn2.group(1)}"
+            else:
+                title_match = re.search(r'Sprint\s+(\d+)', text[:200])
+                if title_match:
+                    data["sprint_label"] = f"S{title_match.group(1)}"
+        # C6: Expanded verdict detection for close gates
         data["approved"] = bool(
             re.search(r"Approved\s*✓", text) or re.search(r"steps?\s+\d+-\d+\s*✓", text)
             or re.search(r"Gate passed", text) or re.search(r"Complete\s*✓", text, re.IGNORECASE)
+            or re.search(r"\*\*PASS\*\*", text) or re.search(r"Verdict:\s*PASS", text, re.IGNORECASE)
         )
 
     # Gate-type-specific detail tables (always use local regex — sprint_lib
@@ -410,8 +446,8 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
         if not metrics:
             metrics = extract_table_from_section(text, "Phase 0")
         data["metrics"] = metrics
-        data["metrics_pass"] = sum(1 for m in metrics if m.get("status", "").upper() == "PASS")
-        data["metrics_deferred"] = sum(1 for m in metrics if m.get("status", "").upper() == "DEFERRED")
+        data["metrics_pass"] = sum(1 for m in metrics if (m.get("status", "") or m.get("verdict", "")).upper() == "PASS")
+        data["metrics_deferred"] = sum(1 for m in metrics if (m.get("status", "") or m.get("verdict", "")).upper() == "DEFERRED")
         data["metrics_total"] = len(metrics)
         data["findings"] = extract_table_from_section(text, "Phase 1a")
         # Also include supplemental findings from Phase 1b
@@ -450,7 +486,7 @@ def parse_gate_report(path: Path, gate_type: str) -> Dict[str, Any]:
     elif gate_type == "sprint_close":
         data["checkmarks"] = extract_table_from_section(text, "Step 1")
         data["baseline"] = extract_table_from_section(text, "Step 5")
-        data["retrospective"] = extract_table_from_section(text, "Step 7")
+        data["retrospective"] = extract_table_from_section(text, "Step 7") or extract_table_from_section(text, "Failure Mode Retrospective")
     return data
 
 
@@ -463,11 +499,11 @@ def build_sprint_failure_analysis(gates: Dict[str, Any], tracking_fh: List[Dict]
     retro = sprint_close.get("retrospective", [])
     if retro:
         for row in retro:
-            predicted = row.get("predicted?", "").lower().strip("*")
-            occurred = row.get("actually_occurred?", "").lower().strip("*")
-            guardrail = row.get("new_guardrail?", "").strip("*").strip()
-            mode = row.get("predicted_mode", "").strip("*").strip()
-            is_predicted = predicted == "yes"
+            predicted = row.get("predicted?", row.get("predicted", row.get("predicted_mode", ""))).lower().strip("*")
+            occurred = row.get("actually_occurred?", row.get("occurred?", "")).lower().strip("*")
+            guardrail = row.get("new_guardrail?", row.get("new_guardrail", "")).strip("*").strip()
+            mode = row.get("item", row.get("predicted_mode", "")).strip("*").strip()
+            is_predicted = predicted.startswith("yes")
             is_occurred = occurred not in ("no", "—", "-", "") and "same failure" not in occurred
             if is_predicted:
                 analysis["total_predicted"] += 1
@@ -480,6 +516,7 @@ def build_sprint_failure_analysis(gates: Dict[str, Any], tracking_fh: List[Dict]
                 analysis["details"].append({
                     "mode": mode, "predicted": is_predicted, "impact": row.get("impact", ""),
                     "root_cause": row.get("root_cause", ""), "guardrail": guardrail,
+                    "escalate": row.get("escalate?", row.get("escalate", "")),
                 })
             if guardrail and guardrail.lower() not in ("no", "—", "-", "") and not guardrail.startswith("covered"):
                 analysis["new_guardrails"] += 1
@@ -487,18 +524,20 @@ def build_sprint_failure_analysis(gates: Dict[str, Any], tracking_fh: List[Dict]
         for row in tracking_fh:
             if row.get("sprint", "").strip() != sprint_label:
                 continue
-            predicted = row.get("predicted?", "").lower()
+            predicted = row.get("predicted?", row.get("predicted", "")).lower()
             guardrail = row.get("guardrail", "").strip()
             analysis["total_occurred"] += 1
-            if predicted == "yes":
+            if predicted.startswith("yes"):
+                analysis["total_predicted"] += 1
                 analysis["predicted_and_caught"] += 1
             else:
                 analysis["unpredicted"] += 1
             if guardrail and guardrail.lower() not in ("no", "—", "-", ""):
                 analysis["new_guardrails"] += 1
             analysis["details"].append({
-                "mode": row.get("mode", ""), "predicted": predicted == "yes",
+                "mode": row.get("mode", ""), "predicted": predicted.startswith("yes"),
                 "impact": row.get("impact", ""), "root_cause": row.get("root_cause", ""), "guardrail": guardrail,
+                "escalate": row.get("escalate?", row.get("escalate", "")),
             })
     close_gate = gates.get("close", {})
     analysis["close_gate_findings"] = len(close_gate.get("findings", []))
@@ -604,7 +643,7 @@ def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_histo
     guardrails_created: Dict[str, str] = {}
     for row in all_failure_history:
         gr = row.get("guardrail", "").strip()
-        gr_match = re.search(r"(G-\d+)", gr)
+        gr_match = re.search(r"(G-[A-Z0-9][-\w]*)", gr, re.IGNORECASE)
         gr = gr_match.group(1) if gr_match else gr
         sprint = row.get("sprint", "").strip()
         if gr and gr.lower() not in ("no", "—", "-", "") and sprint:
@@ -612,8 +651,8 @@ def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_histo
     for sd in sprint_data_list:
         retro = sd.get("gates", {}).get("sprint_close", {}).get("retrospective", [])
         for row in retro:
-            gr_raw = row.get("new_guardrail?", "").strip("*").strip()
-            gr_match2 = re.search(r"(G-\d+)", gr_raw)
+            gr_raw = row.get("new_guardrail?", row.get("new_guardrail", "")).strip("*").strip()
+            gr_match2 = re.search(r"(G-[A-Z0-9][-\w]*)", gr_raw, re.IGNORECASE)
             gr2 = gr_match2.group(1) if gr_match2 else gr_raw
             if gr2 and gr2.lower() not in ("no", "—", "-", "") and not gr2.startswith("covered"):
                 guardrails_created[gr2] = sd["label"]
@@ -628,7 +667,8 @@ def build_trends(sprint_data_list: List[Dict], tracking: Dict, all_failure_histo
             row_num = int(re.search(r"\d+", row_sprint).group()) if re.search(r"\d+", row_sprint) else 0
             if row_num > created_num:
                 row_gr = row.get("guardrail", "").strip()
-                if re.search(r"(G-\d+)", row_gr) and re.search(r"(G-\d+)", row_gr).group(1) == gr_id:
+                row_gr_match = re.search(r"(G-[A-Z0-9][-\w]*)", row_gr, re.IGNORECASE)
+                if row_gr_match and row_gr_match.group(1) == gr_id:
                     recurred = True
                     recurred_in.append(row_sprint)
         guardrail_effectiveness.append({
@@ -656,7 +696,10 @@ def collect_hooks_status(root: Path) -> Dict[str, Any]:
     # Parse config for enabled/disabled
     config_flags: Dict[str, bool] = {}
     if config_path.is_file():
-        text = config_path.read_text(encoding="utf-8")
+        try:
+            text = config_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = config_path.read_text(encoding="utf-8", errors="replace")
         for m in re.finditer(r'^HOOK_(\w+)=.*\$\{HOOK_\1:-\$_(\w+)\}', text, re.MULTILINE):
             config_flags[m.group(1).lower()] = True
         # Read resolved values (mode-based defaults)
@@ -674,6 +717,11 @@ def collect_hooks_status(root: Path) -> Dict[str, Any]:
         "validate-sprint-close": "validate_sprint_close",
         "detect-audit-signals": "detect_audit_signals",
         "memory-sync": "memory_sync", "cross-llm-audit": "cross_llm_audit",
+        "bootstrap-guard": "bootstrap_guard",
+        "bootstrap-phase-gate": "bootstrap_phase_gate",
+        "verify-evidence": "verify_evidence",
+        "audit-health-check": "audit_health_check",
+        "pre-merge-audit": "pre_merge_audit",
     }
     for h in hooks:
         flag_key = flag_map.get(h["name"], "")
@@ -688,9 +736,12 @@ def collect_hooks_status(root: Path) -> Dict[str, Any]:
 def collect_workflow_config(root: Path) -> Dict[str, str]:
     """Read WORKFLOW_MODE and SPRINT_TYPE from hooks-config.sh."""
     config_path = root / ".claude" / "hooks-config.sh"
-    result = {"workflow_mode": "standard", "sprint_type": "feature", "hooks_version": ""}
+    result = {"workflow_mode": "standard", "sprint_type": "", "hooks_version": ""}
     if config_path.is_file():
-        text = config_path.read_text(encoding="utf-8")
+        try:
+            text = config_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = config_path.read_text(encoding="utf-8", errors="replace")
         m = re.search(r'^WORKFLOW_MODE="(\w+)"', text, re.MULTILINE)
         if m:
             result["workflow_mode"] = m.group(1)
@@ -709,7 +760,10 @@ def collect_knowledge(root: Path) -> Dict[str, int]:
     for name in ("CODING_GUARDRAILS.md", "Docs/CODING_GUARDRAILS.md"):
         p = root / name
         if p.is_file():
-            text = p.read_text(encoding="utf-8")
+            try:
+                text = p.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = p.read_text(encoding="utf-8", errors="replace")
             result["guardrails"] = len(re.findall(r"^(?:##?\s+G-?\d+|^-\s+\*\*G)", text, re.MULTILINE))
             if result["guardrails"] == 0:
                 result["guardrails"] = len(re.findall(r"^[-*]\s+", text, re.MULTILINE))
@@ -717,7 +771,10 @@ def collect_knowledge(root: Path) -> Dict[str, int]:
     for name in ("SPRINT-INDEX.md", "Docs/SPRINT-INDEX.md"):
         p = root / name
         if p.is_file():
-            text = p.read_text(encoding="utf-8")
+            try:
+                text = p.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = p.read_text(encoding="utf-8", errors="replace")
             result["index_entries"] = len(re.findall(r"^\|\s*\w", text, re.MULTILINE)) - 1  # minus header
             if result["index_entries"] < 0:
                 result["index_entries"] = 0
@@ -756,8 +813,12 @@ def collect_validation(root: Path) -> Dict[str, Any]:
 
 def infer_sprint_phase(items: List[Dict], gates: Dict, changelog_lines: List[str]) -> str:
     """Infer sprint phase from items, gates, and changelog — mirrors sprint-state.py logic."""
+    # Robust "done" detection: gate signal takes priority over keyword matching
     all_cl = " ".join(changelog_lines).lower()
-    if "sprint close" in all_cl and "complete" in all_cl:
+    sc_gate = gates.get("sprint_close", {})
+    if sc_gate.get("exists") and sc_gate.get("approved"):
+        return "done"
+    if "sprint close" in all_cl:
         return "done"
     cg = gates.get("close", {})
     if cg.get("exists"):
@@ -775,6 +836,8 @@ def infer_sprint_phase(items: List[Dict], gates: Dict, changelog_lines: List[str
         return "impl_done"
     eg = gates.get("entry", {})
     if eg.get("exists"):
+        if all(i.get("status", "open") == "open" for i in items) or not items:
+            return "entry_gate"
         return "impl_loop"
     if any(i.get("status") != "open" for i in items):
         return "impl_loop"
@@ -792,6 +855,14 @@ def collect_data(root: Path) -> Dict[str, Any]:
         "working_context": {}, "session_notes": [],
         "current_focus": "No TRACKING.md found",
     }
+    # Parse retroactive audits if not already in tracking dict
+    if "retroactive_audits" not in tracking and tracking_path:
+        try:
+            _text = tracking_path.read_text(encoding="utf-8", errors="replace")
+            tracking["retroactive_audits"] = extract_table_from_section(_text, "Retroactive Audits")
+        except OSError:
+            tracking["retroactive_audits"] = []
+
     roadmap_path = find_file(root, "Roadmap.md")
     roadmap = parse_roadmap(roadmap_path) if roadmap_path else {"overview": [], "sprints": {}}
 
@@ -938,6 +1009,7 @@ def collect_data(root: Path) -> Dict[str, Any]:
             "dismissed_signals": tracking.get("dismissed_signals", []),
             "changelog_lines": project_changelog,
             "workflow_config": workflow_config,
+            "retroactive_audits": tracking.get("retroactive_audits", []),
         },
         "sprints": sprints,
         "roadmap": roadmap,
@@ -1430,7 +1502,7 @@ function renderAll(D){
   const wctx=proj.working_context||{};
   const _wcEmpty=new Set(['','\u2014','-']);
   const _wcVal=v=>v&&!_wcEmpty.has(v);
-  if(_wcVal(wctx.task)||_wcVal(wctx.doing)||_wcVal(wctx.blockers)){
+  if(_wcVal(wctx.task)||_wcVal(wctx.doing)||_wcVal(wctx.decisions)||_wcVal(wctx.blockers)){
     let wh='';
     if(_wcVal(wctx.task))wh+=`<div class="wc-item"><span class="wc-label">Task</span>${E(wctx.task)}</div>`;
     if(_wcVal(wctx.doing))wh+=`<div class="wc-item"><span class="wc-label">Doing</span>${E(wctx.doing)}</div>`;
@@ -1761,7 +1833,8 @@ function renderQuality(gates,fa,perf,risks,ds,predictedFailures,failureEncounter
         const ic=d.predicted?'<span style="color:var(--green)">✓</span>':'<span style="color:var(--red)">!</span>';
         const imp=d.impact&&d.impact!=='—'?` <span style="color:var(--text2)">(${E(d.impact)})</span>`:'';
         const gr=d.guardrail&&!['no','—','-'].includes(d.guardrail.toLowerCase())?` → <span style="color:var(--cyan)">${E(d.guardrail)}</span>`:'';
-        h+=`<div style="padding:.2rem 0">${ic} ${E(d.mode)}${imp}${gr}</div>`});
+        const esc=d.escalate&&!['no','—','-',''].includes(d.escalate.toLowerCase())?` <span style="color:var(--red)">⚑ escalate</span>`:'';
+        h+=`<div style="padding:.2rem 0">${ic} ${E(d.mode)}${imp}${gr}${esc}</div>`});
       h+='</div>';
     }
     $('failures').innerHTML=h;
@@ -1850,8 +1923,8 @@ function renderQuality(gates,fa,perf,risks,ds,predictedFailures,failureEncounter
 
   // Dismissed Signals
   if(ds.length){
-    let h='<table class="sm"><thead><tr><th>CP</th><th>System</th><th>Signal</th><th>Decision</th><th>#</th></tr></thead><tbody>';
-    ds.forEach(d=>{h+=`<tr><td>${E(d.checkpoint||'')}</td><td>${E(d.system_metric||d['system___metric']||d.system||'')}</td><td>${E(d.signal_summary||'')}</td><td>${E(d.user_decision||'')}</td><td>${E(d['dismissal_#']||d.dismissal||'')}</td></tr>`});
+    let h='<table class="sm"><thead><tr><th>Date</th><th>CP</th><th>System</th><th>Signal</th><th>Decision</th><th>#</th><th>Supp.</th><th>Revisit</th></tr></thead><tbody>';
+    ds.forEach(d=>{h+=`<tr><td class="dim">${E(d.date||'')}</td><td>${E(d.checkpoint||'')}</td><td>${E(d.system_metric||d['system___metric']||d.system||'')}</td><td>${E(d.signal_summary||'')}</td><td>${E(d.user_decision||'')}</td><td>${E(d['dismissal_#']||d.dismissal||'')}</td><td>${E(d['suppressed?']||d.suppressed||'')}</td><td class="dim">${E(d.revisit_sprint||d['revisit_sprint']||'')}</td></tr>`});
     h+='</tbody></table>';$('dismissed').innerHTML=h;
   } else $('dismissed').innerHTML='<div class="empty">No dismissed signals</div>';
 }
@@ -2117,9 +2190,14 @@ def find_watched_files(root: Path) -> List[Path]:
     for p in root.glob("**/*SPRINT_CLOSE*.md"):
         files.append(p)
     if root.parent != root:
-        for p in root.parent.glob("**/*GATE*.md"):
+        parent = root.parent
+        for p in parent.glob("*GATE*.md"):
             files.append(p)
-        for p in root.parent.glob("**/*SPRINT_CLOSE*.md"):
+        for p in parent.glob("*/*GATE*.md"):
+            files.append(p)
+        for p in parent.glob("*SPRINT_CLOSE*.md"):
+            files.append(p)
+        for p in parent.glob("*/*SPRINT_CLOSE*.md"):
             files.append(p)
     return files
 
@@ -2144,20 +2222,26 @@ class LiveServer:
 
     def watch(self):
         watched = self._find_watched_files()
-        mtimes = {str(f): f.stat().st_mtime for f in watched if f.exists()}
+        mtimes = {}
+        for f in watched:
+            try:
+                mtimes[str(f)] = f.stat().st_mtime
+            except (FileNotFoundError, OSError):
+                pass
         while True:
             time.sleep(1)
             new_watched = self._find_watched_files()
             changed = False
             new_mtimes = {}
             for f in new_watched:
-                if not f.exists():
+                try:
+                    key = str(f)
+                    mt = f.stat().st_mtime
+                    new_mtimes[key] = mt
+                    if key not in mtimes or mtimes[key] != mt:
+                        changed = True
+                except (FileNotFoundError, OSError):
                     continue
-                key = str(f)
-                mt = f.stat().st_mtime
-                new_mtimes[key] = mt
-                if key not in mtimes or mtimes[key] != mt:
-                    changed = True
             if changed:
                 self._refresh()
             mtimes = new_mtimes

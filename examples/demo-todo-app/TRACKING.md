@@ -20,12 +20,19 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 | CORE-003 | Input validation (title required, max 200 chars) | verified | S1 | 8/8 validation tests pass |
 | CORE-004 | Pagination (limit/offset, default 20) | verified | S1 | 6/6 pagination tests pass |
 
+Status values: `open` -> `in_progress` -> `fixed` -> `verified`
+Special statuses:
+- `deferred`: item intentionally skipped (maps to roadmap `[~]`). Requires reason + target sprint.
+- `blocked`: item cannot proceed due to external dependency. Requires linked blocker in Open Risks.
+
 ## Open Risks / Blockers
 
 | ID | Risk | Mitigation | Sprint |
 |----|------|------------|--------|
 
 ## Predicted Failure Modes — Current Sprint
+
+Written at Entry Gate step 9a. Read at Sprint Close step 7 (retrospective comparison).
 
 | Item | Category | Predicted Mode | Detection Plan |
 |------|----------|---------------|----------------|
@@ -38,6 +45,11 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 
 ## Failure Mode History
 
+Category naming: use `type:subsystem` format (e.g. `db-lock:SQLite`, `null-ref:Renderer`).
+Pattern rules:
+- Same category 2+ times in last 3 sprints -> Architecture Review Required at next Entry Gate.
+- Same detection=user-visual 2+ times -> mandatory question at next Entry Gate.
+
 | Sprint | Category | Predicted? | Detection | Mode | Impact | Root Cause | Guardrail | Escalate? |
 |--------|----------|------------|-----------|------|--------|------------|-----------|-----------|
 | S1 | db-lock:SQLite | Yes (CORE-002 direct) | test | WAL mode not enabled, concurrent writes fail | Medium — data loss on parallel requests | Default journal mode is DELETE, not WAL | G-SQL: Enable WAL mode at DB init | No |
@@ -48,7 +60,13 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 |------|----------|-------------------|-----------|------|
 | CORE-002 | direct | SQLite default journal mode caused SQLITE_BUSY on concurrent writes. Fixed by enabling WAL mode at connection init. | test | 2025-01-16 |
 
+Category: direct / interaction / stress-edge.
+Detection: test / user-visual / profiler / code-review.
+
 ## Performance Baseline Log
+
+Recorded at Sprint Close step 5. New row per sprint per tracked metric.
+`Value` must be a plain number (no unit suffix) — unit goes in the `Unit` column.
 
 | Sprint | Metric | Value | Unit | Method |
 |--------|-----------------|-------|------|----------------|
@@ -69,6 +87,9 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 
 ## Session Notes
 
+Append-only journal. Written via `sprint-tools note`. Cleared at sprint close.
+Types: `decision` | `attempt` | `side-effect` | `observation` | `artifact`
+
 | # | Type | Item | Note | Time |
 |---|------|------|------|------|
 
@@ -76,8 +97,8 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 
 ### Sprint 1
 
-- [2025-01-15] Bootstrap: CLAUDE.md, TRACKING.md, Roadmap.md, CODING_GUARDRAILS.md created from skeleton templates.
-- [2025-01-15] Entry Gate: Sprint 1 plan confirmed. 3 Must + 1 Should. Implementation order: CORE-002 -> CORE-001 -> CORE-003 -> CORE-004. S1_ENTRY_GATE.md written.
+- [2025-01-15] Bootstrap: CLAUDE.md, TRACKING.md, Docs/Planning/Roadmap.md, Docs/CODING_GUARDRAILS.md created from skeleton templates.
+- [2025-01-15] Entry Gate: Sprint 1 plan confirmed. 3 Must + 1 Should. Implementation order: CORE-002 -> CORE-001 -> CORE-003 -> CORE-004. Docs/Planning/S1_ENTRY_GATE.md written.
 - [2025-01-15] CORE-002: in_progress — SQLite schema + connection setup.
 - [2025-01-16] CORE-002: fixed — persistence layer complete. Encountered SQLITE_BUSY under concurrent writes; enabled WAL mode to resolve.
 - [2025-01-16] CORE-002: verified — 4/4 DB tests pass, WAL mode confirmed via PRAGMA check.
@@ -90,5 +111,5 @@ Sprint 1: Core CRUD API with persistence, validation, and pagination (COMPLETE)
 - [2025-01-17] CORE-004: in_progress — pagination query params.
 - [2025-01-17] CORE-004: fixed — limit/offset with defaults (20/0), meta.total in response.
 - [2025-01-17] CORE-004: verified — 6/6 pagination tests pass (including 10k row stress check < 50ms).
-- [2025-01-17] Close Gate: sprint-audit.sh clean (16/16 sections). Manual spec-driven audit passed. Verdict: PASS.
+- [2025-01-17] Close Gate: sprint-audit.sh clean (17/17 sections). Manual spec-driven audit passed. Verdict: PASS.
 - [2025-01-17] Sprint Close: retrospective written, baselines recorded, branch squash-merged to main, S1_CLOSE_GATE.md archived.

@@ -2,9 +2,8 @@
 
 How to use the AI Sprint Workflow with [Cline](https://cline.bot).
 
-## Status: Community-tested patterns
-
-These are practical adaptation patterns. PRs with confirmed test results are welcome.
+> **Common setup steps** (bootstrap, rule content, prompts, sprint tools, hook equivalents): see [AGENT-SETUP.md](../../Docs/Workflow/AGENT-SETUP.md).
+> This playbook covers Cline-specific differences only.
 
 ## Setup
 
@@ -16,156 +15,44 @@ In Cline chat, paste:
 Read WORKFLOW.md and bootstrap this project.
 ```
 
-Cline will read the file and run the bootstrap procedure. It can create files,
-run terminal commands, and manage the full setup.
+Cline can create files, run terminal commands, and manage the full setup.
 
-> **Note:** Skip step 8.5 (`.claude/` hooks) — those are Claude Code-specific.
-> Use `.clinerules` for equivalent enforcement (see below).
+> Skip Step 8.5 (`.claude/` hooks) — use `.clinerules/` instead.
 
-### 2. Create `.clinerules`
+### 2. Create Cline Rules
 
-Cline reads `.clinerules` at the project root (or `.clinerules/*.md` as a directory
-of rule files) automatically at the start of every task.
+Create `.clinerules` in your project root (or `.clinerules/workflow.md` as a directory) with the rule content from [AGENT-SETUP.md §2](../../Docs/Workflow/AGENT-SETUP.md#2-rule-file-content).
 
-> **Note:** The old "Custom Instructions" text box in Cline settings is deprecated.
-> Use `.clinerules` files instead — they're version-controllable and shareable.
+> **Note:** The old "Custom Instructions" text box in Cline settings is deprecated. Use `.clinerules` files — they're version-controllable and shareable.
 
-Create `.clinerules` in your project root:
-
-```markdown
-# AI Sprint Workflow — Cline Rules
-
-## Session Start Protocol
-At the start of every task:
-1. Read CLAUDE.md — check Project Summary, Immutable Contracts, Last Checkpoint
-2. Read TRACKING.md — check Current Focus, Sprint Board, Open Risks
-3. Read the active sprint section from Docs/Planning/Roadmap.md
-4. State what sprint you're in and what items are in progress
-
-## Protected Files
-- NEVER overwrite CLAUDE.md entirely. Edit specific sections only.
-- NEVER modify Docs/Workflow/ files without explicit user permission.
-
-## Status Tracking
-- Update TRACKING.md after every significant fix or decision
-- Valid statuses: open, in_progress, fixed, verified, deferred, blocked
-- fixed → verified requires evidence (test file:line or confirmation)
-- deferred requires reason + target sprint
-
-## Sprint Flow
-- After completing Entry Gate: recommend starting a new task for implementation
-- Close Gate is user-initiated only. Never suggest closing unprompted.
-- Run Tools/sprint-audit.sh at Close Gate Phase 1a
-
-## Before Writing Code
-- Check Docs/CODING_GUARDRAILS.md for relevant sections
-- Follow Immutable Contracts in CLAUDE.md — never change without revision procedure
-```
-
-**Directory format:** For larger projects, use `.clinerules/` as a directory:
+**Directory format** for larger projects:
 ```
 .clinerules/
-├── workflow.md        # Sprint workflow rules (above)
+├── workflow.md        # Sprint workflow rules
 ├── guardrails.md      # Project-specific forbidden patterns
 └── conventions.md     # Code style and naming rules
 ```
 
-All `.md` files in the directory are loaded automatically.
+Cline also auto-detects `.cursorrules`, `.windsurfrules`, and `AGENTS.md`.
 
-### 3. Cline Prompts
+### 3. Hook Enforcement (Native)
 
-**Starting a sprint:**
-```
-Open Sprint N for [description]. Read Docs/Workflow/ENTRY-GATE.md
-and run the full procedure (phases 0-3, 12 steps). Present the
-gate assessment before writing any code.
-```
+Cline supports hooks natively since v3.36 (8 events). Hooks return JSON with `{"cancel": true}` to block actions. This project does not yet provide Cline hook scripts — [contributions welcome](../../CONTRIBUTING.md).
 
-**Continuing work:**
-```
-Resume Sprint N. Read TRACKING.md first, then continue implementing
-the next open item in dependency order.
-```
+## Cline-Specific Tips
 
-**Closing a sprint:**
-```
-Close Sprint N. Read Docs/Workflow/CLOSE-GATE.md.
-Start with Phase −1 (state recovery) — read TRACKING.md and the
-Entry Gate report before making any assessments.
-```
+1. **Approval workflow is a natural checkpoint.** Cline asks for user approval before file writes and terminal commands — this complements the workflow's gate system.
 
-**Running audit:**
-```
-Run Tools/sprint-audit.sh and show the results.
-```
+2. **Use task boundaries as session boundaries.** Start a new Cline task after Entry Gate and before Close Gate.
 
-## Hook Equivalents
+3. **Sub-agents (read-only).** Cline supports sub-agents for parallel codebase analysis. Enable in settings.
 
-| Claude Code Hook | Cline Equivalent |
-|-----------------|-----------------|
-| `protect-claude.sh` | `.clinerules`: "NEVER overwrite CLAUDE.md" |
-| `validate-tracking.sh` | `.clinerules`: status validation rules |
-| `session-start.sh` | `.clinerules`: session start protocol (reads CLAUDE.md + TRACKING.md) |
-| `validate-id-uniqueness.sh` | `sprint-audit.sh` Section 11 at Close Gate |
-| `entry-gate-session.sh` | `.clinerules`: recommend new task after Entry Gate |
-| `detect-test-regression.sh` | Cline: run tests after each item |
-| `validate-close-gate.sh` | Manual: follow Close Gate checklist |
-| `validate-sprint-close.sh` | Manual: follow Sprint Close checklist |
-| `detect-audit-signals.sh` | Manual: check §Performance Baseline Log at Entry Gate |
+4. **Multi-model support.** Cline works with Claude, GPT, Gemini, and local models. Claude models follow complex multi-step procedures more reliably.
 
-**Key difference:** Claude Code hooks run automatically on every tool call.
-Cline rules are instructions loaded at task start — they depend on the model's
-compliance rather than mechanical enforcement.
-
-## Cline-Specific Strengths
-
-1. **Tool use by default.** Cline can read files, write files, run terminal
-   commands, and browse the web. Entry Gate and Close Gate procedures work
-   naturally without special setup.
-
-2. **Approval workflow.** Cline asks for user approval before file writes
-   and terminal commands. This provides a natural checkpoint that complements
-   the sprint workflow's gate system.
-
-3. **Task-scoped context.** Each Cline task starts with `.clinerules` loaded
-   fresh. This aligns well with the workflow's session boundary recommendations.
-
-4. **Multi-model support.** Cline works with Claude, GPT, Gemini, and local
-   models. The workflow is model-agnostic — any model that follows markdown
-   instructions will work.
-
-## Tips
-
-1. **Use task boundaries as session boundaries.** Start a new Cline task
-   after Entry Gate and before Close Gate. This keeps context clean.
-
-2. **Pin CLAUDE.md at task start.** If Cline doesn't auto-read CLAUDE.md
-   (model-dependent), include "Read CLAUDE.md first" in your opening message.
-
-3. **Keep TRACKING.md concise.** Archive older sprint sections per the
-   workflow spec to stay within context limits.
-
-4. **Use auto-approve for implementation loop.** During the implementation
-   loop (steps A-E), Cline's auto-approve mode can speed up the code → test
-   → verify cycle. Disable it during gate operations for careful review.
-
-## Sprint Tools (CLI)
-
-Bash/Python CLI tools usable by any agent with shell access:
-
-- `python3 dashboard/sprint-status.py` — sprint dashboard (CLI, watch mode, web)
-- `sprint-tools state` — sprint digest for context injection
-- `sprint-tools item ID STATUS` — status transitions (updates TRACKING.md)
-- `sprint-tools git commit ID "msg"` — item-prefixed commits
-
-Cline can run these via terminal commands. Add to `.clinerules` if you want
-the agent to prefer CLI tools over manual file edits for status updates.
+5. **Auto-approve for implementation.** During the implementation loop, auto-approve mode speeds up the code → test → verify cycle. Disable during gate operations.
 
 ## Known Limitations
 
-- No mechanical hook enforcement (rules are advisory, not blocking)
+- Cline supports hooks natively (v3.36+) but this project does not yet provide Cline-specific hook scripts
 - Rules are not hot-reloaded mid-task — changes take effect on next task
-- Context can accumulate in long tasks — break gate operations into
-  separate tasks
-- Model compliance varies — Claude models follow complex multi-step
-  instructions more reliably than smaller models
+- Model compliance varies — Claude models follow complex instructions more reliably than smaller models
