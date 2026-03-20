@@ -24,25 +24,12 @@ HOOKS_VERSION="3.1"
 # Set WORKFLOW_MODE to auto-configure hooks and audit defaults for your project.
 # Individual overrides below still take precedence over the mode preset.
 #
-#   freestyle — Hackathon, experiments, learning. Safety only, zero workflow enforcement.
-#               Enables: protect-claude, protect-secrets, validate-tracking, session-start, id-uniqueness, memory-sync (6/12)
-#               Disables: entry-gate-session, close-gate, sprint-close, audit-signals, test-regression, cross-llm-audit
-#               Gates: none enforced (AI follows WORKFLOW.md voluntarily)
-#               Cross-audit defaults: N/A (not recommended)
+#   freestyle — Safety only, zero workflow enforcement.
+#   lite     — Solo dev, lightweight gates.
+#   standard — Default. Full workflow, all hooks.
+#   strict   — All hooks mandatory, no overrides, enforce-block.
 #
-#   lite     — Solo dev, small projects. Lightweight gates with basic enforcement.
-#              Enables: 6 core + close-gate + test-regression + cross-audit (9/12)
-#              Disables: entry-gate-session, sprint-close, audit-signals (CP1/CP2)
-#              Gates: abbreviated Entry Gate, basic Close Gate (sprint-audit.sh + verdict)
-#              Cross-audit defaults: wave-size 8
-#
-#   standard — Default. Full workflow with all hooks.
-#              Enables: all hooks (12/12)
-#              Cross-audit defaults: wave-size 5
-#
-#   strict   — Team + critical systems. All hooks mandatory, no individual overrides.
-#              Enables: all hooks (overrides ignored — see note below)
-#              Cross-audit defaults: wave-size 3, enforce-block true
+#   See Docs/Workflow/WORKFLOW-MODES.md for full comparison table.
 #
 # Usage: set WORKFLOW_MODE and leave individual flags commented out to use the preset.
 #        Or set WORKFLOW_MODE and override specific flags below.
@@ -73,6 +60,8 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=false
     _MEMORY_SYNC=true
     _CROSS_LLM_AUDIT=false
+    _BOOTSTRAP_GUARD=true
+    _BOOTSTRAP_PHASE_GATE=true
     ;;
   lite)
     # Core safety + close gate + test regression
@@ -88,7 +77,8 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=false
     _MEMORY_SYNC=true
     _CROSS_LLM_AUDIT=true
-    _D_CROSS_AUDIT_WAVE_SIZE=8
+    _BOOTSTRAP_GUARD=true
+    _BOOTSTRAP_PHASE_GATE=true
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
   strict)
@@ -105,7 +95,8 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=true
     _MEMORY_SYNC=true
     _CROSS_LLM_AUDIT=true
-    _D_CROSS_AUDIT_WAVE_SIZE=3
+    _BOOTSTRAP_GUARD=true
+    _BOOTSTRAP_PHASE_GATE=true
     _D_CROSS_AUDIT_ENFORCE_BLOCK=true
     ;;
   *)  # standard (default)
@@ -121,7 +112,8 @@ case "${WORKFLOW_MODE}" in
     _DETECT_AUDIT_SIGNALS=true
     _MEMORY_SYNC=true
     _CROSS_LLM_AUDIT=true
-    _D_CROSS_AUDIT_WAVE_SIZE=5
+    _BOOTSTRAP_GUARD=true
+    _BOOTSTRAP_PHASE_GATE=true
     _D_CROSS_AUDIT_ENFORCE_BLOCK=false
     ;;
 esac
@@ -169,6 +161,15 @@ HOOK_MEMORY_SYNC="${HOOK_MEMORY_SYNC:-$_MEMORY_SYNC}"
 # Cross-LLM audit: external model reviews code changes (requires API key in .env)
 HOOK_CROSS_LLM_AUDIT="${HOOK_CROSS_LLM_AUDIT:-$_CROSS_LLM_AUDIT}"
 
+# Bootstrap phase guard: enforce research + review before project file creation
+# PostToolUse: inject phase context + create markers on WebSearch/Agent usage
+# PreToolUse: block CLAUDE.md/TRACKING.md writes until markers exist
+HOOK_BOOTSTRAP_GUARD="${HOOK_BOOTSTRAP_GUARD:-$_BOOTSTRAP_GUARD}"
+
+# Bootstrap phase gate: block CLAUDE.md/TRACKING.md creation until research+review phases complete
+# PreToolUse: checks for .bootstrap/ markers before allowing Write|Edit on project files
+HOOK_BOOTSTRAP_PHASE_GATE="${HOOK_BOOTSTRAP_PHASE_GATE:-$_BOOTSTRAP_PHASE_GATE}"
+
 # ══════════════════════════════════════════════════════════════
 # ── Cross-LLM Audit, Thresholds, Limits & Dashboard ──
 # ══════════════════════════════════════════════════════════════
@@ -176,7 +177,7 @@ HOOK_CROSS_LLM_AUDIT="${HOOK_CROSS_LLM_AUDIT:-$_CROSS_LLM_AUDIT}"
 # HOW TO CHANGE A SETTING:
 #   1. Edit the value in the "Defaults" table below      (applies to whole team)
 #   2. Or put it in .env                                  (personal, git-ignored)
-#   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
+#   3. Or export as env var: export CROSS_AUDIT_TIMEOUT=120  (temporary, current shell)
 #
 #   Priority: env var > .env > defaults below
 #
@@ -194,7 +195,6 @@ HOOK_CROSS_LLM_AUDIT="${HOOK_CROSS_LLM_AUDIT:-$_CROSS_LLM_AUDIT}"
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
 _D_CROSS_AUDIT_MODEL=                                    # Empty = auto-set per provider (see examples below)
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
-_D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
 _D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
 #
 # ┌─────────────────────────────────────────────────────────────┐
@@ -202,7 +202,7 @@ _D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit no
 # └─────────────────────────────────────────────────────────────┘
 _D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider (see examples below)
 _D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
-_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: per-edit=×0.75, wave=×1, close-gate=×1.5
+_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: wave=×1, close-gate=×1.5, entry-gate=×1
 _D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (0.20 = 20%)
 _D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprint count)
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (directory levels)
@@ -233,10 +233,8 @@ CROSS_AUDIT_MODEL="${CROSS_AUDIT_MODEL:-$_D_CROSS_AUDIT_MODEL}"
 CROSS_AUDIT_LANG="${CROSS_AUDIT_LANG:-$_D_CROSS_AUDIT_LANG}"
 CROSS_AUDIT_TIMEOUT="${CROSS_AUDIT_TIMEOUT:-$_D_CROSS_AUDIT_TIMEOUT}"
 CROSS_AUDIT_ENFORCE_BLOCK="${CROSS_AUDIT_ENFORCE_BLOCK:-$_D_CROSS_AUDIT_ENFORCE_BLOCK}"
-CROSS_AUDIT_WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-$_D_CROSS_AUDIT_WAVE_SIZE}"
 CROSS_AUDIT_MAX_DIFF="${CROSS_AUDIT_MAX_DIFF:-$_D_CROSS_AUDIT_MAX_DIFF}"
 # Derived diff limits (base × multiplier) — override individual limits via env if needed
-CROSS_AUDIT_MAX_DIFF_PER_EDIT="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-$(( CROSS_AUDIT_MAX_DIFF * 3 / 4 ))}"
 CROSS_AUDIT_MAX_DIFF_WAVE="${CROSS_AUDIT_MAX_DIFF_WAVE:-$CROSS_AUDIT_MAX_DIFF}"
 CROSS_AUDIT_MAX_DIFF_ENTRY_GATE="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-$CROSS_AUDIT_MAX_DIFF}"
 CROSS_AUDIT_MAX_DIFF_CLOSE_GATE="${CROSS_AUDIT_MAX_DIFF_CLOSE_GATE:-$(( CROSS_AUDIT_MAX_DIFF * 3 / 2 ))}"
@@ -275,4 +273,6 @@ if [[ "${WORKFLOW_MODE}" == "strict" ]]; then
   HOOK_DETECT_AUDIT_SIGNALS=true
   HOOK_MEMORY_SYNC=true
   HOOK_CROSS_LLM_AUDIT=true
+  HOOK_BOOTSTRAP_GUARD=true
+  HOOK_BOOTSTRAP_PHASE_GATE=true
 fi

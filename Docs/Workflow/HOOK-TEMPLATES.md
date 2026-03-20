@@ -17,7 +17,7 @@ CRITICAL: Only create hooks if project uses Claude Code. Run `chmod +x .claude/h
 # HOW TO CHANGE A SETTING:
 #   1. Edit the value in the "Defaults" table below      (applies to whole team)
 #   2. Or put it in .env                                  (personal, git-ignored)
-#   3. Or export as env var: export WAVE_SIZE=10          (temporary, current shell)
+#   3. Or export as env var: export CROSS_AUDIT_TIMEOUT=120  (temporary, current shell)
 
 # Version — tracks which WORKFLOW.md version these hooks were generated from.
 HOOKS_VERSION="3.0"
@@ -25,9 +25,8 @@ HOOKS_VERSION="3.0"
 WORKFLOW_MODE="standard"  # "freestyle", "lite", "standard", or "strict"
 
 # Mode-based defaults are set automatically (see actual file for case block).
-# Modes: freestyle (6/12 hooks, no gates), lite (9/12, close gate + CP3/CP4 + audit),
-#         standard (12/12, full workflow), strict (12/12 forced, no overrides).
-# Cross-audit defaults also vary by mode (wave-size, context, min-changes, enforce-block).
+# See Docs/Workflow/WORKFLOW-MODES.md for mode details and hook counts.
+# Cross-audit defaults also vary by mode (enforce-block).
 # Hook flags use mode preset; individual HOOK_* overrides are below the case block.
 
 # ── Defaults ──────────────────────────────────────────────────
@@ -39,7 +38,6 @@ WORKFLOW_MODE="standard"  # "freestyle", "lite", "standard", or "strict"
 _D_CROSS_AUDIT_PROVIDER=openai                           # "openai" or "anthropic"
 _D_CROSS_AUDIT_MODEL=                                    # Empty = auto-set per provider
 _D_CROSS_AUDIT_LANG=en                                   # "en" or "tr"
-_D_CROSS_AUDIT_WAVE_SIZE="${_D_CROSS_AUDIT_WAVE_SIZE:-5}"  # Edits before wave fires (mode-aware)
 _D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit non-zero on BLOCK (mode-aware)
 #
 # ┌─────────────────────────────────────────────────────────────┐
@@ -47,7 +45,7 @@ _D_CROSS_AUDIT_ENFORCE_BLOCK="${_D_CROSS_AUDIT_ENFORCE_BLOCK:-false}"  # Exit no
 # └─────────────────────────────────────────────────────────────┘
 _D_CROSS_AUDIT_API_BASE=                                 # Empty = auto-set per provider
 _D_CROSS_AUDIT_TIMEOUT=60                                # API timeout (seconds)
-_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: per-edit=×0.75, wave=×1, close-gate=×1.5
+_D_CROSS_AUDIT_MAX_DIFF=32000                            # Base diff limit — derived: wave=×1, close-gate=×1.5, entry-gate=×1
 _D_AUDIT_CP1_THRESHOLD=0.20                              # CP1: metric regression (20%)
 _D_AUDIT_CP2_MIN_SPRINTS=2                               # CP2: recurring failure (sprints)
 _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (dir levels)
@@ -81,6 +79,10 @@ _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (di
         "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-claude.sh" }]
       },
       {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bootstrap-phase-gate.sh" }]
+      },
+      {
         "matcher": "Read|Bash",
         "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-secrets.sh" }]
       }
@@ -109,6 +111,10 @@ _D_DASHBOARD_SEARCH_DEPTH=3                              # File search depth (di
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/detect-test-regression.sh" },
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/memory-sync.sh" }
         ]
+      },
+      {
+        "matcher": "Read|WebSearch|WebFetch|Agent",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bootstrap-guard.sh" }]
       }
     ],
     "Stop": [
@@ -539,13 +545,12 @@ command -v jq >/dev/null 2>&1 || exit 0
 Requires API key to activate (silently skips if no key). See [CROSS-LLM-AUDIT.md](CROSS-LLM-AUDIT.md) for setup.
 
 Design:
-- **Four audit modes:** per-edit (source → `git diff HEAD`), wave-review (merge checkpoint → `git diff HEAD~1`), close-gate (holistic → `git diff main...HEAD`), entry-gate (plan review → gate file content)
+- **Three audit modes:** wave-review (item completion → `git diff HEAD~1`), close-gate (holistic → `git diff main...HEAD`), entry-gate (plan review → gate file content). Other source file edits are skipped.
 - **Two providers:** OpenAI-compatible (default), native Anthropic API
-- **Wave batching:** fires every ~5 source edits. Gate/wave-review bypass wave counting
 - **Sub-agent skip:** worktree-based sub-agents auto-detected and skipped
 - **Context:** always sends full context (diff + active items + guardrails + failure modes + AC + contracts + sprint goal/progress + file content)
 - **Exit 0 always.** Only BLOCK verdict can enforce blocking (via `CROSS_AUDIT_ENFORCE_BLOCK`)
-- **Config:** `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_WAVE_SIZE`, `CROSS_AUDIT_TIMEOUT`, `CROSS_AUDIT_ENFORCE_BLOCK`
+- **Config:** `CROSS_AUDIT_PROVIDER`, `CROSS_AUDIT_API_KEY`, `CROSS_AUDIT_MODEL`, `CROSS_AUDIT_LANG`, `CROSS_AUDIT_TIMEOUT`, `CROSS_AUDIT_ENFORCE_BLOCK`
 
 ---
 

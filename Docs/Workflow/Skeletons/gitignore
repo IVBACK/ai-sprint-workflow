@@ -19,3 +19,6 @@ secrets.yml
 *.swo
 
 # FILL: Add stack-specific patterns below (node_modules/, __pycache__/, etc.)
+
+# Bootstrap phase markers (temporary)
+.bootstrap/

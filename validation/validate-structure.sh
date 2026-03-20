@@ -238,7 +238,10 @@ if [[ -f "$MODES" ]]; then
   MODES_LITE=$(echo "$_HOOKS_ROW" | grep -oE '[0-9]+/[0-9]+' | sed -n '2p')
   MODES_FULL=$(echo "$_HOOKS_ROW" | grep -oE '[0-9]+/[0-9]+' | sed -n '3p')
 
-  if [[ "$MODES_FREESTYLE" == "$README_FREESTYLE" && "$MODES_LITE" == "$README_LITE" && "$MODES_FULL" == "$README_FULL" ]]; then
+  if [[ -z "$README_FREESTYLE" && -z "$README_LITE" && -z "$README_FULL" ]]; then
+    echo "  INFO  [HOOK_COUNT_PARITY] Claim delegated to linked doc (README omits numeric detail)"
+    passes=$((passes + 1))
+  elif [[ "$MODES_FREESTYLE" == "$README_FREESTYLE" && "$MODES_LITE" == "$README_LITE" && "$MODES_FULL" == "$README_FULL" ]]; then
     pass "HOOK_COUNT_PARITY" "($README_FREESTYLE, $README_LITE, $README_FULL)"
   else
     fail "HOOK_COUNT_PARITY" "WORKFLOW-MODES.md ($MODES_FREESTYLE, $MODES_LITE, $MODES_FULL) != README ($README_FREESTYLE, $README_LITE, $README_FULL)"

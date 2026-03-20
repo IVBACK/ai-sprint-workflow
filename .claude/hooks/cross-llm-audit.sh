@@ -18,7 +18,6 @@
 #   CROSS_AUDIT_API_BASE               — API base URL (auto-set per provider)
 #   CROSS_AUDIT_MODEL                  — Model to use (default: gpt-4o / claude-sonnet-4-20250514)
 #   CROSS_AUDIT_LANG                   — Review language: "en" or "tr" (default: en)
-#   CROSS_AUDIT_WAVE_SIZE              — Edits before wave fires (default: 5)
 #   CROSS_AUDIT_TIMEOUT                — API timeout in seconds (default: 60)
 #
 # Exit: 0 normally. If CROSS_AUDIT_ENFORCE_BLOCK=true and verdict=BLOCK, exits 1.
@@ -92,15 +91,15 @@ if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]]; then _log_audit "skip" "wrong-
 # ── Detect audit mode ──
 # Close Gate file → holistic sprint review (full sprint diff against main)
 # Entry Gate file → plan review
-# Source file → per-edit review (existing behavior)
-AUDIT_MODE="per-edit"
+# TRACKING.md → wave-review (item completion boundary)
+# Other source files → skip (gates + wave-review provide sufficient coverage)
+AUDIT_MODE="skip"
 case "$FILE" in
   *_CLOSE_GATE*.md) AUDIT_MODE="close-gate" ;;
   *_ENTRY_GATE*.md) AUDIT_MODE="entry-gate" ;;
   *TRACKING*.md)    AUDIT_MODE="wave-review" ;;
-  *CLAUDE.md|*WORKFLOW*.md|*[Rr]oadmap*.md|*ROADMAP*.md|*SPRINT_CLOSE*|\
-  *GUARDRAILS*|*LESSONS*|*.json|*.yaml|*.yml|*.toml|*.lock|*.env*) _log_audit "skip" "excluded-file"; exit 0 ;;
 esac
+if [[ "$AUDIT_MODE" == "skip" ]]; then _log_audit "skip" "no-audit-mode"; exit 0; fi
 
 # ── Configuration defaults ──
 PROVIDER="${CROSS_AUDIT_PROVIDER:-openai}"  # "openai" or "anthropic"
@@ -118,57 +117,10 @@ if [[ -z "$API_BASE" || -z "$MODEL" ]]; then
 fi
 AUDIT_LANG="${CROSS_AUDIT_LANG:-en}"
 TIMEOUT="${CROSS_AUDIT_TIMEOUT:-60}"
-WAVE_SIZE="${CROSS_AUDIT_WAVE_SIZE:-5}"
-LOCK_TIMEOUT="${CROSS_AUDIT_LOCK_TIMEOUT:-5}"
 
-# ── Trigger control: wave vs item ──
-# For "wave" mode, we use a counter file to batch changes.
-# The audit fires after the Nth source file edit (default: when user is asked for approval).
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-# Counter file uses .claude/.state/ for persistence (survives /tmp/ cleanup, container restarts).
-# Per-user counters prevent race conditions when multiple developers share a machine.
-# Override with CROSS_AUDIT_COUNTER_FILE env var for testing.
 _STATE_DIR="${PROJECT_DIR}/.claude/.state"
 mkdir -p "$_STATE_DIR" 2>/dev/null
-_USER_ID="${USER:-${LOGNAME:-unknown}}"
-COUNTER_FILE="${CROSS_AUDIT_COUNTER_FILE:-${_STATE_DIR}/cross-audit-counter-${_USER_ID}}"
-
-# Gate and wave-review always fire immediately — wave counting only applies to per-edit
-if [[ "$AUDIT_MODE" == "per-edit" ]]; then
-  # Increment counter (atomic via flock if available)
-  # Returns exit code 0 = threshold reached (continue to audit),
-  #                    7 = below threshold (skip audit).
-  # Uses code 7 (not 0/1) so callers can distinguish "skip" from errors.
-  _do_wave_count() {
-    COUNT=0
-    [[ -f "$COUNTER_FILE" ]] && COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)
-    COUNT=$((COUNT + 1))
-    echo "$COUNT" > "$COUNTER_FILE"
-
-    # In wave mode, only fire every Nth edit (configured via CROSS_AUDIT_WAVE_SIZE)
-    # OR when explicitly signaled via CROSS_AUDIT_FIRE=true
-    if [[ "$COUNT" -lt "$WAVE_SIZE" && "${CROSS_AUDIT_FIRE:-}" != "true" ]]; then
-      return 7
-    fi
-    # Reset counter after firing
-    echo "0" > "$COUNTER_FILE"
-    return 0
-  }
-
-  # Use flock for atomic counter access if available; fallback to direct access
-  if command -v flock >/dev/null 2>&1; then
-    _wave_result=0
-    (
-      flock -w "$LOCK_TIMEOUT" 200 || exit 1
-      _do_wave_count
-    ) 200>"${COUNTER_FILE}.lock"
-    _wave_result=$?
-    # 7 = below threshold (skip audit), 1 = flock failed (skip safely), 0 = fire
-    if [[ $_wave_result -ne 0 ]]; then _log_audit "skip" "wave-below-threshold"; exit 0; fi
-  else
-    _do_wave_count || { _log_audit "skip" "wave-below-threshold"; exit 0; }
-  fi
-fi
 
 # ── Gather diff (strategy depends on audit mode) ──
 cd "$PROJECT_DIR" 2>/dev/null || {
@@ -213,11 +165,6 @@ elif [[ "$AUDIT_MODE" == "entry-gate" ]]; then
   COMBINED_DIFF=""
   [[ -f "$FILE" ]] && COMBINED_DIFF=$(cat "$FILE" 2>/dev/null || true)
   MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_ENTRY_GATE:-32000}"
-else
-  # Per-edit: current uncommitted changes (staged + unstaged vs HEAD)
-  # Exclude sensitive files from diff sent to external LLM
-  COMBINED_DIFF=$(git diff "$_DIFF_BASE" -- ':!*.env' ':!*.env.*' ':!*.key' ':!*.pem' ':!*.p12' ':!*credentials*' ':!*secrets*' 2>/dev/null || true)
-  MAX_DIFF_CHARS="${CROSS_AUDIT_MAX_DIFF_PER_EDIT:-24000}"
 fi
 
 # Check minimum change threshold (skip for entry-gate — always review the plan)
@@ -233,7 +180,7 @@ if [[ -z "$COMBINED_DIFF" ]]; then
   _log_audit "skip" "empty-diff"
   exit 0
 fi
-if [[ "$AUDIT_MODE" == "per-edit" || "$AUDIT_MODE" == "wave-review" ]]; then
+if [[ "$AUDIT_MODE" == "wave-review" ]]; then
   CHANGED_LINES=$(echo "$COMBINED_DIFF" | grep -cE '^\+[^+]|^-[^-]' 2>/dev/null || echo 0)
 else
   CHANGED_LINES=$(echo "$COMBINED_DIFF" | wc -l | tr -d ' ')
@@ -322,9 +269,9 @@ if [[ -f "${ENTRY_GATE:-}" ]]; then
 $AC_SECTION"
 fi
 
-# Full file context (for per-edit mode)
+# Full file context (for wave-review — shows the edited file for deeper analysis)
 FULL_FILE_CONTEXT=""
-if [[ -f "$FILE" ]]; then
+if [[ "$AUDIT_MODE" == "wave-review" && -f "$FILE" ]]; then
   FILE_CONTENT=$(head -c 8000 "$FILE")
   FULL_FILE_CONTEXT="## Full File Context ($FILE)
 \`\`\`
@@ -378,7 +325,7 @@ SEVERITY DECISION TREE:
 - PASS: no cross-cutting issues found
 
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
-Focus on cross-cutting concerns that per-edit reviews would miss. Be concise."
+Focus on cross-cutting concerns that individual edits may have missed. Be concise."
 
 elif [[ "$AUDIT_MODE" == "wave-review" ]]; then
   MODE_INSTRUCTIONS="You are reviewing a WAVE MERGE — the coordinator just merged parallel sub-agent work into the main branch. ${LANG_DIRECTIVE}
@@ -414,7 +361,7 @@ This is code from parallel sub-agents merged by the coordinator. Sub-agents work
 4. Import/dependency coherence — are all needed imports present? Any duplicate or conflicting dependencies?
 5. Naming consistency — do newly added functions/variables follow the same conventions?
 
-### B. Code quality (secondary — catch what per-edit reviews may have missed)
+### B. Code quality (secondary — catch what individual edits may have missed)
 6. Bugs, edge cases, or missed error handling in the merged code
 7. Security issues (injection, auth bypass, data exposure)
 8. Critical axis violations (if specified above)
@@ -465,49 +412,6 @@ SEVERITY DECISION TREE:
 Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"item\":\"CORE-NNN\",\"issue\":\"...\",\"suggestion\":\"...\"}]}
 Be concise. Focus on real planning gaps, not formatting."
 
-else
-  MODE_INSTRUCTIONS="You are a code reviewer performing an independent audit. ${LANG_DIRECTIVE}
-
-${SPRINT_GOAL}
-
-${SPRINT_PROGRESS}
-
-${CRITICAL_AXIS}
-
-${CONTRACTS}
-
-${ITEM_CONTEXT}
-
-${GUARDRAILS_CONTEXT}
-
-${FAILURE_MODES}
-
-${AC_CONTEXT}
-
-${FULL_FILE_CONTEXT}
-
-## Changes to Review
-\`\`\`diff
-${COMBINED_DIFF}
-\`\`\`
-
-## Instructions
-Review the changes for:
-1. Acceptance criteria coverage — are the active items properly addressed?
-2. Critical axis violations (if specified above)
-3. Coding rules violations (if guardrails provided)
-4. Bugs, edge cases, missed error handling
-5. Predicted risks — are failure modes addressed?
-6. Security issues (injection, auth bypass, data exposure)
-7. Integration risk — could this change conflict with other active items listed above? Flag potential API mismatches, shared state mutations, or import conflicts that would surface when parallel work is merged.
-
-SEVERITY DECISION TREE:
-- BLOCK: security issue (injection, auth bypass, data exposure), unhandled crash, acceptance criteria violation, API contract break, critical axis violation
-- WARN: logic bug in non-critical path, missing edge case, performance regression, style/naming violation, missing test coverage
-- PASS: no issues found
-
-Return JSON: {\"verdict\":\"PASS|WARN|BLOCK\",\"summary\":\"...\",\"findings\":[{\"severity\":\"high|medium|low\",\"file\":\"path\",\"line\":N,\"issue\":\"...\",\"suggestion\":\"...\"}]}
-Be concise."
 fi
 
 REVIEW_PROMPT="$MODE_INSTRUCTIONS"

@@ -42,16 +42,7 @@ The agent installs workflow files, scans your codebase, asks what you're buildin
   SPRINT CLOSE      →  Archive, baseline, retrospective
 ```
 
-Four [workflow modes](Docs/Workflow/WORKFLOW-MODES.md) from zero-overhead to full rigor:
-
-| Mode | Target | Hooks | Cross-Audit |
-|------|--------|-------|-------------|
-| Freestyle | Hackathon, experiments | 6/12 | Off |
-| Lite | Solo dev, small projects | 9/12 | wave:8 |
-| Standard | Most projects (default) | 12/12 | wave:5 |
-| Strict | Teams, critical systems | 12/12 | wave:3, enforce-block |
-
-Cross-audit sends diffs to a second LLM for independent review. Full review matrix: [CROSS-LLM-AUDIT.md §13](Docs/Workflow/CROSS-LLM-AUDIT.md#13-workflow-mode-interaction).
+Four [workflow modes](Docs/Workflow/WORKFLOW-MODES.md) from zero-overhead to full rigor: **Freestyle** (safety only), **Lite** (basic gates), **Standard** (default, full workflow), **Strict** (no overrides, enforce-block). See [WORKFLOW-MODES.md](Docs/Workflow/WORKFLOW-MODES.md) for the full comparison table.
 
 ## Documentation
 

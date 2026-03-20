@@ -190,7 +190,7 @@ ELIF custom hooks not in template: leave untouched (user extensions).
 - **Updated:** Bootstrap Step 3 (.gitignore secrets)
 - **Updated:** Discovery Q15 (Claude Code prerequisite)
 - **Doc:** `CROSS-LLM-AUDIT.md` (safety layers, config reference)
-- **Updated hook:** `cross-llm-audit.sh` (wave-review, worktree detection, wave counter)
+- **Updated hook:** `cross-llm-audit.sh` (wave-review, worktree detection)
 - **Updated hook:** `detect-audit-signals.sh` (PostToolUse filter, missing section warnings)
 - **Updated:** `CROSS-LLM-AUDIT.md` (four audit modes, sub-agent skip)
 

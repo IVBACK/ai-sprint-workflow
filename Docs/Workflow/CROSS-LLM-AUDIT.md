@@ -15,12 +15,11 @@ Hook fires on `PostToolUse(Edit|Write)`:
 
 | Mode | Trigger | Diff Source | Focus |
 |------|---------|-------------|-------|
-| **Per-edit** | Source file change (wave-batched) | `git diff HEAD` (uncommitted) | Bugs, security, AC, integration risk |
-| **Wave Review** | `TRACKING.md` edited | `git diff HEAD~1` (last commit) | Cross-item integration + code quality (dual-axis) |
+| **Wave Review** | `TRACKING.md` edited (item completion) | `git diff HEAD~1` (last commit) | Cross-item integration + code quality |
 | **Close Gate** | `S*_CLOSE_GATE.md` written | `git diff main...HEAD` (full sprint) | Cross-item consistency, architecture, failure modes |
 | **Entry Gate** | `S*_ENTRY_GATE.md` written | Gate report content | Plan quality, missing risks, AC vs guardrails |
 
-Gate reviews (Close/Entry) fire immediately, bypass wave counting.
+Other source file edits are skipped — gates + wave-review provide sufficient coverage.
 
 ## 3. Setup
 
@@ -28,7 +27,7 @@ Gate reviews (Close/Entry) fire immediately, bypass wave counting.
 ```bash
 bash .claude/setup-audit.sh
 ```
-Verify: make a 3+ line code change, check stderr for "Cross-audit:" messages.
+Verify: complete a TRACKING.md item update, check stderr for "Cross-audit:" messages.
 
 ### Manual
 1. Set API key in `.env` (git-ignored): `CROSS_AUDIT_API_KEY=your-key-here`
@@ -63,12 +62,9 @@ Config precedence: env var > `.env` > `hooks-config.sh` defaults (`_D_*`).
 | `CROSS_AUDIT_LANG` | `en` | `en` or `tr` |
 | `CROSS_AUDIT_TIMEOUT` | `60` | API timeout (seconds) |
 | `CROSS_AUDIT_ENFORCE_BLOCK` | `false` | Exit non-zero on BLOCK verdict |
-| `CROSS_AUDIT_WAVE_SIZE` | `5` | Edits before wave fires |
-| `CROSS_AUDIT_MAX_DIFF` | `32000` | Base diff limit (chars). Per-edit=x0.75, wave=x1, entry-gate=x1, close-gate=x1.5 |
+| `CROSS_AUDIT_MAX_DIFF` | `32000` | Base diff limit (chars). wave=x1, entry-gate=x1, close-gate=x1.5 |
 
-Force immediate audit: `export CROSS_AUDIT_FIRE=true`
-
-Override per-mode limits: `CROSS_AUDIT_MAX_DIFF_PER_EDIT`, `_WAVE`, `_ENTRY_GATE`, `_CLOSE_GATE`.
+Override per-mode limits: `CROSS_AUDIT_MAX_DIFF_WAVE`, `_ENTRY_GATE`, `_CLOSE_GATE`.
 
 ### Audit Signal Thresholds
 
@@ -86,12 +82,11 @@ Override per-mode limits: `CROSS_AUDIT_MAX_DIFF_PER_EDIT`, `_WAVE`, `_ENTRY_GATE
 - Critical axis from CLAUDE.md
 - Immutable contracts (except entry-gate: plan review, not code)
 - Guardrails + failure modes + acceptance criteria
-- Per-edit: full content of edited file (first 8000 chars)
 
-### Skipped Files (never trigger hook)
-`CLAUDE.md`, `WORKFLOW*.md`, `*Roadmap*.md`, `*SPRINT_CLOSE*`, `*GUARDRAILS*`, `*LESSONS*`, `*.json`, `*.yaml`, `*.yml`, `*.toml`, `*.lock`, `*.env*`
+### What Triggers Audit
+Only three file patterns trigger an audit mode (see §2). All other file edits are silently skipped — no explicit skip list needed.
 
-Note: `TRACKING*.md` triggers wave-review mode, not skipped.
+Config/workflow files (`CLAUDE.md`, `WORKFLOW*.md`, `*Roadmap*.md`, `*.json`, `*.yaml`, etc.) also don't match these patterns and are naturally skipped.
 
 ## 6. Verdict Handling
 
@@ -195,24 +190,11 @@ bash .claude/hooks/audit-health-check.sh 1800   # 30 min
 
 ## 13. Workflow Mode Interaction
 
-Cross-LLM audit is **disabled** in freestyle mode (`HOOK_CROSS_LLM_AUDIT=false`). In lite, standard, and strict modes it activates when API key is present.
+Cross-LLM audit is **disabled** in freestyle mode (`HOOK_CROSS_LLM_AUDIT=false`). In lite, standard, and strict modes it activates when API key is present. Strict mode enables enforce-block (BLOCK verdict exits non-zero).
 
-| Mechanism | Freestyle | Lite | Standard | Strict |
-|-----------|:---------:|:----:|:--------:|:------:|
-| cross-llm-audit hook | off | on | on | on |
-| Wave size (edits before fire) | — | 8 | 5 | 3 |
-| enforce-block (BLOCK → exit 1) | — | no | no | yes |
-| sprint-tools review (blind) | available | available | available | available |
-| pre-merge-audit (parallel exec) | — | — | optional | recommended |
-| detect-audit-signals (CP1/CP2) | off | off | on | on (no suppress) |
-| detect-test-regression (CP3) | off | on | on | on |
-| validate-close-gate (CP4) | off | on | on | on |
-| Entry Gate blind review (12a) | not enforced | abbreviated | full/abbreviated | full always |
-| Close Gate blind review | not enforced | basic | full 6-phase | full + peer sign-off |
+For the full mode comparison (hooks, gates, checkpoints, audit), see [WORKFLOW-MODES.md](WORKFLOW-MODES.md).
 
 `sprint-tools review` is available in all modes but not mechanically enforced — soft-enforced via AGENT-RULES.md §Blind Review. Requires API key; skips gracefully without one.
-
-Audit signal hooks (CP1/CP2 via `detect-audit-signals.sh`) are controlled by workflow mode. Override: `HOOK_DETECT_AUDIT_SIGNALS=true`.
 
 ## 14. Disabling
 

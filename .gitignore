@@ -68,3 +68,6 @@ data/
 results-*/
 results-combined-*/
 results-parallel-*/
+
+# Bootstrap phase markers (temporary)
+.bootstrap/

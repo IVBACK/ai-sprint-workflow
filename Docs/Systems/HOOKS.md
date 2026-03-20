@@ -22,6 +22,7 @@ Derived from `.claude/settings.json`:
 | SessionStart | (all) | detect-audit-signals.sh | CP1/CP2: metric regression, recurring failures |
 | SessionStart | (all) | memory-sync.sh | Inject "Read TRACKING.md" + tool list |
 | PreToolUse | Write | protect-claude.sh | Block Write tool on existing CLAUDE.md |
+| PreToolUse | Write\|Edit | bootstrap-phase-gate.sh | Block file creation until bootstrap markers exist |
 | PreToolUse | Read\|Bash | protect-secrets.sh | Block reads of .env, .key, .pem, credentials |
 | PostToolUse | Edit\|Write | validate-tracking.sh | Check legal statuses, evidence on verified items |
 | PostToolUse | Edit\|Write | validate-id-uniqueness.sh | Detect duplicate CORE-### IDs |
@@ -32,6 +33,7 @@ Derived from `.claude/settings.json`:
 | PostToolUse | Write | validate-sprint-close.sh | Check roadmap marks, deferred acknowledgment |
 | PostToolUse | Bash | detect-test-regression.sh | CP3: scan test runner output for failures |
 | PostToolUse | Bash | memory-sync.sh | After git commit: remind to update TRACKING |
+| PostToolUse | Read\|WebSearch\|WebFetch\|Agent | bootstrap-guard.sh | Inject phase context + create markers |
 | PreCompact | (all) | memory-sync.sh | Inject "re-read TRACKING after compaction" + last 5 session notes |
 | Stop | (all) | memory-sync.sh | Block stop if TRACKING not updated |
 
@@ -70,7 +72,9 @@ Additional checks:
 
 ## Protection Hooks
 
-**protect-claude.sh** (PreToolUse/Write) -- Blocks the Write tool on any file named `CLAUDE.md` that already exists. The Edit tool is allowed (partial modifications are safe). Write is allowed if the file does not exist yet (bootstrap creation).
+**protect-claude.sh** (PreToolUse/Write) -- Blocks the Write tool on any file named `CLAUDE.md` that already exists. The Edit tool is allowed (partial modifications are safe). Write is allowed if the file does not exist yet (bootstrap creation) or if the file still contains `[REQUIRED` placeholders (bootstrap fill).
+
+**bootstrap-phase-gate.sh** (PreToolUse/Write|Edit) -- Blocks creation of project files (CLAUDE.md, TRACKING.md, Roadmap.md, CODING_GUARDRAILS.md) until bootstrap markers (`.bootstrap/research-done`, `.bootstrap/review-done`) exist. Only active during bootstrap (detected by `[REQUIRED` in CLAUDE.md skeleton). Outside bootstrap, exits silently.
 
 **protect-secrets.sh** (PreToolUse/Read|Bash) -- Two layers:
 - Read tool: blocks `.env`, `.env.*`, `*.key`, `*.pem`, `*.p12`, `credentials.json`, `secrets.yaml`. Allows `.env.example`.
@@ -99,6 +103,10 @@ Exits 1 on violations (non-blocking warning).
 - Roadmap.md has checked items (`[x]` or `[~]`)
 - Warns about deferred item count for acknowledgment in close report
 
+## Bootstrap Hooks
+
+**bootstrap-guard.sh** (PostToolUse/Read|WebSearch|WebFetch|Agent) -- Active only during bootstrap (CLAUDE.md has `[REQUIRED` placeholders). Detects which bootstrap phase file was read and injects phase-specific context via `additionalContext`. Creates marker files (`.bootstrap/research-done` on WebSearch/WebFetch, `.bootstrap/review-done` on Agent when `plan-draft.md` exists). Markers gate the phase-gate hook above. Also warns about crash recovery when stale `.bootstrap/plan-draft.md` is found.
+
 ## Audit Signal Hooks
 
 **detect-audit-signals.sh** (SessionStart + PostToolUse/Edit|Write on TRACKING.md) -- Detects two checkpoint signals by parsing structured tables in TRACKING.md:
@@ -109,11 +117,11 @@ Silent when sections are missing. Persists findings to `.findings-log`. Threshol
 
 **detect-test-regression.sh** (PostToolUse/Bash) -- Gate 1: checks if the Bash command matches a known test runner (pytest, jest, go test, cargo test, etc. -- 20+ patterns). Gate 2: scans output for failure patterns specific to each runner. Injects CP3 AUDIT SIGNAL with required actions (distinguish current vs past sprint failures).
 
-**cross-llm-audit.sh** (PostToolUse/Edit|Write) -- Sends diffs to an external LLM. Four audit modes based on the edited file:
-- `per-edit`: uncommitted diff, fires every N edits (wave counter, default 5)
-- `wave-review`: fires on TRACKING.md edit (coordinator merged sub-agent work)
+**cross-llm-audit.sh** (PostToolUse/Edit|Write) -- Sends diffs to an external LLM. Three audit modes based on the edited file:
+- `wave-review`: fires on TRACKING.md edit (item completion boundary)
 - `entry-gate`: sends the gate report content for plan review
 - `close-gate`: full sprint diff against main branch
+- Other source file edits are skipped (gates + wave-review provide sufficient coverage)
 
 Excludes config/workflow files. Scrubs secrets from diffs. Builds context layers from TRACKING, CLAUDE.md, Roadmap, guardrails, and Entry Gate. Returns structured JSON verdict (PASS/WARN/BLOCK) with a self-audit checklist directive. Logs all invocations to `.claude/.state/cross-audit-log.jsonl`. WARN/BLOCK findings are persisted to `.findings-log`.
 
@@ -121,14 +129,7 @@ Excludes config/workflow files. Scrubs secrets from diffs. Builds context layers
 
 `.claude/hooks-config.sh` controls everything. Each hook has a flag (`HOOK_*=true|false`).
 
-Four workflow modes set flag presets:
-
-| Mode | Hooks enabled | Cross-audit wave size | Notes |
-|------|--------------|----------------------|-------|
-| freestyle | 6/12 (safety only) | N/A | No gates, no audit signals |
-| lite | 9/12 | 8 | No entry-gate-session, sprint-close, CP1/CP2 |
-| standard | 12/12 | 5 | Default. All hooks enabled |
-| strict | 12/12 (forced) | 3 | Individual overrides ignored, enforce-block=true |
+Four workflow modes set flag presets — see [WORKFLOW-MODES.md](../Workflow/WORKFLOW-MODES.md) for the full comparison table. Modes range from Freestyle (safety hooks only) to Strict (all hooks forced on, no overrides).
 
 Override priority: env var > `.env` file > hooks-config.sh defaults. In strict mode, all hooks are forced on after `.env` loading.
 
@@ -137,7 +138,6 @@ Override priority: env var > `.env` file > hooks-config.sh defaults. In strict m
 - **jq** -- Required by all hooks. Each hook checks `command -v jq` and exits gracefully if missing.
 - **python3** -- Required only if using sprint-tools (session-start.sh digest injection).
 - **curl** -- Required only by cross-llm-audit.sh for API calls.
-- **flock** -- Optional. cross-llm-audit.sh uses it for atomic wave counter access; falls back to direct file access.
 - **git** -- Used by memory-sync.sh (commit detection, tracking update check) and cross-llm-audit.sh (diff gathering). Hooks degrade gracefully in VCS=none mode.
 
 ## Hook Simulation for Testing
@@ -163,8 +163,8 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"TRACKING.md"}}' | bash .cla
 # PreToolUse Write on CLAUDE.md
 echo '{"tool_name":"Write","tool_input":{"file_path":"CLAUDE.md"}}' | bash .claude/hooks/protect-claude.sh
 
-# Cross-audit (requires API key, resets wave counter)
-CROSS_AUDIT_FIRE=true echo '{"tool_name":"Edit","tool_input":{"file_path":"src/main.py"}}' | bash .claude/hooks/cross-llm-audit.sh
+# Cross-audit wave-review (requires API key, fires on TRACKING.md edit)
+echo '{"tool_name":"Edit","tool_input":{"file_path":"TRACKING.md"}}' | bash .claude/hooks/cross-llm-audit.sh
 ```
 
 Set `CLAUDE_PROJECT_DIR` to the project root when testing outside Claude Code.

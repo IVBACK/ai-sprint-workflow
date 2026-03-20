@@ -18,6 +18,10 @@ FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 # Allow Write if CLAUDE.md doesn't exist yet (bootstrap creation).
 if [[ "$TOOL" == "Write" ]] && [[ "$(basename "$FILE")" == "CLAUDE.md" ]]; then
     if [[ -f "$FILE" ]]; then
+        # Allow Write if file is still a skeleton (has [REQUIRED] placeholders — bootstrap fill)
+        if grep -q '\[REQUIRED' "$FILE" 2>/dev/null; then
+            exit 0
+        fi
         echo "BLOCKED: Writing to CLAUDE.md is not allowed (would overwrite existing content)." >&2
         echo "Use the Edit tool to append or modify specific sections." >&2
         echo "WORKFLOW.md rule: 'Never overwrite CLAUDE.md without reading and preserving existing content.'" >&2

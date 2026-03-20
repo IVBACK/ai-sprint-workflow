@@ -15,12 +15,12 @@
 | Sprint Close | None enforced | Steps 1-3, 5, 14 | Full (1-15) | Full + team review |
 | Failure analysis | Skip | Skip | Per item (3 cat) | Per item + Critical Axis |
 | Metric sufficiency | Skip | Basic (9b-lite) | Full (9c) | Full + threshold review |
-| Hooks | Core safety (6/12) | Core + close + test + audit (9/12) | All (12/12) | All, overrides disabled |
+| Hooks | Core safety (8/14) | Core + close + test + audit (11/14) | All (14/14) | All, overrides disabled |
 | sprint-audit.sh | Optional | Optional | Recommended | Mandatory (blocks gate) |
 | CP1-2 | Disabled | Disabled | Enabled (suppress x2) | Enabled, no suppression |
 | CP3-4 | Disabled | Enabled | Enabled | Enabled |
 | Perf Baseline | Not recorded | Recorded | Recorded | Recorded |
-| Cross-audit | Off | wave:8 | wave:5 | wave:3, enforce-block |
+| Cross-audit | Off | On | On | On, enforce-block |
 | Parallel exec | No | No | Optional | Recommended |
 | Overhead | ~0 min | ~7 min | ~15 min | ~25 min |
 
@@ -47,7 +47,7 @@ Phase 0 (sprint type detection) and step 0pre (roadmap sanity) still run. UNTRAC
 Activate: `WORKFLOW_MODE="standard"` (default)
 
 All workflow features and hooks active. AI recommends abbreviated vs full entry gate by sprint size.
-Cross-audit: wave:5, min:3.
+Cross-audit: on, non-blocking.
 Parallel: optional (4+ independent items -> 40-60% gate time reduction at 2-3x tokens).
 
 ## Strict
@@ -63,7 +63,7 @@ Everything in Standard plus:
 6. sprint-audit.sh exit code 1 blocks Close Gate.
 7. UNTRACKED_DEBT findings require team review to dismiss.
 
-Cross-audit: wave:3, min:1, enforce-block true.
+Cross-audit: on, enforce-block true (BLOCK verdict halts the agent).
 Parallel: recommended (2-3x tokens, 40-50% faster).
 
 Team conventions (strict) — see [TEAM-GUIDE.md](TEAM-GUIDE.md) for full team coordination:
