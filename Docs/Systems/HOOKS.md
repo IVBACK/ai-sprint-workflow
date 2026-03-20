@@ -115,7 +115,7 @@ Exits 1 on violations (non-blocking warning).
 
 Silent when sections are missing. Persists findings to `.findings-log`. Thresholds configurable via `AUDIT_CP1_THRESHOLD` and `AUDIT_CP2_MIN_SPRINTS`.
 
-**detect-test-regression.sh** (PostToolUse/Bash) -- Gate 1: checks if the Bash command matches a known test runner (pytest, jest, go test, cargo test, etc. -- 20+ patterns). Gate 2: scans output for failure patterns specific to each runner. Injects CP3 AUDIT SIGNAL with required actions (distinguish current vs past sprint failures).
+**detect-test-regression.sh** (PostToolUse/Bash) -- Gate 1: checks if the Bash command matches a known test runner (pytest, jest, go test, cargo test, etc. -- 20+ patterns). Gate 2: scans output for failure patterns specific to each runner. Gate 3: if no failures matched, resets the escalation counter and exits. On failure, tracks consecutive failures in `.claude/.state/escalation-counter.json` and injects CP3 AUDIT SIGNAL with graduated messaging: 1st failure = standard required actions, 2nd = L2 approach escalation reminder (IMPL-LOOP §B.2), 3rd+ = 3-strike stop directive. Counter resets on any passing run (including empty output). Agent response procedure: see AGENT-RULES.md §CP3 Response.
 
 **cross-llm-audit.sh** (PostToolUse/Edit|Write) -- Sends diffs to an external LLM. Three audit modes based on the edited file:
 - `wave-review`: fires on TRACKING.md edit (item completion boundary)

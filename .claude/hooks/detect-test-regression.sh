@@ -70,10 +70,20 @@ done
 
 [[ "$IS_TEST_RUNNER" != "true" ]] && exit 0
 
+# --- State directory setup (needed by both empty-output and failure paths) ---
+# Derive project dir reliably: prefer CLAUDE_PROJECT_DIR, fall back to hook's own location
+_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$HOOKS_DIR/../.." && pwd)}"
+STATE_DIR="$_PROJECT_DIR/.claude/.state"
+ESCALATION_FILE="$STATE_DIR/escalation-counter.json"
+
 # --- Gate 2: Extract and scan output ---
 OUTPUT=$(echo "$INPUT" | jq -r '.tool_response.output // empty')
 
-[[ -z "$OUTPUT" ]] && exit 0
+[[ -z "$OUTPUT" ]] && {
+    # Empty output from test runner = likely passed
+    [[ -f "$ESCALATION_FILE" ]] && rm -f "$ESCALATION_FILE" 2>/dev/null
+    exit 0
+}
 
 # Failure patterns — narrowed to test-runner specific formats only.
 # Excludes generic words like "FAILED" that appear in non-test contexts.
@@ -115,23 +125,57 @@ for pattern in "${FAIL_PATTERNS[@]}"; do
     done < <(echo "$OUTPUT" | grep -E "$pattern" 2>/dev/null | head -3)
 done
 
-if [[ ${#MATCHED_LINES[@]} -gt 0 ]]; then
-    UNIQUE_LINES=$(printf '%s\n' "${MATCHED_LINES[@]}" | sort -u | head -8)
-
-    jq -n --arg lines "$UNIQUE_LINES" --arg cmd "$COMMAND" '{
-      "additionalContext": (
-        "=== ⚠ CP3 AUDIT SIGNAL (WORKFLOW.md Implementation Loop D.6) ===\n" +
-        "Test failures detected in: " + $cmd + "\n" +
-        $lines + "\n\n" +
-        "REQUIRED ACTIONS:\n" +
-        "1. Determine if these are current-sprint or past-sprint failures.\n" +
-        "2. If past-sprint: DO NOT continue silently. Surface to user:\n" +
-        "   \"Past-sprint test regression detected — recommend Retroactive Audit.\"\n" +
-        "3. If current-sprint: fix before proceeding, do not defer silently.\n" +
-        "4. Do not mark sprint items as verified while tests are failing.\n" +
-        "================================================================="
-      )
-    }'
+# --- Gate 3: Test passed? Reset escalation counter ---
+if [[ ${#MATCHED_LINES[@]} -eq 0 ]]; then
+    # Tests passed — reset escalation counter
+    if [[ -f "$ESCALATION_FILE" ]]; then
+        rm -f "$ESCALATION_FILE" 2>/dev/null
+    fi
+    exit 0
 fi
+
+# --- Test failures detected — track consecutive failures ---
+mkdir -p -m 700 "$STATE_DIR" 2>/dev/null
+
+FAIL_COUNT=1
+if [[ -f "$ESCALATION_FILE" ]]; then
+    PREV_COUNT=$(jq -r '.count // 0' "$ESCALATION_FILE" 2>/dev/null || echo 0)
+    FAIL_COUNT=$((PREV_COUNT + 1))
+fi
+
+_TMP_ESC="$ESCALATION_FILE.tmp"
+jq -n --argjson count "$FAIL_COUNT" --arg cmd "$COMMAND" \
+    '{"count": $count, "last_cmd": $cmd}' > "$_TMP_ESC" 2>/dev/null && \
+    mv "$_TMP_ESC" "$ESCALATION_FILE" 2>/dev/null
+
+UNIQUE_LINES=$(printf '%s\n' "${MATCHED_LINES[@]}" | sort -u | head -8)
+
+# Build escalation reminder based on consecutive failure count
+# Use printf to produce real newlines so jq --arg properly JSON-escapes them
+ESCALATION_MSG=""
+if [[ $FAIL_COUNT -ge 3 ]]; then
+    ESCALATION_MSG=$(printf '\n⚠ ESCALATION: This is consecutive failure #%d. You have hit the 3-strike limit.\nSTOP fixing and present options to user (see IMPL-LOOP §C or §D.6).\n' "$FAIL_COUNT")
+elif [[ $FAIL_COUNT -ge 2 ]]; then
+    ESCALATION_MSG=$(printf '\n⚠ ESCALATION: This is consecutive failure #%d. Apply Approach Escalation (IMPL-LOOP §B.2).\nDo NOT repeat the same fix. Move to L2+ (alternative approach, deeper investigation, or decompose).\nLog transition: sprint-tools note attempt "L1→L2: [reason]"\n' "$FAIL_COUNT")
+fi
+
+jq -n --arg lines "$UNIQUE_LINES" --arg cmd "$COMMAND" --arg esc "$ESCALATION_MSG" '{
+  "additionalContext": (
+    "=== ⚠ CP3 AUDIT SIGNAL (WORKFLOW.md Implementation Loop D.6) ===\n" +
+    "Test failures detected in: " + $cmd + "\n" +
+    $lines + "\n\n" +
+    "REQUIRED ACTIONS:\n" +
+    "1. Determine if these are current-sprint or past-sprint failures.\n" +
+    "2. If past-sprint: DO NOT continue silently. Surface to user:\n" +
+    "   \"Past-sprint test regression detected — recommend Retroactive Audit.\"\n" +
+    "3. If current-sprint: fix before proceeding, do not defer silently.\n" +
+    "4. Do not mark sprint items as verified while tests are failing.\n" +
+    "5. PREFER spawning a diagnostic sub-agent (worktree) with the failure output +\n" +
+    "   stack trace files. Task: identify root cause + propose fix (do NOT apply).\n" +
+    "   Review diagnosis before applying. If no sub-agent: diagnose in-context.\n" +
+    $esc +
+    "================================================================="
+  )
+}'
 
 exit 0

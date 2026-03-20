@@ -603,6 +603,56 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════
+# SECTION 17: Evidence confidence level audit
+# Verified items should have evidence prefixed with
+# VERIFIED:, INFERRED:, or UNCERTAIN:.
+# Must items require VERIFIED: — anything else is a finding.
+# ═══════════════════════════════════════════════════════
+
+echo ""
+echo "── EVIDENCE CONFIDENCE LEVELS ──"
+TRACKING_FILE="$ROOT/TRACKING.md"
+if [[ -f "$TRACKING_FILE" ]]; then
+  # Extract verified items from Sprint Board table
+  VERIFIED_ROWS=$(sed -n '/^## Sprint Board/,/^## /p' "$TRACKING_FILE" \
+    | grep -i '| *verified *|' 2>/dev/null || true)
+
+  if [[ -z "$VERIFIED_ROWS" ]]; then
+    echo "  SKIP  (no verified items found)"
+  else
+    MISSING_PREFIX=0
+    MUST_NOT_VERIFIED=0
+    while IFS='|' read -r _ id _ status _ priority evidence _; do
+      id=$(echo "$id" | xargs 2>/dev/null || true)
+      priority=$(echo "$priority" | xargs 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+      evidence=$(echo "$evidence" | xargs 2>/dev/null || true)
+      [[ -z "$id" || -z "$evidence" ]] && continue
+
+      # Check prefix exists
+      if ! echo "$evidence" | grep -qiE '^(VERIFIED|INFERRED|UNCERTAIN):'; then
+        echo "  WARN  $id: evidence missing confidence prefix (VERIFIED:/INFERRED:/UNCERTAIN:)"
+        total=$((total + 1))
+        MISSING_PREFIX=$((MISSING_PREFIX + 1))
+      elif [[ "$priority" == "must" ]] && ! echo "$evidence" | grep -qiE '^VERIFIED:'; then
+        echo "  WARN  $id: must-priority item verified with non-VERIFIED evidence"
+        total=$((total + 1))
+        MUST_NOT_VERIFIED=$((MUST_NOT_VERIFIED + 1))
+      elif [[ "$priority" == "should" ]] && ! echo "$evidence" | grep -qiE '^(VERIFIED|INFERRED):'; then
+        echo "  WARN  $id: should-priority item verified with UNCERTAIN evidence (requires VERIFIED or INFERRED)"
+        total=$((total + 1))
+        MUST_NOT_VERIFIED=$((MUST_NOT_VERIFIED + 1))
+      fi
+    done <<< "$VERIFIED_ROWS"
+
+    if [[ $MISSING_PREFIX -eq 0 && $MUST_NOT_VERIFIED -eq 0 ]]; then
+      echo "  PASS  All verified items have correct evidence confidence levels"
+    fi
+  fi
+else
+  echo "  SKIP  (TRACKING.md not found)"
+fi
+
+# ═══════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════
 

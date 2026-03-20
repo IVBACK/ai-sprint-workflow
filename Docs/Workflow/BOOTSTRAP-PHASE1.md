@@ -14,7 +14,7 @@ IF git available:
      - Docs/Workflow/ (all workflow instruction files)
      - Docs/Systems/ (HOOKS.md, MEMORY.md, TOOLS.md)
      - Tools/sprint-tools (dispatcher)
-     - Tools/sprint-*.py (12 subcommands)
+     - Tools/sprint-*.py (13 subcommands)
      - Tools/sprint_lib/ (shared library, 8 files)
      - Tools/sprint-audit.sh
      - checks/ → Tools/checks/ (modular audit adapters)

@@ -152,6 +152,57 @@ IF new session (context lost):
 - Run ALL tests after each item (D.6)
 - Never skip verification to "save time"
 - Before fixing a bug: write root cause in one sentence. Can't? Investigate more.
+- When stuck: apply Approach Escalation (IMPL-LOOP.md §B.2) — do not repeat the same approach.
+
+## Evidence Standards
+
+```
+CONFIDENCE LEVELS (prefix evidence string when running sprint-tools item ... verified):
+
+  VERIFIED  — direct observation: test ran + passed, runtime output checked, manual review
+              Example: sprint-tools item CORE-NNN verified "VERIFIED: pytest 14/14 passed"
+  INFERRED  — indirect signal: grep confirmed, static analysis, code review without execution
+              Example: sprint-tools item CORE-NNN verified "INFERRED: grep shows function in 3 callers"
+  UNCERTAIN — not independently checked, infrastructure unavailable
+              Example: sprint-tools item CORE-NNN verified "UNCERTAIN: prod env not available, staging only"
+
+FORMAT: Always prefix the evidence string with the confidence level.
+
+RULES:
+  Must items  → VERIFIED only (enforced by sprint-tools — wrong level exits with error).
+  Should items → VERIFIED or INFERRED.
+  Could items  → any level, but state it explicitly.
+  UNCERTAIN alone is never sufficient for Must or Should items.
+
+  sprint-tools enforcement: missing prefix → warning (advisory). Wrong level for
+  priority → hard block (exit 2). Unknown priority → treated as must (fail-closed).
+
+  IF VERIFIED is impossible (no test infra, non-executable item like docs/config):
+    VERIFIED means: manual review confirms change matches AC. State review method.
+    Example: "VERIFIED: manual review — README install steps match new CLI flags"
+    Do NOT downgrade to INFERRED — instead, use VERIFIED with the review method.
+    For pending infrastructure: mark item "pending" per IMPL-LOOP §D.6.
+
+WHY: "grep found it" ≠ "it works." Stating confidence level forces the question:
+     "Did I actually run this, or am I assuming?"
+```
+
+## CP3 Response (test failure detected)
+
+```
+ON CP3 AUDIT SIGNAL (injected by detect-test-regression hook):
+  1. Spawn diagnostic sub-agent (worktree isolation) with:
+     - Failing test output (from CP3 signal)
+     - Stack trace / relevant source files
+     - Task: identify root cause + propose fix (do NOT apply)
+     - Return: root_cause, proposed_fix, confidence
+  2. Review sub-agent diagnosis, then apply fix and re-run tests.
+  3. If no sub-agent capability: diagnose in-context using §B.2 escalation.
+
+  NEVER: ignore CP3 and continue to next item.
+  NEVER: retry the same fix without understanding root cause first.
+  Apply Approach Escalation (IMPL-LOOP §B.2) across retries.
+```
 
 ## Auto-Detection
 
@@ -233,6 +284,17 @@ ESCALATION:
   T1-T6 match → prompt user for domain research (see ENTRY-GATE / IMPL-LOOP A.5)
   T7-T8 match → micro-gate: log trigger + ask user before proceeding (see IMPL-LOOP A.2.5)
   No match    → proceed without asking
+
+DELEGATION (context preservation):
+  T1-T6 (domain triggers) → prefer sub-agent delegation:
+    Spawn research sub-agent with: trigger type, item description, relevant file paths.
+    Task: research + return structured findings (max 20 lines).
+    Main agent: receives findings, continues with clean context.
+  T7-T8 (confidence triggers) → in-context OK (small scope).
+  IF no sub-agent capability: proceed in-context but externalize findings to
+    sprint-tools note immediately — do not accumulate research in conversation.
+  WHY: domain research (T1-T6) consumes significant context. Delegation keeps
+    main context focused on implementation.
 ```
 
 ## Blind Review

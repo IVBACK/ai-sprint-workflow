@@ -20,7 +20,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
           │ ENTRY-GATE.md         │  │                          │
           │ IMPL-LOOP.md          │  │ settings.json  → wiring  │
           │ CLOSE-GATE.md         │  │ hooks-config.sh→ toggles │
-          │ SPRINT-CLOSE.md       │  │ 12 bash hooks  → enforce │
+          │ SPRINT-CLOSE.md       │  │ 14 bash hooks  → enforce │
           │ AGENT-RULES.md        │  └──────────┬───────────────┘
           │ PROCEDURES.md         │             │
           │ STATE-TRANSITIONS.md  │        reads/writes
@@ -36,7 +36,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
           │ sprint-state.py       │  │ SPRINT-INDEX → lookup    │
           │ sprint-item.py        │  └──────────────────────────┘
           │ sprint-git.py         │
-          │ + 6 more tools        │  ┌──────────────────────────┐
+          │ + 10 more tools       │  ┌──────────────────────────┐
           │ sprint_lib/ (shared)  │  │   Validation             │
           └───────────────────────┘  │   validation/            │
                                      │                          │
@@ -49,7 +49,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
 
 ## Hook System
 
-12 bash hooks triggered by Claude Code lifecycle events (SessionStart, PreToolUse, PostToolUse, PreCompact, Stop). Each hook reads `hooks-config.sh` for its toggle flag. Four workflow modes (freestyle/lite/standard/strict) set which hooks are active. Settings wired in `.claude/settings.json`.
+14 bash hooks triggered by Claude Code lifecycle events (SessionStart, PreToolUse, PostToolUse, PreCompact, Stop). Each hook reads `hooks-config.sh` for its toggle flag. Four workflow modes (freestyle/lite/standard/strict) set which hooks are active. Settings wired in `.claude/settings.json`.
 
 - Detail: [Docs/Systems/HOOKS.md](Docs/Systems/HOOKS.md)
 - Config: [.claude/hooks-config.sh](.claude/hooks-config.sh)
@@ -57,7 +57,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
 
 ## Tool System
 
-`Tools/sprint-tools` is a bash dispatcher that routes subcommands (state, item, git, checkpoint, baseline, metrics, close, index, review, learn, note, migrate) to single-responsibility Python scripts. All tools share `sprint_lib/` -- a typed library with markdown parsers, in-place writers, and data models. Zero external dependencies (stdlib only).
+`Tools/sprint-tools` is a bash dispatcher that routes subcommands (state, item, git, checkpoint, baseline, metrics, close, index, review, verify, learn, note, migrate) to single-responsibility Python scripts. All tools share `sprint_lib/` -- a typed library with markdown parsers, in-place writers, and data models. Zero external dependencies (stdlib only).
 
 - Detail: [Docs/Systems/TOOLS.md](Docs/Systems/TOOLS.md)
 - Dispatcher: [Tools/sprint-tools](Tools/sprint-tools)
@@ -90,10 +90,10 @@ Split workflow documentation in `Docs/Workflow/` -- one file per phase/concern. 
   settings.json            Hook event → script wiring
   hooks-config.sh          Feature flags, mode presets, audit config
   setup-audit.sh           Interactive cross-LLM audit setup
-  hooks/                   12 bash hooks (see §Hook System)
+  hooks/                   14 bash hooks (see §Hook System)
 Tools/
-  sprint-tools             Bash dispatcher → 12 Python subcommands
-  sprint-{state,item,git,checkpoint,baseline,metrics,close,index,review,learn,note,migrate}.py
+  sprint-tools             Bash dispatcher → 13 Python subcommands
+  sprint-{state,item,git,checkpoint,baseline,metrics,close,index,review,verify,learn,note,migrate}.py
   sprint_lib/              Shared library (models, parsers, writers)
 Docs/Systems/
   HOOKS.md                 Hook system internals

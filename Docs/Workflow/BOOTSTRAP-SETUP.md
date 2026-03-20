@@ -65,6 +65,9 @@ IMPORTANT: Do NOT rewrite or regenerate static sections.
   Operational Rules structure, and Quick Start. These are workflow-invariant.
   Only replace [REQUIRED: ...] markers with project-specific values.
   All [REQUIRED] fields MUST be filled — do not leave them as placeholders.
+  IF stuck on a placeholder (e.g. Critical Axis unclear, Immutable Contracts unknown):
+    Ask user, check existing code, or infer from domain. Do NOT guess silently
+    or leave placeholder. (Full escalation protocol: IMPL-LOOP.md §B.2)
 ```
 
 ## 6. Populate CODING_GUARDRAILS.md
@@ -131,6 +134,9 @@ After bootstrap completes, clean up: `rm -rf .bootstrap/`
 
 ## Checklist (AI self-check before step 10)
 
+Run `sprint-tools verify --bootstrap` for automated verification of this checklist.
+Fix any findings before proceeding to step 10.
+
 ```
 [ ] CLAUDE.md skeleton present, all [REQUIRED] placeholders replaced
 [ ] CLAUDE.md §Available Tools section intact (not rewritten or truncated)
@@ -139,7 +145,7 @@ After bootstrap completes, clean up: `rm -rf .bootstrap/`
 [ ] .gitignore present with secret patterns + stack-specific additions
 [ ] CODING_GUARDRAILS.md with stack/domain rules
 [ ] Roadmap.md with Sprint 1 items
-[ ] Tools/sprint-tools + 12 .py subcommands present
+[ ] Tools/sprint-tools + 13 .py subcommands present
 [ ] Tools/sprint_lib/ complete (8 modules)
 [ ] Tools/sprint-audit.sh adapted to language
 [ ] Tools/checks/ present (modular audit adapters)

@@ -1,6 +1,6 @@
 # Sprint Tools
 
-Dispatcher-based CLI for sprint workflow automation. A single entry point (`sprint-tools`) routes to 10 single-responsibility Python tools.
+Dispatcher-based CLI for sprint workflow automation. A single entry point (`sprint-tools`) routes to 13 single-responsibility Python tools.
 
 ```
 sprint-tools <command> [args...]
@@ -41,6 +41,22 @@ git diff | sprint-tools review --stdin           # review a diff
 
 Output: severity-tagged findings (`critical`/`warning`/`info`), summary, missing items list.
 
+### verify
+
+Three modes: (1) item verification checklist for `fixed` items, (2) audit-all evidence audit across all verified items, (3) bootstrap completion check. The item mode pulls failure modes and verification plan from the Entry Gate report, lists changed files, and detects test commands. The agent (or a sub-agent) uses the checklist to verify the item before marking `verified`.
+
+```
+sprint-tools verify CORE-001                # human-readable checklist
+sprint-tools verify CORE-001 --json         # structured JSON (for sub-agent input)
+sprint-tools verify CORE-001 --auto-apply   # hint: auto-mark verified on pass
+sprint-tools verify --audit-all             # audit evidence levels on all verified items
+sprint-tools verify --audit-all --json      # structured JSON audit output
+sprint-tools verify --bootstrap             # 13-point bootstrap completion check
+sprint-tools verify --bootstrap --json      # structured JSON bootstrap output
+```
+
+Output: checklist with failure modes, verification plan, changed files, test commands, evidence template. Item mode requires item status = `fixed`.
+
 ## Workflow-Step Tools
 
 ### item
@@ -52,9 +68,11 @@ Status transition with changelog, evidence, and roadmap sync. Single command rep
 ```
 sprint-tools item CORE-001 in_progress
 sprint-tools item CORE-001 fixed "login endpoint passes all tests"
-sprint-tools item CORE-001 verified "commit abc1234"
+sprint-tools item CORE-001 verified "VERIFIED: pytest 14/14 passed"
 sprint-tools item CORE-001 deferred
 ```
+
+**Evidence validation** (on `verified` transitions): evidence string should be prefixed with a confidence level (`VERIFIED:`, `INFERRED:`, or `UNCERTAIN:`). Missing prefix emits a warning (advisory). Wrong level for item priority is a hard block (exit 2): must items require `VERIFIED:`, should items require `VERIFIED:` or `INFERRED:`. Unknown priority is treated as must (fail-closed). See AGENT-RULES.md §Evidence Standards.
 
 **Modifies:** TRACKING.md (Sprint Board status + evidence column, Change Log section), Roadmap.md (checkbox on `verified`/`deferred`).
 

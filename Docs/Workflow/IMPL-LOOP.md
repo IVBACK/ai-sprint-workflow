@@ -136,6 +136,31 @@ IF change fixes a pattern (bug, anti-pattern, convention violation, missing guar
 
 SKIP IF: new feature with no existing pattern, or Q1 found only one site.
 
+### B.2 Approach Escalation Protocol
+
+Applies to ALL retry loops in this document (§C self-verify, §D.5 visual, §D.6 test run).
+
+```
+WITHIN each attempt — approach escalation:
+  L1: Direct fix — obvious solution, apply immediately
+  L2: Alternative approach — same goal, different means
+  L3: Deep investigation — read source, add logging, isolate variable
+  L4: Decompose — break problem into smaller testable pieces
+  L5: Escalate to user — present attempts + findings, ask direction
+
+  RULE: Move to next level after ONE failed attempt with the SAME strategy.
+        A substantively different fix at the same level is a new attempt at that level,
+        not a reason to escalate. Max 2 attempts at any single level before moving up.
+  ANTI-PATTERN: Repeating the same L1 fix hoping for a different result.
+  Log transitions: sprint-tools note attempt "L1→L2: [reason]"
+
+  L5 AND ATTEMPT COUNTER:
+    L5 escalation does NOT consume an attempt. User direction starts a new attempt at L1.
+    The 3-strike counter (§C, §D.6) increments only when an attempt concludes with
+    a failed fix (code changed, result still wrong). For attempt limits and user options,
+    see the calling section (§C, §D.5, or §D.6).
+```
+
 ### C. Self-verify (5-point checklist)
 
 Run before writing tests:
@@ -145,7 +170,7 @@ Run before writing tests:
 - [ ] Follows project conventions?
 - [ ] Tech debt introduced? → fix now or document. Use `// TEMP(CORE-NNN): [reason]` format.
 
-IF any fails: fix and recheck. Max 3 rounds.
+IF any fails: fix and recheck. Max 3 rounds. Apply Approach Escalation (§B.2) within each round.
 
 **Research fallback (before 3rd attempt):** IF failure suggests incorrect domain knowledge (wrong values, math errors, spec non-compliance) → return to A.5 before 3rd attempt. Log: `"Research fallback triggered for CORE-### at self-verify round [N]"`
 
@@ -172,16 +197,17 @@ TRIGGER: item marked "manual+screenshot" in Entry Gate 9b.
 1. Ask user specific visual questions about what to look for.
 2. User responds:
    - "OK" → proceed to D.6
-   - "Problem: [description]" → log, fix, ask again
+   - "Problem: [description]" → log, fix, ask again. Apply Approach Escalation (§B.2) within each attempt.
    - Max 3 attempts. IF still failing → log `"visual unconfirmed — target sprint [N]"` in evidence column. Mark `fixed` with caveat. Continue to D.6.
 3. Automated proxy tests do NOT replace visual confirmation.
 
 ### D.6 Incremental Test Run
 
 Run ALL tests (current + previous items this sprint):
-- All PASS → proceed to E
+- All PASS → proceed to D.6b
 - FAIL on new test → fix implementation, rerun
 - FAIL on previous item's test → regression: fix before writing more code
+- Apply Approach Escalation (§B.2) within each attempt.
 - Max 3 fix attempts → present to user:
   "(1) accept as known gap — log, mark pending,
    (2) block until resolved,
@@ -232,6 +258,7 @@ Read item's ACs from S<N>_ENTRY_GATE.md. Check each:
 ### E. Update TRACKING.md
 
 1. Run: `sprint-tools item CORE-NNN fixed "key decisions"` (do NOT edit TRACKING.md manually).
+   When later marking `verified`, include confidence level per AGENT-RULES.md §Evidence Standards (VERIFIED/INFERRED/UNCERTAIN).
 2. Write engineering lessons to CODING_GUARDRAILS.md and architectural decisions to CLAUDE.md (see AGENT-RULES.md §Finding Materialization — do not defer).
 3. IF bugs/failures encountered → log each to §Failure Encounters:
    `[item ID] | [category: direct/interaction/stress-edge] | [description] | [how detected]`

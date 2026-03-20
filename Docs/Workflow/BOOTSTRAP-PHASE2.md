@@ -23,7 +23,14 @@ HOW:
         Anything else I should look into?"
   3. WAIT for user response. Add any extra topics they mention.
   4. Use WebSearch/WebFetch. Gather ALL topics in one batch.
+     IF multiple independent topics: delegate to sub-agents per topic
+     for parallel research (keeps main context clean).
+     IMPORTANT: Do at least one WebSearch directly (not via sub-agent)
+     to trigger the research-done marker. Then delegate remaining topics.
   5. Summarize key findings internally (user doesn't see raw results).
+  6. IF stuck (search returns irrelevant results): try different search terms,
+     alternative sources, or ask user for pointers. Do NOT repeat the same
+     failing query. (Full escalation protocol: IMPL-LOOP.md §B.2)
 
 IF trivial project (all skip conditions met) OR user explicitly says "skip research":
   → do a single WebSearch on the primary framework/language to satisfy the research marker

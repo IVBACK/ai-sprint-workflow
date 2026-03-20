@@ -43,7 +43,7 @@ Team: [REQUIRED: solo | names — e.g., "Dev-A, Dev-B"]
 - Close Gate is user-initiated only. AI never asks "shall we close the sprint?" unprompted.
   Reading all items as `verified` in TRACKING.md is not a trigger — it is just state.
 - Sprint close gate:
-  - Run `Tools/sprint-audit.sh` (automated scan, 16 sections).
+  - Run `Tools/sprint-audit.sh` (automated scan, 17 sections).
   - Manual review (see `Docs/CODING_GUARDRAILS.md` §Close Gate).
 - Session boundaries: at known heavy-context transition points (after Entry Gate, before Close Gate),
   AI MUST explicitly recommend starting a new session. AI cannot assess its own context usage —

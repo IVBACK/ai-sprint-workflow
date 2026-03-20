@@ -6,8 +6,17 @@ from pathlib import Path
 
 from sprint_lib.utils import find_project_root, find_tracking_file
 from sprint_lib import tracking_parser, writers
-from sprint_lib.models import VALID_TRANSITIONS, VALID_STATUSES
+from sprint_lib.models import VALID_TRANSITIONS, VALID_STATUSES, PRIORITIES
 from sprint_lib.errors import ItemNotFoundError, InvalidTransitionError, SetupError
+
+
+EVIDENCE_PREFIXES = ("VERIFIED:", "INFERRED:", "UNCERTAIN:")
+# Must items require VERIFIED evidence. Should allows VERIFIED or INFERRED.
+PRIORITY_ALLOWED_EVIDENCE = {
+    "must": ("VERIFIED:",),
+    "should": ("VERIFIED:", "INFERRED:"),
+    "could": EVIDENCE_PREFIXES,
+}
 
 
 ROADMAP_CANDIDATES = [
@@ -53,6 +62,57 @@ def _log_encounter_if_applicable(
     except Exception as exc:
         # Non-fatal — don't block status transition, but warn
         print(f"Warning: Could not log failure encounter for {item_id}: {exc}", file=sys.stderr)
+
+
+def _validate_evidence_level(evidence: str, priority: str, item_id: str) -> str | None:
+    """Validate evidence confidence level prefix for verified items.
+
+    Enforces: Must → VERIFIED only, Should → VERIFIED|INFERRED, Could → any.
+    Warns but does not block if prefix is missing (advisory for adoption period).
+
+    Returns an error message string on hard failure, or None on success/warning.
+    """
+    if not evidence:
+        print(
+            f"Warning: {item_id} verified without evidence. "
+            f"Use: sprint-tools item {item_id} verified \"VERIFIED: <evidence>\"",
+            file=sys.stderr,
+        )
+        return None
+
+    evidence_upper = evidence.upper()
+    has_prefix = any(evidence_upper.startswith(p) for p in EVIDENCE_PREFIXES)
+    if not has_prefix:
+        truncated = evidence[:60] + ("..." if len(evidence) > 60 else "")
+        print(
+            f"Warning: {item_id} evidence missing confidence prefix. "
+            f"Expected one of: {', '.join(EVIDENCE_PREFIXES)}\n"
+            f"  Got: \"{truncated}\"\n"
+            f"  Tip: sprint-tools item {item_id} verified \"VERIFIED: {evidence}\"",
+            file=sys.stderr,
+        )
+        return None
+
+    priority_lower = priority.lower().strip() if priority else ""
+    if not priority_lower or priority_lower not in PRIORITIES:
+        print(
+            f"Warning: {item_id} has unknown priority '{priority}', treating as 'must' (fail-closed).",
+            file=sys.stderr,
+        )
+        priority_lower = "must"
+    allowed = PRIORITY_ALLOWED_EVIDENCE.get(priority_lower, EVIDENCE_PREFIXES)
+    prefix_used = next(p for p in EVIDENCE_PREFIXES if evidence_upper.startswith(p))
+
+    if prefix_used not in allowed:
+        allowed_str = " or ".join(allowed)
+        return (
+            f"{item_id} is priority '{priority_lower}' — "
+            f"requires {allowed_str} evidence, got '{prefix_used}'.\n"
+            f"  Must items need VERIFIED (direct test/observation).\n"
+            f"  Use: sprint-tools item {item_id} verified \"VERIFIED: <evidence>\""
+        )
+
+    return None
 
 
 def _get_sprint_label(data) -> str:
@@ -124,6 +184,14 @@ def main():
         old_status = _run_single(root, tracking_path, data, item_id, new_status, note)
 
         evidence = note if new_status in ("fixed", "verified") else ""
+
+        if new_status == "verified":
+            item = tracking_parser.get_item(data, item_id)
+            err = _validate_evidence_level(evidence, item.priority if item else "", item_id)
+            if err:
+                print(f"Error: {err}", file=sys.stderr)
+                sys.exit(2)
+
         writers.set_item_status(tracking_path, item_id, new_status, evidence=evidence)
 
         entry = f"{item_id}: {old_status} \u2192 {new_status}"
@@ -158,6 +226,19 @@ def main():
 
     # Batch status update (1 read + 1 write for TRACKING.md Sprint Board)
     evidence = note if new_status in ("fixed", "verified") else ""
+
+    if new_status == "verified":
+        errors = []
+        for item_id in item_ids:
+            item = tracking_parser.get_item(data, item_id)
+            err = _validate_evidence_level(evidence, item.priority if item else "", item_id)
+            if err:
+                errors.append(err)
+        if errors:
+            for e in errors:
+                print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2)
+
     batch_items = [(item_id, new_status, evidence) for item_id in item_ids]
     writers.set_items_status_batch(tracking_path, batch_items)
 

@@ -17,6 +17,7 @@ case "$CMD" in
   note)       exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-note.py"      "$@" ;;
   learn)      exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-learn.py"    "$@" ;;
   review)     exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-review.py"    "$@" ;;
+  verify)     exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-verify.py"  "$@" ;;
   migrate)    exec "${PYTHON:-python3}" "$SCRIPT_DIR/sprint-migrate.py"  "$@" ;;
   help|--help|-h)
     echo "Usage: sprint-tools <command> [args...]"
@@ -33,6 +34,7 @@ case "$CMD" in
     echo "  note        Session journal — append-only notes (decision/attempt/observation)"
     echo "  learn       Knowledge classification + routing (guardrail/index/risk)"
     echo "  review      Blind review via external LLM (file or stdin)"
+    echo "  verify      Generate verification checklist for a fixed item"
     echo "  migrate     Migrate from older workflow version (v2.1 → v3.1)"
     ;;
   *)

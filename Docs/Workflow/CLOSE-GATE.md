@@ -37,6 +37,24 @@ Read TRACKING.md Sprint Board and Entry Gate report before starting.
 6. Log compact summary to TRACKING.md (NOT full table):
    `**Metric Verification:** X/Y PASS, Z DEFERRED (item-id reason -> S<N>, ...)`
 
+## Phase 0b — Evidence Confidence Audit
+
+Verify evidence confidence levels on all verified items (see AGENT-RULES.md §Evidence Standards):
+
+```
+FOR each verified item in Sprint Board:
+  1. Evidence has confidence prefix? (VERIFIED: / INFERRED: / UNCERTAIN:)
+     MISSING → finding: "evidence missing confidence prefix"
+  2. IF priority == must AND prefix != VERIFIED:
+     → finding: "must-priority item requires VERIFIED evidence"
+  3. IF priority == should AND prefix == UNCERTAIN:
+     → finding: "should-priority item requires VERIFIED or INFERRED"
+
+sprint-audit.sh §Evidence Confidence Levels section checks this automatically.
+IF findings exist → return item to impl loop for proper verification
+  (run sprint-tools verify CORE-NNN for checklist).
+```
+
 ## Phase 1a — Automated Scan
 
 1. Run `Tools/sprint-audit.sh`.
@@ -173,7 +191,7 @@ IF all items CONCERN with no actionable fix: flag to user before proceeding.
    ```
    IF user does NOT approve:
      Identify concern -> return to relevant phase:
-       Phase 0 (metrics) / 1a (scan) / 1b (audit) / 1c (fitness) /
+       Phase 0 (metrics) / 0b (evidence) / 1a (scan) / 1b (audit) / 1c (fitness) /
        2 (fix/defer) / 3 (regression) / 4 (coverage)
    ```
 5. After approval: `sprint-tools checkpoint "Close Gate complete — Sprint N approved, starting Sprint Close"`

@@ -330,7 +330,7 @@ print("")
 print("── CHECK 8: Guard Conditions ──")
 
 # Smoke test: keyword heuristic — verifies termination/blocking language exists, not semantic correctness
-BLOCKING_PATTERN = r"block|cannot proceed|gate blocked|must not proceed|protocol violation|mandatory"
+BLOCKING_PATTERN = r"(?i)block|cannot proceed|gate blocked|must not proceed|protocol violation|mandatory"
 
 for guard in model.get("guards", []):
     gid = guard["id"]
