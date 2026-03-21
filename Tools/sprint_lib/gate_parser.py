@@ -1,4 +1,7 @@
-"""Read-only parser for Entry Gate and Close Gate report files."""
+"""Read-only parser for Entry Gate and Close Gate report files.
+
+Uses shared helpers from :mod:`sprint_lib.utils` for table/section parsing.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +9,11 @@ import re
 from pathlib import Path
 
 from sprint_lib.models import Metric
+from sprint_lib.utils import (
+    extract_section,
+    extract_table_from_section,
+    parse_md_table,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,39 +78,27 @@ def _extract_sprint_label(text: str) -> str:
 
 
 def _is_approved(text: str) -> bool:
-    """Detect approval markers anywhere in the text."""
+    """Detect approval markers anywhere in the text (case-insensitive).
+
+    Recognized markers: ``gate passed``, ``approved``, ``approved ✓``,
+    ``**pass**`` (markdown bold), ``verdict: pass``.
+    """
     lower = text.lower()
     return any(
         marker in lower
-        for marker in ("gate passed", "approved", "approved ✓")
+        for marker in ("gate passed", "approved", "approved ✓",
+                       "**pass**", "verdict: pass")
     )
-
-
-def _parse_table_rows(block: str) -> list[dict[str, str]]:
-    """Parse a markdown table block into a list of dicts keyed by header."""
-    lines = [ln.strip() for ln in block.strip().splitlines() if ln.strip()]
-    if len(lines) < 2:
-        return []
-
-    def _cells(line: str) -> list[str]:
-        line = line.strip().strip("|")
-        return [c.strip() for c in line.split("|")]
-
-    headers = _cells(lines[0])
-    # skip separator line (index 1)
-    rows: list[dict[str, str]] = []
-    for line in lines[2:]:
-        if re.match(r"^[\s|:-]+$", line):
-            continue
-        vals = _cells(line)
-        row = {h: (vals[i] if i < len(vals) else "") for i, h in enumerate(headers)}
-        rows.append(row)
-    return rows
 
 
 def _find_section(text: str, heading_pattern: str) -> str:
     """Return text from the matched heading until the next heading of same or
-    higher level, or end of file."""
+    higher level, or end of file.  Supports regex *heading_pattern*.
+
+    NOTE: Kept separate from ``utils.extract_section`` because this function
+    accepts regex patterns (e.g. ``r"(?:Phase\\s*0|Metric Verification)"``),
+    while ``extract_section`` takes literal strings with ``re.escape()``.
+    """
     m = re.search(
         rf"^(#{{1,6}})\s+{heading_pattern}",
         text,
@@ -112,7 +108,6 @@ def _find_section(text: str, heading_pattern: str) -> str:
         return ""
     level = len(m.group(1))
     start = m.end()
-    # Find next heading of same or higher (fewer #) level
     nxt = re.search(
         rf"^#{{{1},{level}}}\s",
         text[start:],
@@ -123,8 +118,7 @@ def _find_section(text: str, heading_pattern: str) -> str:
 
 
 def _table_in(section: str) -> str:
-    """Return the first markdown table found in *section* (including header
-    and separator lines)."""
+    """Return the first markdown table found in *section*."""
     lines = section.splitlines()
     table_lines: list[str] = []
     in_table = False
@@ -136,6 +130,11 @@ def _table_in(section: str) -> str:
         elif in_table:
             break
     return "\n".join(table_lines)
+
+
+def _parse_table_rows(block: str) -> list[dict[str, str]]:
+    """Parse a markdown table block — delegates to :func:`parse_md_table`."""
+    return parse_md_table(block)
 
 
 # ---------------------------------------------------------------------------
@@ -366,4 +365,102 @@ def parse_close_gate(path: Path) -> dict:
         "findings_count": findings_count,
         "tests_passed": tests_passed,
         "tests_total": tests_total,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Close Gate — phase detail extraction (previously dashboard-only)
+# ---------------------------------------------------------------------------
+
+def extract_close_gate_details(path: Path) -> dict:
+    """Extract phase-level detail tables from a Close Gate report.
+
+    Returns a dict with keys:
+
+    - ``metrics`` (list[dict]) — Phase 0 / Metric Verification table
+    - ``metrics_pass`` (int) — count with status PASS
+    - ``metrics_deferred`` (int)
+    - ``metrics_total`` (int)
+    - ``findings`` (list[dict]) — Phase 1a + Supplemental findings
+    - ``spec_audit`` (list[dict]) — Phase 1b / Per-Item Summary
+    - ``fitness`` (list[dict]) — Phase 1c
+    - ``fitness_pass`` (int)
+    - ``fitness_total`` (int)
+    - ``tests_passed`` (int)
+    - ``tests_total`` (int)
+    - ``file_coverage`` (list[dict]) — Phase 4a
+    - ``item_coverage`` (list[dict]) — Phase 4b
+    """
+    text = path.read_text(encoding="utf-8")
+
+    # Metrics (Phase 0)
+    metrics = extract_table_from_section(text, "Metric Verification")
+    if not metrics:
+        metrics = extract_table_from_section(text, "Phase 0")
+    metrics_pass = sum(
+        1 for m in metrics
+        if (m.get("status", "") or m.get("verdict", "")).upper() == "PASS"
+    )
+    metrics_deferred = sum(
+        1 for m in metrics
+        if (m.get("status", "") or m.get("verdict", "")).upper() == "DEFERRED"
+    )
+
+    # Findings (Phase 1a + Supplemental)
+    findings = extract_table_from_section(text, "Phase 1a")
+    supplemental = extract_table_from_section(text, "Supplemental Findings")
+    for sf in supplemental:
+        normalized: dict[str, str] = {}
+        for k, v in sf.items():
+            kl = k.lower()
+            if kl == "file":
+                normalized["section"] = v
+            elif kl in ("finding", "action"):
+                normalized[kl] = v
+            else:
+                normalized[k] = v
+        if "finding" in normalized:
+            findings.append(normalized)
+
+    # Spec Audit (Phase 1b)
+    spec_audit = (extract_table_from_section(text, "Phase 1b")
+                  or extract_table_from_section(text, "Per-Item Summary"))
+
+    # Fitness Review (Phase 1c)
+    fitness = extract_table_from_section(text, "Phase 1c")
+    fitness_pass = sum(
+        1 for f in fitness if "PASS" in f.get("verdict", "").upper()
+    )
+
+    # Test counts (Phase 3)
+    tests_passed = 0
+    tests_total = 0
+    regression_section = extract_section(text, "Phase 3")
+    tests_match = re.search(
+        r"Tests:\s*(\d+)\s*passed.*?(\d+)\s*total", regression_section
+    )
+    if tests_match:
+        tests_passed = int(tests_match.group(1))
+        tests_total = int(tests_match.group(2))
+
+    # Coverage tables (Phase 4a, 4b)
+    file_coverage = (extract_table_from_section(text, "4a")
+                     or extract_table_from_section(text, "File-Level Coverage"))
+    item_coverage = (extract_table_from_section(text, "4b")
+                     or extract_table_from_section(text, "Item-Level Coverage"))
+
+    return {
+        "metrics": metrics,
+        "metrics_pass": metrics_pass,
+        "metrics_deferred": metrics_deferred,
+        "metrics_total": len(metrics),
+        "findings": findings,
+        "spec_audit": spec_audit,
+        "fitness": fitness,
+        "fitness_pass": fitness_pass,
+        "fitness_total": len(fitness),
+        "tests_passed": tests_passed,
+        "tests_total": tests_total,
+        "file_coverage": file_coverage,
+        "item_coverage": item_coverage,
     }

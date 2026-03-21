@@ -67,6 +67,21 @@ Four [workflow modes](Docs/Workflow/WORKFLOW-MODES.md) from zero-overhead to ful
 | Self-validation (contributors) | [validation/](validation/) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
+## Dashboard
+
+Live sprint dashboard that visualizes project status from your workflow artifacts (TRACKING.md, gate reports, roadmap).
+
+```bash
+# Web dashboard (recommended)
+python3 dashboard/sprint-status.py your-project/ --serve
+
+# Then open http://127.0.0.1:8384
+```
+
+Shows sprint progress, gate status, failure analysis, metrics, trends, and changelog — all parsed from your existing markdown files. Auto-refreshes when files change.
+
+Other modes: CLI snapshot (no flags), watch mode (`-w`), JSON export (`--json`).
+
 ## Is This For You?
 
 **Good fit:** Multi-sprint projects where context loss between sessions hurts, and mistakes compound over time.

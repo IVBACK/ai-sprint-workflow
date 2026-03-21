@@ -1,6 +1,6 @@
 """Read-only parser for TRACKING.md files.
 
-Imports only from sprint_lib.models and stdlib.
+Imports from sprint_lib.models, sprint_lib.utils, and stdlib.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ import re
 from pathlib import Path
 
 from sprint_lib.models import (
-    TABLE_SEPARATOR_RE,
     BaselineEntry,
     DismissedSignal,
     FailureEncounter,
@@ -21,72 +20,11 @@ from sprint_lib.models import (
     TrackingData,
     WorkingContext,
 )
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _safe_int(value: str | int, default: int = 0) -> int:
-    """Convert to int, returning *default* on failure."""
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
-
-
-def _extract_section(text: str, section_name: str) -> str:
-    """Extract text between ``## section_name`` and the next ``##`` header."""
-    pattern = re.compile(
-        r"^##\s+" + re.escape(section_name) + r"\s*$",
-        re.MULTILINE,
-    )
-    match = pattern.search(text)
-    if match is None:
-        return ""
-    start = match.end()
-    next_header = re.search(r"^##\s+", text[start:], re.MULTILINE)
-    if next_header is None:
-        return text[start:]
-    return text[start : start + next_header.start()]
-
-
-def _parse_table(section_text: str) -> list[dict[str, str]]:
-    """Parse a markdown table into a list of dicts keyed by column header.
-
-    Handles:
-    - empty tables (header + separator, no data rows)
-    - rows with extra or missing trailing pipes
-    - whitespace around cell values
-    """
-    lines = [
-        line.strip()
-        for line in section_text.splitlines()
-        if line.strip().startswith("|")
-    ]
-    if len(lines) < 2:
-        return []
-
-    def _split_row(line: str) -> list[str]:
-        # Strip leading/trailing pipe then split on pipes.
-        stripped = line.strip("|")
-        return [cell.strip() for cell in stripped.split("|")]
-
-    headers = _split_row(lines[0])
-    # Normalise header keys: lowercase, replace spaces/special chars with '_'.
-    keys = [re.sub(r"[^a-z0-9]+", "_", h.lower()).strip("_") for h in headers]
-
-    rows: list[dict[str, str]] = []
-    for line in lines[1:]:
-        # Skip separator rows (e.g. |---|---|)
-        if TABLE_SEPARATOR_RE.match(line):  # trailing pipe optional
-            continue
-        cells = _split_row(line)
-        row: dict[str, str] = {}
-        for idx, key in enumerate(keys):
-            row[key] = cells[idx] if idx < len(cells) else ""
-        rows.append(row)
-    return rows
+from sprint_lib.utils import (
+    extract_section as _extract_section,
+    parse_md_table as _parse_table,
+    safe_int as _safe_int,
+)
 
 
 def _parse_changelog(section_text: str) -> dict[str, list[str]]:
