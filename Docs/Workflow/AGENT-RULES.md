@@ -316,7 +316,10 @@ HOW: sprint-tools review <file> [-c "context"] [-q "question"]
 IF no API key configured → skip, proceed normally
 
 ON FEEDBACK:
-  Agree → fix before presenting
+  BLOCK   → present to user, do not proceed
+  WARN    → fix, then re-review same diff (max 3 attempts, then escalate to user)
+  PASS    → proceed
+  Agree   → fix, re-review to confirm
   Disagree → note to user: "Reviewer flagged X, I disagree because Y"
 ```
 

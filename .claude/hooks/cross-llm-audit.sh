@@ -583,7 +583,8 @@ ${SELF_AUDIT_CHECKLIST_FULL}"
 2. Compare findings — for each, state AGREE, DISAGREE, or PARTIAL.
    PARTIAL = the issue exists but the suggested fix is wrong or incomplete. Propose your own fix.
 3. ${_AUTOFIX_INSTRUCTION} Log all disagreements in Change Log.
-4. Inform user of any auto-fixes applied. Continue implementation.
+4. After fixing, re-run blind review on the updated diff to verify the fix is correct.
+   Max 3 review rounds — if WARN persists after 3 attempts, present all findings to user.
 Workflow-Mode: ${WORKFLOW_MODE:-standard}
 Audit-Mode: ${AUDIT_MODE}
 
@@ -660,9 +661,25 @@ else
   _log_audit "success" "" "$VERDICT"
 fi
 
-# ── P1: Mechanical BLOCK enforcement ──
-# When enabled, BLOCK verdict causes non-zero exit → Claude Code treats as hook failure.
-# Opt-in via CROSS_AUDIT_ENFORCE_BLOCK=true (default: false, advisory only).
+# ── P1: Surface findings directly to user (stderr, not through Claude) ──
+if [[ "$VERDICT" == "BLOCK" || "$VERDICT" == "WARN" ]]; then
+  echo "" >&2
+  echo "╔══ CROSS-LLM AUDIT: ${VERDICT} (${MODEL}) ══" >&2
+  # Try to extract structured findings; fall back to summary
+  _STDERR_FINDINGS=$(echo "$CONTENT" | jq -r '.findings[]? | "  [\(.severity // "?")] \(.file // .item // "?"):\(.line // "?") — \(.issue // "")"' 2>/dev/null || true)
+  if [[ -n "$_STDERR_FINDINGS" ]]; then
+    echo "$_STDERR_FINDINGS" >&2
+  else
+    _STDERR_SUMMARY=$(echo "$CONTENT" | jq -r '.summary // empty' 2>/dev/null || true)
+    echo "  ${_STDERR_SUMMARY:-$(echo "$CONTENT" | head -3)}" >&2
+  fi
+  echo "╚══════════════════════════════════════════════" >&2
+fi
+
+# ── P2: Mechanical BLOCK enforcement ──
+# BLOCK verdict causes non-zero exit → Claude Code treats as hook failure.
+# Default: true in standard/strict, false in lite/freestyle.
+# Override: CROSS_AUDIT_ENFORCE_BLOCK=false in .env
 if [[ "$VERDICT" == "BLOCK" && "${CROSS_AUDIT_ENFORCE_BLOCK:-false}" == "true" ]]; then
   exit 1
 fi

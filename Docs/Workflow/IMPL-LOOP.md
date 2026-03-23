@@ -225,14 +225,18 @@ IF test needs unavailable infrastructure → mark "pending" in TRACKING.md → r
 
 **Handling findings:**
 - BLOCK → present to user. Do not proceed until user decides.
-- WARN → present alongside own assessment. User decides.
+- WARN → fix the issue, then re-review the same diff (blind review or cross-LLM).
+  - If re-review returns PASS → proceed.
+  - If re-review returns WARN again → fix and re-review (max 3 attempts total).
+  - After 3 attempts still WARN → present to user with all findings. User decides.
+  - This follows the same escalation pattern as §B.2 Approach Escalation.
 - PASS → mention as confidence signal, continue.
 - Conflicting opinions → present both perspectives. User decides. Do not silently override.
 
 **Self-audit comparison (after external findings arrive):**
 1. Run structured self-audit (8-item for BLOCK/WARN, 3-item for PASS) on same diff.
 2. Decision matrix:
-   - AGREE → auto-fix, inform user.
+   - AGREE → fix, then re-review to confirm fix is correct.
    - DISAGREE on BLOCK → escalate (mandatory).
    - DISAGREE on WARN → log disagreement, continue.
 3. PASS → lightweight self-audit (bug scan, security, AC), mention as confidence signal.

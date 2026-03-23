@@ -114,7 +114,7 @@ case "${WORKFLOW_MODE}" in
     _CROSS_LLM_AUDIT=true
     _BOOTSTRAP_GUARD=true
     _BOOTSTRAP_PHASE_GATE=true
-    _D_CROSS_AUDIT_ENFORCE_BLOCK=false
+    _D_CROSS_AUDIT_ENFORCE_BLOCK=true
     ;;
 esac
 
