@@ -22,7 +22,7 @@ meta:
   # validate-model.sh recomputes and fails if mismatch — forces conscious review on WORKFLOW.md changes.
   # To update after WORKFLOW.md changes:
   #   python3 -c "import hashlib; print(hashlib.sha256(open('WORKFLOW.md','rb').read()).hexdigest())"
-  workflow_hash: f9fc085dfbbf169368cd825efdc2c9489dd1317c4c99f267c1e979898274c74f
+  workflow_hash: a169c56a46131f771c9551942c97d54cbf49653950510f95da12ba874ad8e10e
 
 # ─── STATE MACHINE ────────────────────────────────────────────────────────────
 # required: true  → BFS reachability is checked (normal-flow states)

@@ -60,6 +60,9 @@ Run: `sprint-tools close N` (handles archive + cleanup).
 
 Record measurable metrics. Compare vs previous sprint.
 
+**Format:** Append data rows AFTER the existing table header row (`| Sprint | Metric | Value | Unit | Method |`).
+Do NOT write data rows above the header — this breaks automated CP1 regression detection.
+
 IF regression detected:
   Surface to user: "Performance regression: [metric] was [X] in Sprint N-1, now [Y].
   (1) fix now — reopen Close Gate Phase 2, (2) accept and log in Open Risks with target sprint."
@@ -104,6 +107,7 @@ Update `Docs/SPRINT-INDEX.md`:
 - Scan TRACKING.md for significant entries (failures, decisions, guardrails).
 - Add one-line summary under relevant topic heading, newest first.
 - Before creating new topic heading: scan existing headings for synonyms (e.g. `auth` vs `authentication`). Reuse existing name.
+- **Verification:** IF SPRINT-INDEX.md has no entries from this sprint after step 7b, something was missed. Re-scan Change Log and Failure Mode History for taggable entries.
 
 ### 7c. Memory Consolidation (Episodic → Procedural)
 

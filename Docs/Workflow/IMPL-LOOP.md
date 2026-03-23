@@ -67,23 +67,29 @@ sprint-tools git merge N
 
 1. Mark item `in_progress`:
    - Run: `Tools/sprint-tools item CORE-NNN in_progress` (do NOT edit TRACKING.md manually)
-2. Read GUARDRAILS: §Index → §TL;DR for relevant sections → full section only if writing code in that area
+2. Update Working Context in TRACKING.md:
+   - Task: CORE-NNN description
+   - Doing: what you're about to implement
+   - Decisions: — (fill as you make choices)
+   - Blockers: — (fill if encountered)
+3. Log approach decision: `sprint-tools note decision "CORE-NNN: [chosen approach] — [why]"`
+4. Read GUARDRAILS: §Index → §TL;DR for relevant sections → full section only if writing code in that area
 
-3. **Observable evidence gate** (bug/quality/fix items only):
+5. **Observable evidence gate** (bug/quality/fix items only):
    - Confirm problem exists at runtime. Accepted: screenshot/video, profiler output, test failure, GPU/API readback, user report, reproducible error log.
    - Pure code analysis is NOT sufficient.
    - IF evidence cannot be produced → narrow scope to "investigate & reproduce" first.
    - Log: `"Evidence gate: CORE-### — [evidence type]: [summary]"`
    - SKIP IF: new feature (not a fix), or Entry Gate already documented evidence.
 
-4. **Impact analysis** — answer before coding:
+6. **Impact analysis** — answer before coding:
    1. What files will this touch?
    2. What behaviors change?
    3. How will you verify it works?
    - IF >5 files or cross-system effects not predicted at Entry Gate 9a → flag to user.
    - SKIP IF: trivially obvious (typo fix, config value change).
 
-5. **Uncertainty check** (T7/T8 — all items):
+7. **Uncertainty check** (T7/T8 — all items):
    - T7: Rate confidence in chosen approach (0-100%). IF <70% → flag: `"Confidence gap: CORE-### — [area], [%]. Research? [y/N]"`
    - T8: IF domain was last researched >2 sprints ago OR API has known breaking changes → flag: `"Stale knowledge: CORE-### — [topic], last S<N>. Research? [y/N]"`
    - IF both clear → proceed silently. No log needed.
