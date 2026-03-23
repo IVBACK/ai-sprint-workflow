@@ -41,11 +41,36 @@ IF Roadmap.md already has items → skip
 IF existing project → current work = Sprint 1
 ```
 
-Populate from discovery conversation:
-- First thing user wants → Sprint 1 Must items
-- "Then" items → Sprint 2 sketch or Sprint 1 Should/Could
-- Assign CORE-### IDs (continue from highest existing, never reuse)
-- Identify immutable contracts → CLAUDE.md
+Populate from plan-draft.md. Mapping rules:
+
+```
+plan-draft.md section    → target file
+─────────────────────    ──────────────
+## Project               → CLAUDE.md §Project Summary
+## Tech Stack            → CLAUDE.md §Project Summary
+## Critical Axis         → CLAUDE.md §Project Summary
+## Items + Sprint Split  → Roadmap.md (per-sprint sections, see below)
+## Key Assumptions       → stays in plan-draft.md (archived, not in Roadmap)
+## Risks                 → TRACKING.md §Open Risks (if actionable) or plan-draft archive
+```
+
+Roadmap population:
+- For each sprint in the plan-draft sprint split:
+  - Add a `## Sprint N — [Goal]` section to Roadmap.md (copy from Skeletons/Roadmap.md template)
+  - Items marked Must → `**Must:**` section with `- [ ] CORE-NNN: [description]`
+  - Items marked Should/Could → respective sections
+  - Metric gates for Sprint 1: define testable pass/fail criteria per Must item
+    (e.g., "All tests pass", "CLI runs end-to-end", "No data loss on add→delete cycle").
+    Metric gates for Sprint 2+ are NOT needed yet — Entry Gate will define them.
+  - Add sprint to the Sprint Overview table at the top
+- Assign CORE-### IDs starting from CORE-001 (sequential, never reuse)
+- Identify immutable contracts (data formats, API contracts) → CLAUDE.md §Immutable Contracts
+
+TRACKING.md population (after Roadmap is populated):
+- Fill §Current Focus: `Sprint 1: [one-line goal from Roadmap]`
+- Fill §Sprint Board: add ALL items from Roadmap (S1 + S2+) with status `open`
+  Use sprint-tools if available: `sprint-tools item CORE-NNN open` for each item.
+  Or fill the table manually if sprint-tools not yet functional.
 
 ## 5. Fill CLAUDE.md Placeholders
 

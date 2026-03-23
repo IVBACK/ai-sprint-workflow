@@ -40,7 +40,10 @@ IF trivial project (all skip conditions met) OR user explicitly says "skip resea
 
 ## Exit Condition
 
-Research completed — findings in hand, not backgrounded, ready to inform the plan.
+Write `.bootstrap/research-notes.md` — one paragraph per topic with key findings and recommendations.
+This persists Phase 2 findings for Phase 3 plan drafting and survives context compaction.
+
+Research completed — findings written to file, ready to inform the plan.
 
 → Read **Docs/Workflow/BOOTSTRAP-PHASE3.md**
 

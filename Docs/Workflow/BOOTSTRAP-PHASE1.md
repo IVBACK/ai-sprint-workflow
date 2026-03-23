@@ -127,16 +127,21 @@ IF existing project:
   → follow up about goals, pain points, team
 ```
 
-Key questions to cover (across the conversation, not all at once):
+Topics to understand (through conversation, not as a checklist):
 - What the project does / will do
 - Who it's for
 - Solo or team
-- What to tackle first
+
+These are starting points, not an exhaustive list. Follow up on what the user says.
+Each answer should lead to a natural follow-up — dig into details, ask about
+usage patterns, edge cases, or anything that would help you plan better.
+A 2-minute conversation that covers just these 3 topics is too shallow.
+A good intake takes 4-8 exchanges where you learn things the user didn't think to mention.
 
 ```
 IF user's first message already answers some/all of these:
   → do NOT re-ask. Confirm what you understood: "So [X], [Y], [Z] — correct?"
-  → ask only about what's still unclear
+  → ask only about what's still unclear, then dig deeper
 IF answer reveals critical domain (payments, medical, legal, auth):
   → note Critical Axis (will confirm later)
 IF answer is vague ("e-commerce" with no specifics):
@@ -144,6 +149,9 @@ IF answer is vague ("e-commerce" with no specifics):
   → do NOT accept vague answers without at least one clarifying question
 IF project scan already answered a question:
   → state what you found, confirm: "I see React + Express. Correct?"
+
+Do NOT rush to the exit gate. Phase 1 is about understanding, not speed.
+Sprint items, tech choices, and "what to build first" belong in Phase 3.
 ```
 
 ---
@@ -156,7 +164,11 @@ BEFORE moving to Phase 2, you MUST:
   2. Ask the user: "Did I miss anything? Anything else I should know before I plan?"
   3. WAIT for user response
      → IF user adds new info → continue conversation, re-summarize, ask again
-     → IF user confirms ("no", "that's it", "looks good") → proceed to Phase 2
+     → IF user confirms ("no", "that's it", "looks good"):
+       4. Write `.bootstrap/intake-summary.md` — 5-10 lines capturing:
+          what the project does, who it's for, solo/team, any domain notes.
+          This persists Phase 1 findings for Phase 3 and Phase 4 reviewer.
+       5. Proceed to Phase 2
   Do NOT proceed without explicit user confirmation.
   Do NOT include a plan, technology choices, or settings in this summary.
   This is ONLY about confirming you understood the user's needs.
