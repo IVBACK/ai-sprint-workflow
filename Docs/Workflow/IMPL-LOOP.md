@@ -241,6 +241,11 @@ IF test needs unavailable infrastructure → mark "pending" in TRACKING.md → r
    - DISAGREE on WARN → log disagreement, continue.
 3. PASS → lightweight self-audit (bug scan, security, AC), mention as confidence signal.
 
+Track re-review attempts via `sprint-tools note attempt "re-review #N: [verdict]"`.
+Attempt counting is procedural (agent tracks across the conversation, not persisted by hook).
+For the full self-audit checklist (8-item for BLOCK/WARN, 3-item for PASS),
+see CROSS-LLM-AUDIT.md §7.
+
 See CROSS-LLM-AUDIT.md for setup.
 
 ### D.7 Acceptance Criteria Exit Check

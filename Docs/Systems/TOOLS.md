@@ -22,9 +22,10 @@ Compact sprint digest for LLM context injection. Parses TRACKING.md, Roadmap.md,
 sprint-tools state              # text output
 sprint-tools state --json       # structured JSON (SprintDigest)
 sprint-tools state /path/to/project  # explicit project root
+sprint-tools state --check-escalations  # check recurring failure patterns needing escalation
 ```
 
-Output includes: sprint number, phase, item statuses (sorted by priority), risks, working context, baselines, recurring failures, entry gate existence.
+Output includes: sprint number, phase, item statuses (sorted by priority), risks, working context, baselines, recurring failures, entry gate existence. The `--check-escalations` flag counts failure encounters by category and reports patterns that have hit the escalation threshold (>=3 occurrences).
 
 ### review
 
@@ -172,7 +173,7 @@ sprint-tools migrate --dry-run    # show what would change without modifying fil
 
 ## sprint_lib
 
-Shared Python library under `Tools/sprint_lib/`. Core modules (3 primary + 5 supporting):
+Shared Python library under `Tools/sprint_lib/`. Core modules (5 primary + supporting):
 
 - **models.py** — Dataclasses for all structured data: `Item`, `Risk`, `BaselineEntry`, `TrackingData`, `SprintDigest`, etc. Defines `VALID_STATUSES` (`open`, `in_progress`, `fixed`, `verified`, `deferred`, `blocked`) and `VALID_TRANSITIONS`:
   ```
@@ -184,9 +185,13 @@ Shared Python library under `Tools/sprint_lib/`. Core modules (3 primary + 5 sup
   deferred    -> open
   ```
 
-- **tracking_parser.py** — Read-only parser for TRACKING.md. Extracts sections by `##` headers, parses markdown tables into model objects. Public API: `parse()`, `get_item()`, `get_sprint_items()`, `get_risks()`, `get_recurring_failures()`, `get_latest_baselines()`.
+- **tracking_parser.py** — Read-only parser for TRACKING.md. Extracts sections by `##` headers, parses markdown tables into model objects. Public API: `parse()`, `get_item()`, `get_sprint_items()`, `get_risks()`, `get_recurring_failures()`, `get_latest_baselines()`, `get_latest_session_notes()`.
 
-- **writers.py** — In-place mutators for TRACKING.md, Roadmap.md, CLAUDE.md. Does NOT import the parser (write-side errors stay isolated). Functions: `set_item_status()`, `append_changelog()`, `update_roadmap_checkbox()`, `add_risk()`, `remove_risk()`, `add_baseline_entry()`, `update_checkpoint()`.
+- **roadmap_parser.py** — Read-only parser for Roadmap.md. Extracts sprint sections, items, checkboxes. Public API: `parse()`, `get_active_sprint()`, `get_sprint()`.
+
+- **gate_parser.py** — Read-only parser for Entry Gate and Close Gate reports. Public API: `find_gate_file()`, `extract_metrics()`, `parse_entry_gate()`, `parse_close_gate()`, `extract_close_gate_details()`.
+
+- **writers.py** — In-place mutators for TRACKING.md, Roadmap.md, CLAUDE.md. Does NOT import any parser (write-side errors stay isolated). Single-item functions: `set_item_status()`, `append_changelog()`, `update_roadmap_checkbox()`, `add_risk()`, `remove_risk()`, `add_baseline_entry()`, `update_checkpoint()`. Batch functions: `set_items_status_batch()`, `append_changelog_batch()`, `update_roadmap_checkboxes_batch()`. Session/failure tracking: `append_session_note()`, `append_failure_encounter()`, `clear_session_notes()`, `update_working_context()`.
 
 ## Tool Usage Rules
 

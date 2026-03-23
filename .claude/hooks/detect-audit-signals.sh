@@ -49,7 +49,7 @@ TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/de
 [[ -z "$TRACKING" || ! -f "$TRACKING" ]] && exit 0
 
 # --- Sanitize helper: strip non-safe chars from metric/category names ---
-sanitize() { echo "$1" | tr -cd 'a-zA-Z0-9_\- ' | cut -c1-40; }
+sanitize() { echo "$1" | tr -cd 'a-zA-Z0-9_\-: ' | cut -c1-40; }
 
 # ── Check for missing structured sections ──
 # Warn if TRACKING.md exists but lacks the tables CP1/CP2 need.
@@ -88,8 +88,8 @@ CP1_SIGNALS=$(awk -F'|' -v cp1_thresh="$_CP1_THRESHOLD" '
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", unit)
     # Only numeric values (integer or decimal, no prefix/suffix)
-    # Sanitize metric name: allow only alphanumeric, underscore, hyphen (max 32 chars)
-    gsub(/[^a-zA-Z0-9_-]/, "_", metric)
+    # Sanitize metric name: allow alphanumeric, underscore, hyphen, colon (max 32 chars)
+    gsub(/[^a-zA-Z0-9_:-]/, "_", metric)
     metric=substr(metric, 1, 32)
     if (value ~ /^[0-9]+(\.[0-9]+)?$/ && metric != "" && metric != "_") {
       key=metric
@@ -100,9 +100,11 @@ CP1_SIGNALS=$(awk -F'|' -v cp1_thresh="$_CP1_THRESHOLD" '
         # Guard: prev must be > 0 to avoid division by zero
         if (prev_val > 0) {
           pct=(curr_val - prev_val) / prev_val
-          if (pct >= cp1_thresh) {
-            printf "  %s: %s%s -> %s%s (+%.0f%%)\n", \
-              key, prev_val, last_unit[key], curr_val, unit, pct*100
+          # Detect regression in either direction (increase or decrease >=threshold)
+          if (pct >= cp1_thresh || pct <= -cp1_thresh) {
+            dir = (pct >= 0) ? "+" : ""
+            printf "  %s: %s%s -> %s%s (%s%.0f%%)\n", \
+              key, prev_val, last_unit[key], curr_val, unit, dir, pct*100
           }
         }
       }
@@ -130,9 +132,14 @@ CP2_SIGNALS=$(awk -F'|' -v cp2_min="$_CP2_MIN_SPRINTS" '
     sprint=$2; category=$3
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", sprint)
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", category)
-    # Sanitize category name
-    gsub(/[^a-zA-Z0-9_-]/, "_", category)
+    # Sanitize category name: allow alphanumeric, underscore, hyphen, colon (type:subsystem format)
+    gsub(/[^a-zA-Z0-9_:-]/, "_", category)
     category=substr(category, 1, 32)
+    # Extract sprint number for recency filter
+    sprint_num = sprint
+    gsub(/[^0-9]/, "", sprint_num)
+    sprint_num = sprint_num + 0
+    if (sprint_num > max_sprint) max_sprint = sprint_num
     if (category != "" && category != "_") {
       # Track unique sprints per category
       key=category SUBSEP sprint
@@ -144,9 +151,22 @@ CP2_SIGNALS=$(awk -F'|' -v cp2_min="$_CP2_MIN_SPRINTS" '
     }
   }
   END {
+    # Recency filter: only count categories within last 3 sprints [max-2, max]
     for (cat in count) {
-      if (count[cat] >= cp2_min) {
-        printf "  \"%s\" -- %d sprints:%s\n", cat, count[cat], sprints[cat]
+      recent_count = 0
+      recent_sprints = ""
+      n = split(sprints[cat], arr, " ")
+      for (i = 1; i <= n; i++) {
+        if (arr[i] != "") {
+          sn = arr[i]; gsub(/[^0-9]/, "", sn); sn = sn + 0
+          if (sn >= max_sprint - 2) {
+            recent_count++
+            recent_sprints = recent_sprints " " arr[i]
+          }
+        }
+      }
+      if (recent_count >= cp2_min) {
+        printf "  \"%s\" -- %d sprints:%s\n", cat, recent_count, recent_sprints
       }
     }
   }

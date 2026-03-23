@@ -33,7 +33,7 @@ TRACKING=$(find "${CLAUDE_PROJECT_DIR:-.}" -maxdepth 2 -name "TRACKING.md" 2>/de
 
 if [[ -f "$TRACKING" ]]; then
     # Must items: open or in_progress status with no evidence
-    # Table format: | CORE-### | summary | status | sprint | priority | evidence |
+    # Table format: | CORE-### | summary | status | sprint | evidence |
     # Look for rows where status=open/in_progress AND evidence column is empty
     UNVERIFIED=$(grep -E '^\| CORE-[0-9]+' "$TRACKING" \
         | awk -F'|' '{
@@ -63,30 +63,39 @@ if [[ -f "$TRACKING" ]]; then
 fi
 
 # --- Output ---
-HAS_ISSUES=false
+# Build additionalContext string (same pattern as detect-audit-signals.sh)
+CONTEXT=""
 
 if [[ ${#CP4_SIGNALS[@]} -gt 0 ]]; then
-    HAS_ISSUES=true
-    echo "⚠ CP4 AUDIT SIGNAL — Unverified items in TRACKING.md:" >&2
+    CONTEXT+="⚠ CP4 AUDIT SIGNAL — Unverified items in TRACKING.md:\n"
     for sig in "${CP4_SIGNALS[@]}"; do
-        echo "$sig" >&2
+        CONTEXT+="$sig\n"
     done
-    echo "  These items have no evidence. Close Gate verdict should not proceed" >&2
-    echo "  until each item is verified, deferred with reason, or explicitly escalated." >&2
-    echo "" >&2
+    CONTEXT+="  These items have no evidence. Close Gate verdict should not proceed\n"
+    CONTEXT+="  until each item is verified, deferred with reason, or explicitly escalated.\n\n"
 fi
 
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
-    HAS_ISSUES=true
     for w in "${WARNINGS[@]}"; do
+        CONTEXT+="⚠ $w\n"
+        # Also write blocking guard to stderr so user sees it directly
         echo "⚠ $w" >&2
     done
-    echo "" >&2
+    CONTEXT+="\n"
 fi
 
-if [[ "$HAS_ISSUES" == "true" ]]; then
-    echo "Resolve the above before declaring Close Gate verdict." >&2
-    exit 1
+if [[ ${#CP4_SIGNALS[@]} -gt 0 ]]; then
+    echo "⚠ CP4: ${#CP4_SIGNALS[@]} unverified item(s) in TRACKING.md" >&2
+fi
+
+if [[ -n "$CONTEXT" ]]; then
+    CONTEXT+="Resolve the above before declaring Close Gate verdict."
+    jq -n --arg ctx "$CONTEXT" '{"additionalContext": $ctx}'
+    # BLOCKING GUARD (all deferred) is a hard failure → exit 1
+    # CP4 advisory signals → exit 0 (avoid retry loops from PostToolUse exit 1)
+    if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+        exit 1
+    fi
 fi
 
 exit 0

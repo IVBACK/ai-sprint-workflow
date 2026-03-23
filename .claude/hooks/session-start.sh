@@ -73,6 +73,17 @@ if [[ -n "$CLAUDE_MD" ]] && [[ -f "$CLAUDE_MD" ]]; then
     fi
 fi
 
+# ── CP3 escalation counter from previous session ──
+ESCALATION_WARN=""
+ESC_FILE="${CLAUDE_PROJECT_DIR:-.}/.claude/.state/escalation-counter.json"
+if [[ -f "$ESC_FILE" ]]; then
+    ESC_COUNT=$(jq -r '.count // 0' "$ESC_FILE" 2>/dev/null || echo 0)
+    ESC_CMD=$(jq -r '.last_cmd // ""' "$ESC_FILE" 2>/dev/null || echo "")
+    if [[ "$ESC_COUNT" -gt 0 ]]; then
+        ESCALATION_WARN="CP3 ACTIVE: $ESC_COUNT consecutive test failure(s) from previous session. Last command: $ESC_CMD."
+    fi
+fi
+
 # ── Sprint digest injection ──
 SPRINT_TOOLS="${CLAUDE_PROJECT_DIR:-.}/Tools/sprint-tools"
 DIGEST=""
@@ -90,12 +101,14 @@ if [[ -n "$DIGEST" ]]; then
       --arg version_warn "$VERSION_WARNING" \
       --arg deprecated "${DEPRECATED_WARN:-}" \
       --arg tools_missing "${TOOLS_MISSING:-}" \
+      --arg esc_warn "$ESCALATION_WARN" \
     '{
       "additionalContext": (
         "=== SPRINT STATUS (auto-generated) ===\n" +
         (if $version_warn != "" then "⚠ " + $version_warn + "\n\n" else "" end) +
         (if $deprecated != "" then "⚠ " + $deprecated + "\n\n" else "" end) +
         (if $tools_missing != "" then "⚠ " + $tools_missing + "\n\n" else "" end) +
+        (if $esc_warn != "" then "⚠ " + $esc_warn + "\n\n" else "" end) +
         $digest + "\n\n" +
         "Read CLAUDE.md for operational rules if needed.\n" +
         (if $audit == "on" then "Cross-LLM Audit: ACTIVE.\n" else "" end) +
@@ -111,12 +124,14 @@ else
       --arg version_warn "$VERSION_WARNING" \
       --arg deprecated "${DEPRECATED_WARN:-}" \
       --arg tools_missing "${TOOLS_MISSING:-}" \
+      --arg esc_warn "$ESCALATION_WARN" \
     '{
       "additionalContext": (
         "=== SESSION START PROTOCOL (WORKFLOW.md) ===\n" +
         (if $version_warn != "" then "⚠ " + $version_warn + "\n\n" else "" end) +
         (if $deprecated != "" then "⚠ " + $deprecated + "\n\n" else "" end) +
         (if $tools_missing != "" then "⚠ " + $tools_missing + "\n\n" else "" end) +
+        (if $esc_warn != "" then "⚠ " + $esc_warn + "\n\n" else "" end) +
         "Before doing anything else:\n" +
         (if $claude_md != "" then "1. Read CLAUDE.md (\($claude_md)) — operational rules and last checkpoint.\n" else "" end) +
         (if $tracking != "" then "2. Read TRACKING.md (\($tracking)) — current sprint status, open items, blockers.\n" else "" end) +

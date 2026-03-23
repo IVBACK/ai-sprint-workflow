@@ -31,7 +31,7 @@ case "$CMD" in
     echo "  close       Sprint-end chores (archive, cleanup)"
     echo "  index       Rebuild SPRINT-INDEX.md from HTML tags"
     echo "  git         Git ceremony wrapper (init/commit/push/merge/abort)"
-    echo "  note        Session journal — append-only notes (decision/attempt/observation)"
+    echo "  note        Session journal — append-only notes (decision/attempt/side-effect/observation/artifact)"
     echo "  learn       Knowledge classification + routing (guardrail/index/risk)"
     echo "  review      Blind review via external LLM (file or stdin)"
     echo "  verify      Generate verification checklist for a fixed item"

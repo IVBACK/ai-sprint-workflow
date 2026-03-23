@@ -72,13 +72,11 @@ def _validate_evidence_level(evidence: str, priority: str, item_id: str) -> str 
 
     Returns an error message string on hard failure, or None on success/warning.
     """
-    if not evidence:
-        print(
-            f"Warning: {item_id} verified without evidence. "
-            f"Use: sprint-tools item {item_id} verified \"VERIFIED: <evidence>\"",
-            file=sys.stderr,
+    if not evidence or not evidence.strip():
+        return (
+            f"{item_id}: Cannot mark verified without evidence. "
+            f"Provide: sprint-tools item {item_id} verified \"VERIFIED: <evidence>\""
         )
-        return None
 
     evidence_upper = evidence.upper()
     has_prefix = any(evidence_upper.startswith(p) for p in EVIDENCE_PREFIXES)

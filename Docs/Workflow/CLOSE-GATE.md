@@ -53,6 +53,10 @@ FOR each verified item in Sprint Board:
 sprint-audit.sh §Evidence Confidence Levels section checks this automatically.
 IF findings exist → return item to impl loop for proper verification
   (run sprint-tools verify CORE-NNN for checklist).
+
+For file:line evidence references, optionally validate with:
+  bash .claude/hooks/verify-evidence.sh <report-file>
+  This checks that referenced files exist and line numbers are in range.
 ```
 
 ## Phase 1a — Automated Scan
@@ -105,6 +109,12 @@ b. **Predicted failure modes — verify each individually:**
    - Stress/edge: extreme input/load/timing? (pool exhaustion, rapid oscillation, cascade)
 
 c. **Verification plan invariants** (Entry Gate 9b): do they hold in implementation?
+
+d. **Recurring pattern check:** For each Failure Encounter logged this sprint,
+   check Failure Mode History for the same category in 2+ of the last 3 sprints.
+   IF found: flag as "Architecture Review Required" and escalate to Phase 2
+   (fix now or defer with architecture review flag in Open Risks).
+   Skip this step if Entry Gate was abbreviated and 9a-esc already flagged the pattern.
 
 **Supplemental per-file check** (outside item scope):
 1. Resource/memory leaks
@@ -180,6 +190,10 @@ IF all items CONCERN with no actionable fix: flag to user before proceeding.
 ## Close Gate Verdict & User Approval
 
 1. Run `sprint-tools review` on Close Gate report (blind review). Fix issues found.
+   If cross-LLM audit hook is configured, it runs automatically on this file write.
+   Manual `sprint-tools review` provides an independent second opinion.
+   When both return verdicts, follow the decision matrix in CROSS-LLM-AUDIT.md §7
+   (do NOT simply pick the stricter verdict — the matrix handles AGREE/DISAGREE cases).
 2. Confirm all phases completed and all Must items verified.
 3. Present assessment:
    - **Metric summary:** X/Y PASS, Z DEFERRED (list + target sprints). Action breakdown: N existing, M written, K fixed, J revised, L added, P escalated.

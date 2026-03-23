@@ -22,8 +22,12 @@ IF item_count <= 3 AND no cross-sprint dependencies:
   Ask user: "Abbreviated (faster) or full gate (more thorough)?"
   IF no response or unclear -> full gate.
   Run: Phase 0 (type + detail) -> 0pre -> 1-2 -> 8 (quick) -> 9b-lite -> 10 -> 12.
-  Skip: 3-4, Phase 2 (5-7), 9a, 9c (incl. fitness check), 11.
+  Skip: 3-4, Phase 2 (5-7), 9a (except 9a-esc), 9c (incl. fitness check), 11.
   After step 2: Clear Predicted Failure Modes and Failure Encounters sections.
+  9a-esc: check Failure Mode History for escalation triggers only (skip full failure mode prediction).
+    Read TRACKING.md §Failure Mode History. IF same category appears in 2+ of the last 3 sprints:
+    surface to user: "Recurring failure pattern: [category]. Architecture review recommended."
+    User decides: address now or defer to Open Risks. Log decision in Change Log.
   9b-lite: per item answer only "what will be tested?" + "what input/output?"
   Impl Loop D.7 (AC exit check) still runs in abbreviated mode.
   Step 12d logs "Entry Gate (abbreviated)".
@@ -258,6 +262,10 @@ IF 4+ independent items -> suggest parallel execution:
 
 **12a.** Write report to `Docs/Planning/S<N>_ENTRY_GATE.md`.
   Run `sprint-tools review S<N>_ENTRY_GATE.md` (blind review). Fix issues, then present.
+  If cross-LLM audit hook is configured, it runs automatically on this file write.
+  Manual `sprint-tools review` provides an independent second opinion.
+  When both return verdicts, follow the decision matrix in CROSS-LLM-AUDIT.md §7
+  (do NOT simply pick the stricter verdict — the matrix handles AGREE/DISAGREE cases).
   Include: phases 0-3 analysis, Metric Changes section (before/after + rationale).
 
 **12b.** AI gate assessment:

@@ -20,7 +20,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
           │ ENTRY-GATE.md         │  │                          │
           │ IMPL-LOOP.md          │  │ settings.json  → wiring  │
           │ CLOSE-GATE.md         │  │ hooks-config.sh→ toggles │
-          │ SPRINT-CLOSE.md       │  │ 14 bash hooks  → enforce │
+          │ SPRINT-CLOSE.md       │  │ 14 hooks + 4 aux→ enforce│
           │ AGENT-RULES.md        │  └──────────┬───────────────┘
           │ PROCEDURES.md         │             │
           │ STATE-TRANSITIONS.md  │        reads/writes
@@ -49,7 +49,7 @@ AI Sprint Workflow is a sprint methodology framework for human + AI coding agent
 
 ## Hook System
 
-14 bash hooks triggered by Claude Code lifecycle events (SessionStart, PreToolUse, PostToolUse, PreCompact, Stop). Each hook reads `hooks-config.sh` for its toggle flag. Four workflow modes (freestyle/lite/standard/strict) set which hooks are active. Settings wired in `.claude/settings.json`.
+14 event-driven bash hooks triggered by Claude Code lifecycle events (SessionStart, PreToolUse, PostToolUse, PreCompact, Stop), plus 4 auxiliary scripts (shared library, pre-merge audit, evidence verification, health check). Each hook reads `hooks-config.sh` for its toggle flag. Four workflow modes (freestyle/lite/standard/strict) set which hooks are active. Settings wired in `.claude/settings.json`.
 
 - Detail: [Docs/Systems/HOOKS.md](Docs/Systems/HOOKS.md)
 - Config: [.claude/hooks-config.sh](.claude/hooks-config.sh)
@@ -90,7 +90,7 @@ Split workflow documentation in `Docs/Workflow/` -- one file per phase/concern. 
   settings.json            Hook event → script wiring
   hooks-config.sh          Feature flags, mode presets, audit config
   setup-audit.sh           Interactive cross-LLM audit setup
-  hooks/                   14 bash hooks (see §Hook System)
+  hooks/                   14 event-driven hooks + 4 auxiliary scripts (see §Hook System)
 Tools/
   sprint-tools             Bash dispatcher → 13 Python subcommands
   sprint-{state,item,git,checkpoint,baseline,metrics,close,index,review,verify,learn,note,migrate}.py
@@ -100,7 +100,10 @@ Docs/Systems/
   TOOLS.md                 Sprint-tools automation reference
   MEMORY.md                Memory/state persistence architecture
 Docs/Workflow/
-  BOOTSTRAP.md             Project setup procedure
+  BOOTSTRAP.md             Project setup orchestrator (reads phases 1-5)
+  BOOTSTRAP-PHASE{1..5}.md Five sequential bootstrap phases
+  BOOTSTRAP-PHASE4B.md     Cross-audit offer (between 4a and 5)
+  BOOTSTRAP-SETUP.md       File creation (steps 3-10)
   ENTRY-GATE.md            Pre-sprint review (phases 0-3, 12 steps)
   IMPL-LOOP.md             Implementation loop
   CLOSE-GATE.md            Sprint-end audit (phases 0-4)
@@ -111,6 +114,13 @@ Docs/Workflow/
   TEMPLATES.md             File templates (CLAUDE.md, TRACKING.md, etc.)
   ADAPTATION.md            Project size adaptation + upgrade
   HOOK-TEMPLATES.md        Hook & audit file templates
+  WORKFLOW-MODES.md        Four rigor presets (freestyle/lite/standard/strict)
+  CROSS-LLM-AUDIT.md       External LLM review integration
+  PARALLEL-EXECUTION.md    Wave-based parallel agent coordination
+  TEAM-GUIDE.md            Multi-agent topologies, PR integration
+  UNITY-GUIDE.md           Unity-specific git, LFS, scene ownership
+  AGENT-SETUP.md           Non-Claude platform adaptation
+  Skeletons/               Pre-shipped skeleton files (CLAUDE.md, TRACKING.md, etc.)
 validation/
   validate-structure.sh    Cross-reference and numeric claim checks
   validate-model.sh        FSM reachability and formal model checks

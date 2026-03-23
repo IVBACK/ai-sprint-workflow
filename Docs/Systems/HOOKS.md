@@ -99,6 +99,8 @@ Exits 1 on violations (non-blocking warning).
 - CP4: scans TRACKING for items with status open/in_progress/fixed and empty evidence
 - All-deferred guard: blocks if every item is deferred (at least one must be verified)
 
+Outputs findings as `additionalContext` JSON (consistent with detect-audit-signals.sh). Exits 1 when issues found (non-blocking warning), 0 when clean. CP4 signal and blocking guard warnings are both included in the injected context.
+
 **validate-sprint-close.sh** (PostToolUse/Write) -- Fires on `*_SPRINT_CLOSE.md*`. Checks:
 - Roadmap.md has checked items (`[x]` or `[~]`)
 - Warns about deferred item count for acknowledgment in close report
@@ -124,6 +126,17 @@ Silent when sections are missing. Persists findings to `.findings-log`. Threshol
 - Other source file edits are skipped (gates + wave-review provide sufficient coverage)
 
 Excludes config/workflow files. Scrubs secrets from diffs. Builds context layers from TRACKING, CLAUDE.md, Roadmap, guardrails, and Entry Gate. Returns structured JSON verdict (PASS/WARN/BLOCK) with a self-audit checklist directive. Logs all invocations to `.claude/.state/cross-audit-log.jsonl`. WARN/BLOCK findings are persisted to `.findings-log`.
+
+## Auxiliary Scripts
+
+Four additional scripts in `.claude/hooks/` are not event-driven hooks but standalone utilities called explicitly by the coordinator or user:
+
+| Script | Purpose | Called By |
+|--------|---------|-----------|
+| `_audit-lib.sh` | Shared library (logging, secret scrubbing, API calls) | Sourced by cross-llm-audit.sh, pre-merge-audit.sh, verify-evidence.sh |
+| `pre-merge-audit.sh` | Audit sub-agent work before merge (generates diff, builds context, calls audit API) | Coordinator: `bash .claude/hooks/pre-merge-audit.sh <worktree\|branch>` |
+| `verify-evidence.sh` | Validate file:line evidence references in sub-agent reports | Coordinator: `bash .claude/hooks/verify-evidence.sh report.txt` |
+| `audit-health-check.sh` | Diagnostic: check cross-audit system health (API key, curl, config) | User: `bash .claude/hooks/audit-health-check.sh` |
 
 ## Feature Flags and Workflow Modes
 

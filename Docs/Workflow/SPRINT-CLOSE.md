@@ -87,6 +87,9 @@ IF failures occurred, analyze each:
 - Category: direct bug / interaction issue / stress-edge case
 - Root cause: missing test / wrong assumption / incomplete spec
 - Add unpredicted patterns as guardrail rules (with user approval)
+- Transfer each Failure Encounter row to §Failure Mode History. During transfer, add:
+  Root Cause (one sentence), Guardrail (rule reference or "none"), Escalate? (yes/no).
+  Use consistent category naming (type:subsystem format, e.g., null-ref:Renderer).
 
 ### 7a. Escalation Triggers
 

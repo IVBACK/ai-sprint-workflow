@@ -93,7 +93,7 @@ Config/workflow files (`CLAUDE.md`, `WORKFLOW*.md`, `*Roadmap*.md`, `*.json`, `*
 | Verdict | Action |
 |---------|--------|
 | **PASS** | Mention as confidence signal |
-| **WARN** | Present warnings, user decides |
+| **WARN** | Fix, then re-review (max 3 attempts). After 3 still WARN, present to user. See IMPL-LOOP.md §D.6b. |
 | **BLOCK** | Present blocking issues, halt until user reviews |
 | **BLOCK** (enforced) | `CROSS_AUDIT_ENFORCE_BLOCK=true`: hook exits non-zero |
 
