@@ -4,6 +4,20 @@
 
 # Bootstrap — Project Setup
 
+## Why This Workflow Exists
+
+AI coding agents are stateless — every session starts from zero. This workflow solves:
+- **Context loss:** CLAUDE.md + TRACKING.md restore state instantly each session
+- **Quality drift:** Three gates (Entry, Close, Sprint Close) catch problems before they compound
+- **Scope creep:** Must/Should/Could prioritization keeps sprints focused
+- **Blind spots:** Cross-LLM audit + blind sub-agent review catch what you miss
+
+Understanding WHY matters more than following steps. A Phase 1 that rushes through
+3 questions produces a bad plan. A Close Gate that rubber-stamps findings defeats its purpose.
+Each phase exists because skipping it has caused real failures in real projects.
+
+---
+
 This is the orchestrator. Each phase has its own file — read them ONE AT A TIME, in order.
 
 → Start by reading **Docs/Workflow/BOOTSTRAP-PHASE1.md**
